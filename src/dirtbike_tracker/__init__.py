@@ -1,28 +1,3 @@
-"""Example agent module."""
+"""Dirtbike price tracker: scrape, score, alert."""
 
 __version__ = "0.1.0"
-
-
-def greet(name: str) -> str:
-    """Return a greeting message.
-
-    Args:
-        name: Name to greet
-
-    Returns:
-        Greeting message
-    """
-    return f"Hello, {name}!"
-
-
-def add(a: int, b: int) -> int:
-    """Add two numbers.
-
-    Args:
-        a: First number
-        b: Second number
-
-    Returns:
-        Sum of a and b
-    """
-    return a + b

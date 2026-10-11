@@ -1,0 +1,41 @@
+# Models to track. One file per project phase.
+# Add/remove here, then re-run `python src/main.py watch` to pick up changes.
+
+# Priority targets right now (dad-and-sons trail bikes)
+priority:
+  - slug: crf150f
+    sources: [kijiji, autotrader]
+    target_price: 2500       # alert immediately if below this, regardless of market
+    notes: "12yo's primary bike. Both brothers ride."
+
+  - slug: crf230f
+    sources: [kijiji, autotrader]
+    target_price: 3000
+    notes: "15yo's bike. Discontinued 2019, tight supply."
+
+# Secondary targets (step-up options, parts donors)
+secondary:
+  - slug: ttr125
+    sources: [kijiji]
+    target_price: 1500
+    notes: "TTR125LE electric start preferred"
+
+  - slug: klx140
+    sources: [kijiji]
+    target_price: 2000
+    notes: "Alternative to CRF150F"
+
+  - slug: crf100f
+    sources: [kijiji]
+    target_price: 1500
+    notes: "Smaller fallback"
+
+# Future (15yo step-up when he outgrows the CRF230F)
+future:
+  - slug: crf250f
+    sources: [kijiji, autotrader]
+    target_price: 4500
+
+  - slug: xr250
+    sources: [kijiji]
+    target_price: 2500
