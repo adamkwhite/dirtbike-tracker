@@ -6,22 +6,19 @@
 # Usage:
 #   ./scripts/install_cron.sh          # install
 #   ./scripts/install_cron.sh --remove # remove
-#
-# Requires NTFY_TOPIC env var set in your shell rc file so cron inherits
-# nothing. We bake the env into the cron entry explicitly.
 
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON="${PROJECT_ROOT}/.venv/bin/python"
-MAIN="${PROJECT_ROOT}/src/main.py"
+DIRTBIKE="${PROJECT_ROOT}/venv/bin/dirtbike"
 LOG_DIR="${PROJECT_ROOT}/logs"
 MARKER="# dirtbike-tracker"
 
 mkdir -p "${LOG_DIR}"
 
-if [[ ! -x "${PYTHON}" ]]; then
-  echo "Error: ${PYTHON} not found. Run from the project root after setting up .venv."
+if [[ ! -x "${DIRTBIKE}" ]]; then
+  echo "Error: ${DIRTBIKE} not found."
+  echo "Run from the project root after: source venv/bin/activate && pip install -e \".[dev]\""
   exit 1
 fi
 
@@ -37,15 +34,11 @@ if [[ -z "${NTFY_TOPIC:-}" ]]; then
   echo "Continuing anyway..."
 fi
 
-# Build the cron entry. Runs every 20 min from 6am - 11pm ET.
-# ET = UTC-5 (standard) or UTC-4 (daylight). We use local time for the
-# user's crontab, which Ubuntu/WSL typically has set.
-CRON_LINE="*/20 6-23 * * * NTFY_TOPIC=${NTFY_TOPIC:-} cd ${PROJECT_ROOT} && ${PYTHON} ${MAIN} watch >> ${LOG_DIR}/watch.log 2>&1 ${MARKER}"
+# Build the cron entries. Every 20 min 6am-11pm for watch, 11:30pm for report.
+CRON_LINE="*/20 6-23 * * * NTFY_TOPIC=${NTFY_TOPIC:-} cd ${PROJECT_ROOT} && ${DIRTBIKE} watch >> ${LOG_DIR}/watch.log 2>&1 ${MARKER}"
+REPORT_LINE="30 23 * * * cd ${PROJECT_ROOT} && ${DIRTBIKE} report --model crf150f --write >> ${LOG_DIR}/report.log 2>&1 ${MARKER}"
 
-# Nightly markdown report at 11:30pm
-REPORT_LINE="30 23 * * * cd ${PROJECT_ROOT} && ${PYTHON} ${MAIN} report --model crf150f --write >> ${LOG_DIR}/report.log 2>&1 ${MARKER}"
-
-# Add the entries, replacing any previous ones with the same marker
+# Install, replacing any previous entries with the same marker
 (crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}") | crontab -
 
 echo "Installed cron entries:"

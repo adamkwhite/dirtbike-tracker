@@ -77,7 +77,7 @@ def trend(model_slug: str, db_path=DB_PATH) -> float | None:
 
 def score_active(model_slug: str, db_path=DB_PATH) -> list[dict]:
     """Return all active primary listings for a model, each with a deal rating."""
-    from storage import active_listings
+    from ..infrastructure.storage import active_listings
 
     stats = market_stats(model_slug, db_path=db_path)
     med = stats["median"]
