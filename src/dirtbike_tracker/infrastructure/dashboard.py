@@ -168,6 +168,7 @@ def render_dashboard(model_slugs: list[str]) -> str:
       --accent: #06b6d4;
     }}
     * {{ box-sizing: border-box; }}
+    html {{ scroll-padding-top: 60px; }}
     body {{
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -188,6 +189,12 @@ def render_dashboard(model_slugs: list[str]) -> str:
       padding: 12px 32px;
       border-bottom: 1px solid var(--border);
       display: flex;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 10;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       gap: 16px;
       flex-wrap: wrap;
     }}
