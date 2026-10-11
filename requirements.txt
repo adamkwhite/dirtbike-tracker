@@ -1,0 +1,13 @@
+# Production dependencies
+# Add your project dependencies here
+#
+# Dev and test tooling belongs in requirements-dev.txt, not here.
+#
+# Example:
+# openai>=1.0.0
+# langchain>=0.1.0
+
+# Common web framework dependencies (with security fixes)
+# Uncomment if building web applications:
+# gunicorn>=23.0.0         # WSGI HTTP Server (CVE-2024-6827, CVE-2024-1135 fixed)
+# flask-cors>=4.0.2        # CORS support for Flask (CVE-2024-6221, CVE-2024-1681, CVE-2024-6839, CVE-2024-6866 fixed)
