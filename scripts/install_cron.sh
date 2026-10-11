@@ -2,10 +2,7 @@
 #
 # Install the dirtbike-tracker watch job on cron.
 # Runs every 20 minutes during Ontario waking hours (6am - 11pm ET).
-#
-# Usage:
-#   ./scripts/install_cron.sh          # install
-#   ./scripts/install_cron.sh --remove # remove
+# Log lines get prefixed with timestamp via `ts` from moreutils.
 
 set -euo pipefail
 
@@ -18,8 +15,15 @@ mkdir -p "${LOG_DIR}"
 
 if [[ ! -x "${DIRTBIKE}" ]]; then
   echo "Error: ${DIRTBIKE} not found."
-  echo "Run from the project root after: source venv/bin/activate && pip install -e \".[dev]\""
   exit 1
+fi
+
+if ! command -v ts >/dev/null 2>&1; then
+  echo "Warning: 'ts' (from moreutils) not installed. Logs will have no timestamps."
+  echo "  sudo apt install moreutils"
+  TS_PREFIX=""
+else
+  TS_PREFIX="| ts '[%Y-%m-%d %H:%M:%S]'"
 fi
 
 if [[ "${1:-}" == "--remove" ]]; then
@@ -28,17 +32,10 @@ if [[ "${1:-}" == "--remove" ]]; then
   exit 0
 fi
 
-if [[ -z "${NTFY_TOPIC:-}" ]]; then
-  echo "Warning: NTFY_TOPIC env var not set. Notifications will be disabled."
-  echo "Set it with: export NTFY_TOPIC=<your-topic>"
-  echo "Continuing anyway..."
-fi
+# Timestamp prefix on every line of output
+CRON_LINE="*/20 6-23 * * * NTFY_TOPIC=${NTFY_TOPIC:-} cd ${PROJECT_ROOT} && ${DIRTBIKE} watch 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/watch.log ${MARKER}"
+REPORT_LINE="30 23 * * * cd ${PROJECT_ROOT} && ${DIRTBIKE} report --model crf150f --write 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/report.log ${MARKER}"
 
-# Build the cron entries. Every 20 min 6am-11pm for watch, 11:30pm for report.
-CRON_LINE="*/20 6-23 * * * NTFY_TOPIC=${NTFY_TOPIC:-} cd ${PROJECT_ROOT} && ${DIRTBIKE} watch >> ${LOG_DIR}/watch.log 2>&1 ${MARKER}"
-REPORT_LINE="30 23 * * * cd ${PROJECT_ROOT} && ${DIRTBIKE} report --model crf150f --write >> ${LOG_DIR}/report.log 2>&1 ${MARKER}"
-
-# Install, replacing any previous entries with the same marker
 (crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}") | crontab -
 
 echo "Installed cron entries:"
