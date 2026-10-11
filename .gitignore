@@ -244,3 +244,22 @@ docs/_templates/
 # ✅ docs/ (documentation)
 # ✅ README.md (project documentation)
 # ✅ .gitignore (this file!)
+
+# ==============================================================================
+# DIRTBIKE TRACKER
+# ==============================================================================
+
+# Generated dashboard HTML (regenerated every watch run)
+dashboard.html
+
+# SQLite database and journal files
+data/listings.db
+data/listings.db-journal
+data/listings.db-wal
+data/listings.db-shm
+
+# Notification state (per-user)
+data/state/
+
+# Generated markdown reports (nightly cron)
+reports/
