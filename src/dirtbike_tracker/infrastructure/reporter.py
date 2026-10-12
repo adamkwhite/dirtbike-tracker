@@ -7,7 +7,7 @@ Output is suitable for pasting into a note, email, or chat message.
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..domain.scoring import MarketSnapshot, project_line, vs_label
+from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
 
 
 def location_label(listing: dict, width: int) -> str:
@@ -54,7 +54,8 @@ def _listing_line(listing: dict) -> str:
     )
     title = (listing["title"] or "")[:60]
     contacted = f" - *{c}*" if (c := contact_label(listing)) else ""
-    return f"- **{price}** {delta} - {location_label(listing, 25)} - [{title}]({listing['url']}){contacted}"
+    specs = f" - {s}" if (s := specs_label(listing)) else ""
+    return f"- **{price}** {delta} - {location_label(listing, 25)} - [{title}]({listing['url']}){specs}{contacted}"
 
 
 def render_report(snap: MarketSnapshot) -> str:

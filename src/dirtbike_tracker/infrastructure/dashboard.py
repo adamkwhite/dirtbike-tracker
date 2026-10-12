@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from ..domain.scoring import FALLBACK_NOTE, MarketSnapshot, project_line, vs_label
+from ..domain.scoring import FALLBACK_NOTE, MarketSnapshot, price_per_year, project_line, vs_label
 from .reporter import contact_label, location_label
 
 RATING_HEX = {
@@ -83,6 +83,7 @@ def _listing_row(listing: dict) -> str:
         )
     loc = location_label(listing, 28)
     title = (listing["title"] or "")[:65]
+    per_year = price_per_year(listing, datetime.now().year)
     contacted = ""
     if label := contact_label(listing):
         days = label.split(":")[0]
@@ -91,6 +92,9 @@ def _listing_row(listing: dict) -> str:
               <tr>
                 <td><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>
                 <td class="num">{_esc(price_str)}</td>
+                <td class="num muted">{listing.get("year") or "—"}</td>
+                <td class="num muted">{f"{listing['km']:,}" if listing.get("km") else "—"}</td>
+                <td class="num muted">{f"${per_year:,}" if per_year else "—"}</td>
                 <td class="num muted" title="{_esc(vs)}">{_esc(delta_str)}</td>
                 <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
                 <td class="muted">{_esc(loc)}</td>
@@ -164,7 +168,7 @@ def _model_section(snap: MarketSnapshot) -> str:
       <div class="chart-wrap"><canvas id="{chart_id}" height="80"></canvas></div>
       <table>
         <thead>
-          <tr><th>Rating</th><th>Price</th><th>vs Med</th><th title="Project fit 0-10: red/green phrases in the ad">Fit</th><th>Location</th><th>Title</th></tr>
+          <tr><th>Rating</th><th>Price</th><th>Year</th><th>km</th><th title="Price per year of age">$/yr</th><th>vs Med</th><th title="Project fit 0-10: red/green phrases in the ad">Fit</th><th>Location</th><th>Title</th></tr>
         </thead>
         <tbody>{rows_html}</tbody>
       </table>{sold_html}

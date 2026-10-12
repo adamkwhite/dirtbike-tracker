@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS listings (
     detail_fetched_at TEXT,
     contacted_at TEXT,
     contact_note TEXT,
+    year INTEGER,
+    km INTEGER,
     UNIQUE(source, external_id)
 );
 
@@ -115,6 +117,9 @@ def _migrate_old_schema(db_path: Path = DB_PATH) -> None:
         if "contacted_at" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN contacted_at TEXT")
             conn.execute("ALTER TABLE listings ADD COLUMN contact_note TEXT")
+        if "year" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN year INTEGER")
+            conn.execute("ALTER TABLE listings ADD COLUMN km INTEGER")
 
 
 def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
@@ -155,8 +160,9 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                     """
                     INSERT INTO listings
                     (source, external_id, url, title, price, price_state, location,
-                     posted_text, description, fingerprint, first_seen, last_seen, is_primary)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     posted_text, description, fingerprint, first_seen, last_seen, is_primary,
+                     year, km)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         listing.source,
@@ -172,6 +178,8 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                         now,
                         now,
                         is_primary,
+                        listing.year,
+                        listing.km,
                     ),
                 )
                 listing_id = cursor.lastrowid
@@ -186,8 +194,16 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                     # reappearing clears a likely-sold tag (relisted, or a false positive)
                     "UPDATE listings SET last_seen=?, is_active=1, sold_at=NULL,"
                     " posted_text=COALESCE(NULLIF(?, ''), posted_text),"
-                    " description=COALESCE(NULLIF(?, ''), description) WHERE id=?",
-                    (now, listing.posted_text, listing.description, listing_id),
+                    " description=COALESCE(NULLIF(?, ''), description),"
+                    " year=COALESCE(?, year), km=COALESCE(?, km) WHERE id=?",
+                    (
+                        now,
+                        listing.posted_text,
+                        listing.description,
+                        listing.year,
+                        listing.km,
+                        listing_id,
+                    ),
                 )
                 stats["updated"] += 1
                 if existing["price"] != listing.price:

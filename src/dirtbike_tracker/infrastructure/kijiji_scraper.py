@@ -17,6 +17,8 @@ from urllib.parse import quote, urljoin
 import requests
 from bs4 import BeautifulSoup, Tag
 
+from ..domain.scoring import parse_km, parse_year
+
 USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
@@ -50,6 +52,8 @@ class Listing:
     model_slugs: list[str]  # one listing can match multiple models (e.g. a package)
     scraped_at: str
     full_description: str | None = None  # set when the search page already had the whole ad (#76)
+    year: int | None = None
+    km: int | None = None  # odometer; dirt bikes rarely have one
 
     def to_dict(self):
         return asdict(self)
@@ -243,51 +247,60 @@ def _iter_ads(data: object) -> Iterator[dict]:
             stack.extend(node.values())
 
 
-def _is_new_vehicle(ad: dict) -> bool:
+def _attrs(ad: dict) -> dict[str, list]:
+    """An ad's form fields: {canonicalName: canonicalValues}, e.g. {"caryear": ["2018"]}."""
     attrs = ad.get("attributes")
     if isinstance(attrs, dict):
         attrs = attrs.get("all")
     if not isinstance(attrs, list):
-        return False
-    return any(
-        isinstance(a, dict)
-        and a.get("canonicalName") == "vehicletype"
-        and "new" in (a.get("canonicalValues") or [])
+        return {}
+    return {
+        a["canonicalName"]: a.get("canonicalValues") or []
         for a in attrs
-    )
+        if isinstance(a, dict) and isinstance(a.get("canonicalName"), str)
+    }
+
+
+def _first(values: list) -> object:
+    return values[0] if values else None
 
 
 # Search-page descriptions are cut at ~200 chars and end like this; shorter ones are the whole ad.
 TRUNCATION_MARK = "..."
 
 
-def _ad_meta(soup: BeautifulSoup) -> tuple[set[str], dict[str, str], dict[str, str]]:
-    """Per-ad facts from the page's __NEXT_DATA__ the HTML cards don't show.
+def _ad_meta(soup: BeautifulSoup) -> dict[str, dict]:
+    """Per-ad facts from the page's __NEXT_DATA__ the HTML cards don't show, by ad id.
 
-    Returns (ids marked vehicletype=new, {id: activationDate}, {id: description}).
-    New bikes are dealer MSRP stock and drag the median up; activationDate is the
-    original post time (sortingDate moves when an ad is bumped); the description
-    is a ~200-char snippet, where the cards mostly have none. Missing or reshaped
-    data returns empties, so a Kijiji markup change drops nothing.
+    Keys, each present only when known:
+    - new: vehicletype=new, i.e. dealer MSRP stock that would drag the median up
+    - posted: activationDate, the original post time (sortingDate moves on a bump)
+    - description: a ~200-char snippet; the cards mostly have none (#76)
+    - year, km: the seller's caryear / carmileageinkms form fields
+    Missing or reshaped data returns {}, so a Kijiji markup change drops nothing.
     """
     script = soup.find("script", id="__NEXT_DATA__")
     try:
         data = json.loads(script.get_text()) if script else None
     except ValueError:
-        return set(), {}, {}
+        return {}
 
-    new_ids: set[str] = set()
-    posted: dict[str, str] = {}
-    descriptions: dict[str, str] = {}
+    this_year = datetime.now(UTC).year
+    meta: dict[str, dict] = {}
     for ad in _iter_ads(data):
-        ad_id = str(ad["id"])
-        if _is_new_vehicle(ad):
-            new_ids.add(ad_id)
+        facts = meta.setdefault(str(ad["id"]), {})
+        attrs = _attrs(ad)
+        if "new" in attrs.get("vehicletype", []):
+            facts["new"] = True
         if isinstance(ad.get("activationDate"), str):
-            posted[ad_id] = ad["activationDate"]
+            facts["posted"] = ad["activationDate"]
         if isinstance(ad.get("description"), str) and ad["description"].strip():
-            descriptions[ad_id] = ad["description"].strip()
-    return new_ids, posted, descriptions
+            facts["description"] = ad["description"].strip()
+        if year := parse_year(_first(attrs.get("caryear", [])), this_year):
+            facts["year"] = year
+        if km := parse_km(_first(attrs.get("carmileageinkms", []))):
+            facts["km"] = km
+    return meta
 
 
 def _whole_ad(snippet: str | None) -> str | None:
@@ -308,7 +321,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
     soup = BeautifulSoup(html, "html.parser")
     listings = []
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
-    new_ids, posted_at, snippets = _ad_meta(soup)
+    meta = _ad_meta(soup)
 
     # Kijiji's current markup uses [data-testid='listing-card'] but
     # fall back to older selectors for resilience.
@@ -325,7 +338,9 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         url = urljoin(BASE_URL, str(link_el["href"]))
         ad_id = _extract_external_id(url)
         # Drop unrelated Kijiji categories and new dealer stock
-        if not any(path in url for path in ALLOWED_CATEGORY_PATHS) or ad_id in new_ids:
+        if not any(path in url for path in ALLOWED_CATEGORY_PATHS) or meta.get(ad_id, {}).get(
+            "new"
+        ):
             continue
 
         title_el = card.find(["h3", "h2", "a"], string=True)
@@ -335,8 +350,9 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
             continue
         price, price_state = _parse_price(_field_text(card, "price"))
         location = _field_text(card, "location")
-        posted = posted_at.get(ad_id) or _field_text(card, "date", r"date|posted")
-        snippet = snippets.get(ad_id)
+        facts = meta.get(ad_id, {})
+        posted = facts.get("posted") or _field_text(card, "date", r"date|posted")
+        snippet = facts.get("description")
         description = snippet or _field_text(card, "description", sep=" ")
 
         listings.append(
@@ -353,6 +369,8 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
                 model_slugs=model_slugs,
                 scraped_at=now,
                 full_description=_whole_ad(snippet),
+                year=facts.get("year"),
+                km=facts.get("km"),
             )
         )
 

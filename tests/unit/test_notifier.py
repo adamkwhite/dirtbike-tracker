@@ -57,3 +57,9 @@ def test_deal_says_which_median(sent: list[dict]) -> None:
     notifier.notify_deal({**LISTING, "basis": "project"})
 
     assert "(-20% vs project median)" in sent[0]["title"]
+
+
+def test_alert_body_has_year_and_km(sent: list[dict]) -> None:
+    notifier.notify_deal({**LISTING, "location": "Kingston", "year": 2018, "km": 16672})
+
+    assert sent[0]["body"] == "t\n2018 · 16,672 km\nKingston\nu"

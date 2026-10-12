@@ -317,3 +317,16 @@ def test_ride_snapshot_skips_the_project_median(tmp_path: Path) -> None:
     upsert_listings([_listing("kijiji", "1700000001", "https://x/1700000001", 4000)], db_path=db)
 
     assert "project_median" not in snapshot("crf150f", goal="ride", db_path=db).stats
+
+
+def test_year_and_km_stored_and_kept_when_a_rescrape_lacks_them(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    bike = _listing("kijiji", "1742893636", "https://x/1742893636", 5250)
+    bike.year, bike.km = 2018, 16672
+    upsert_listings([bike], db_path=db)
+    bike.year, bike.km = None, None  # e.g. a page where the fields didn't load
+    upsert_listings([bike], db_path=db)
+
+    (listing,) = snapshot("crf150f", db_path=db).listings
+    assert (listing["year"], listing["km"]) == (2018, 16672)

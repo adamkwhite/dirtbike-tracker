@@ -1,5 +1,6 @@
 """Renderers take a MarketSnapshot, so they test without a DB."""
 
+from datetime import datetime
 from pathlib import Path
 
 from dirtbike_tracker.domain.scoring import MarketSnapshot, score_listings
@@ -164,3 +165,17 @@ def test_contacted_badge_with_note_tooltip() -> None:
         contact_label({**listing, "contacted_days": 0.2, "contact_note": None}) == "contacted today"
     )
     assert contact_label({"contacted_days": None}) is None
+
+
+def test_row_shows_year_km_and_price_per_year() -> None:
+    listing = {
+        "price": 5250, "rating": "GOOD", "delta_pct": -12.0, "fit": 10, "fit_flags": [],
+        "title": "2018 Honda CB500X", "location": "Kingston", "url": "u", "year": 2018, "km": 16672,
+    }  # fmt: skip
+
+    html = _listing_row(listing)
+
+    assert '<td class="num muted">2018</td>' in html
+    assert '<td class="num muted">16,672</td>' in html
+    per_year = round(5250 / (datetime.now().year - 2018))
+    assert f'<td class="num muted">${per_year:,}</td>' in html

@@ -29,6 +29,7 @@ from ..domain.scoring import (
     GOALS,
     MarketSnapshot,
     project_line,
+    specs_label,
     under_target,
     vs_label,
 )
@@ -286,6 +287,8 @@ def list_cmd(model: str):
             f"{loc:<22}  {title}"
         )
         click.echo(f"           {listing['url']}")
+        if specs := specs_label(listing):
+            click.echo(f"           {specs}")
         if contacted := contact_label(listing):
             click.echo(f"           {contacted}")
 
