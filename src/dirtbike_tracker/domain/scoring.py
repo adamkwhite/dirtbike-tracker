@@ -103,15 +103,17 @@ def weekly_medians(
     for i in range(weeks - 1, -1, -1):
         w_end = now - timedelta(days=7 * i)
         w_start = w_end - timedelta(days=7)
-        prices = []
-        for t in timelines:
-            if t["start"] > w_end or t["end"] < w_start or not t["history"]:
-                continue
-            known = [p for at, p in t["history"] if at <= w_end]
-            # ponytail: before our first observation, assume the first price we saw.
-            # Kijiji post dates reach back months; without this the chart starts empty.
-            price = known[-1] if known else t["history"][0][1]
-            if price and price > 100:
-                prices.append(price)
+        prices = [p for t in timelines if (p := _price_in_window(t, w_start, w_end))]
         out.append((w_start.date().isoformat(), median(prices) if prices else None))
     return out
+
+
+def _price_in_window(t: dict, w_start: datetime, w_end: datetime) -> float | None:
+    """A listing's price as of w_end if it was on the market in the window, else None."""
+    if t["start"] > w_end or t["end"] < w_start or not t["history"]:
+        return None
+    known = [p for at, p in t["history"] if at <= w_end]
+    # ponytail: before our first observation, assume the first price we saw.
+    # Kijiji post dates reach back months; without this the chart starts empty.
+    price = known[-1] if known else t["history"][0][1]
+    return price if price and price > 100 else None
