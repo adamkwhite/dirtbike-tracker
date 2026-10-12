@@ -5,6 +5,7 @@ Fetches search results for a given model/region, parses listings,
 returns structured data. Respects rate limits and rotates User-Agent.
 """
 
+import json
 import random
 import re
 import time
@@ -191,11 +192,47 @@ def fetch_page(url: str, timeout: int = 20) -> str:
     return str(response.text)
 
 
+def _new_vehicle_ids(soup: BeautifulSoup) -> set[str]:
+    """Ad IDs marked vehicletype=new (dealer MSRP stock) in the page's __NEXT_DATA__.
+
+    New bikes aren't used-market prices and drag the median up to MSRP.
+    Returns an empty set if the data is missing or changes shape, so a
+    Kijiji markup change keeps every listing rather than dropping them.
+    """
+    script = soup.find("script", id="__NEXT_DATA__")
+    try:
+        data = json.loads(script.get_text()) if script else None
+    except ValueError:
+        return set()
+
+    new_ids: set[str] = set()
+    stack = [data]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, dict):
+            attrs = node.get("attributes")
+            if isinstance(attrs, dict):
+                attrs = attrs.get("all")
+            if node.get("id") and isinstance(attrs, list):
+                for a in attrs:
+                    if (
+                        isinstance(a, dict)
+                        and a.get("canonicalName") == "vehicletype"
+                        and "new" in (a.get("canonicalValues") or [])
+                    ):
+                        new_ids.add(str(node["id"]))
+            stack.extend(node.values())
+    return new_ids
+
+
 def parse_listings(html: str, model_slug: str) -> list[Listing]:
     """Extract listing data from a Kijiji search results page."""
     soup = BeautifulSoup(html, "html.parser")
     listings = []
     now = datetime.utcnow().isoformat()
+    new_ids = _new_vehicle_ids(soup)
 
     # Kijiji's current markup uses [data-testid='listing-card'] but
     # fall back to older selectors for resilience.
@@ -237,6 +274,9 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
 
         # Filter: drop results from unrelated Kijiji categories
         if not any(path in url for path in ALLOWED_CATEGORY_PATHS):
+            continue
+
+        if _extract_external_id(url) in new_ids:
             continue
 
         # Secondary filter: title must plausibly match the queried model slug.
