@@ -4,13 +4,13 @@ Personal dirt bike price tracker. Scrapes Kijiji + AutoTrader, scores vs market 
 
 ## Architecture
 Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
-- `domain/` - pure scoring logic
+- `domain/` - pure scoring logic, no I/O. Never import from `infrastructure/`
+- `application/market.py` - `snapshot(slug)` composes storage reads + domain scoring; CLI and renderers consume `MarketSnapshot`
 - `infrastructure/` - scrapers, DB, notifier, dashboard
 - `application/cli.py` - orchestration via click
 
 ## Known tech debt
-- `domain/scoring.py` imports from `infrastructure/storage.py` (hexagonal violation). See issue #34
-- Near-zero test coverage (one CLI smoke test). See issues tagged `area:testing`
+- Scrapers, notifier, dashboard and storage writes are untested. See issues tagged `area:testing`
 - `docs/architecture.md` module table predates the hexagonal port (old flat filenames)
 
 ## Common commands

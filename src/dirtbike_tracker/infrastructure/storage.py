@@ -12,7 +12,7 @@ import re
 import sqlite3
 from collections.abc import Iterable
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .kijiji_scraper import Listing
@@ -231,3 +231,23 @@ def active_listings(
         sql += " ORDER BY last_seen DESC"
         rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
+
+
+def market_prices(model_slug: str, days: int = 90, db_path: Path = DB_PATH) -> list[float]:
+    """Distinct non-null prices for a model first seen in the last N days (primary only)."""
+    # naive UTC to match how first_seen is stored
+    cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).isoformat()
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT l.price FROM listings l
+            JOIN listing_models m ON m.listing_id = l.id
+            WHERE m.model_slug=?
+              AND l.price IS NOT NULL
+              AND l.price > 100
+              AND l.first_seen >= ?
+              AND l.is_primary = 1
+            """,
+            (model_slug, cutoff),
+        ).fetchall()
+    return [r["price"] for r in rows]

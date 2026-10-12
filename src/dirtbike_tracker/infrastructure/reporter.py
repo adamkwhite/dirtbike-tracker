@@ -7,14 +7,12 @@ Output is suitable for pasting into a note, email, or chat message.
 from datetime import datetime
 from pathlib import Path
 
-from ..domain.scoring import market_stats, score_active, trend
+from ..domain.scoring import MarketSnapshot
 
 
-def render_report(model_slug: str, db_path=None) -> str:
+def render_report(snap: MarketSnapshot) -> str:
     """Build a markdown snapshot of the current market for a model."""
-    stats = market_stats(model_slug, db_path=db_path) if db_path else market_stats(model_slug)
-    listings = score_active(model_slug, db_path=db_path) if db_path else score_active(model_slug)
-    t = trend(model_slug, db_path=db_path) if db_path else trend(model_slug)
+    model_slug, stats, listings, t = snap.slug, snap.stats, snap.listings, snap.trend
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     lines = []
@@ -66,10 +64,10 @@ def render_report(model_slug: str, db_path=None) -> str:
     return "\n".join(lines)
 
 
-def write_report(model_slug: str, out_dir: Path = Path("reports"), db_path=None) -> Path:
+def write_report(snap: MarketSnapshot, out_dir: Path = Path("reports")) -> Path:
     """Write the markdown report to disk and return the path."""
     out_dir.mkdir(parents=True, exist_ok=True)
     date = datetime.utcnow().strftime("%Y-%m-%d")
-    path = out_dir / f"{model_slug}_{date}.md"
-    path.write_text(render_report(model_slug, db_path=db_path))
+    path = out_dir / f"{snap.slug}_{date}.md"
+    path.write_text(render_report(snap))
     return path

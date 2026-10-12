@@ -16,13 +16,13 @@ from pathlib import Path
 import click
 import yaml
 
-from ..domain.scoring import market_stats, score_active, trend
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.dashboard import write_dashboard
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.notifier import NotifyConfigError, notify_deal, notify_good
 from ..infrastructure.reporter import render_report, write_report
 from ..infrastructure.storage import init_db, mark_stale, upsert_listings
+from .market import snapshot
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 CONFIG_PATH = ROOT / "config" / "models.yml"
@@ -107,7 +107,7 @@ def scrape(model: str, region: str, source: str, pages: int):
 @click.option("--model", required=True)
 def list_cmd(model: str):
     """List active listings for a model with deal ratings."""
-    scored = score_active(model)
+    scored = snapshot(model).listings
     if not scored:
         click.echo(f"No active listings for {model}.")
         return
@@ -137,8 +137,8 @@ def list_cmd(model: str):
 @click.option("--model", required=True)
 def stats(model: str):
     """Market stats for a model."""
-    s = market_stats(model)
-    t = trend(model)
+    snap = snapshot(model)
+    s, t = snap.stats, snap.trend
     click.echo(f"\nMarket stats for {model} (last 90 days):")
     if s["count"] == 0:
         click.echo("  No data yet.")
@@ -158,10 +158,10 @@ def stats(model: str):
 def report(model: str, write: bool):
     """Generate a markdown market report."""
     if write:
-        path = write_report(model, out_dir=REPORTS_DIR)
+        path = write_report(snapshot(model), out_dir=REPORTS_DIR)
         click.echo(f"Report written to {path}")
     else:
-        click.echo(render_report(model))
+        click.echo(render_report(snapshot(model)))
 
 
 @cli.command()
@@ -198,7 +198,7 @@ def watch(region: str, notify: bool, group: str):
             totals["updated"] += stats["updated"]
 
         # Re-score after upsert
-        scored = score_active(slug)
+        scored = snapshot(slug).listings
         target_price = target.get("target_price")
 
         for listing in scored:
@@ -238,7 +238,7 @@ def watch(region: str, notify: bool, group: str):
     # Refresh the dashboard with every watch run
     all_slugs = [t["slug"] for t in all_targets]
     try:
-        write_dashboard(all_slugs, DASHBOARD_PATH)
+        write_dashboard([snapshot(s) for s in all_slugs], DASHBOARD_PATH)
     except Exception as exc:  # noqa: BLE001
         click.echo(f"  (dashboard write failed: {exc})")
 
@@ -267,7 +267,7 @@ def dashboard(models: str, open_browser: bool):
             click.echo("No models configured. Pass --models or populate config/models.yml")
             return
 
-    path = write_dashboard(slugs, DASHBOARD_PATH)
+    path = write_dashboard([snapshot(s) for s in slugs], DASHBOARD_PATH)
     click.echo(f"Dashboard written: file://{path}")
     if open_browser:
         import webbrowser

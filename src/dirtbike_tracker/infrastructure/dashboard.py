@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from ..domain.scoring import _market_prices, market_stats, score_active, trend
+from ..domain.scoring import MarketSnapshot
 
 RATING_HEX = {
     "DEAL": "#10b981",  # emerald
@@ -45,12 +45,9 @@ def _histogram(prices: list[float], bins: int = 10) -> tuple[list[float], list[i
     return centers, counts
 
 
-def _model_section(slug: str) -> str:
+def _model_section(snap: MarketSnapshot) -> str:
     """Render one model's panel."""
-    stats = market_stats(slug)
-    listings = score_active(slug)
-    t = trend(slug)
-    prices = _market_prices(slug, days=90)
+    slug, stats, listings, t, prices = snap.slug, snap.stats, snap.listings, snap.trend, snap.prices
 
     # Market summary tiles
     if stats["count"] == 0:
@@ -146,10 +143,11 @@ def _model_section(slug: str) -> str:
     """
 
 
-def render_dashboard(model_slugs: list[str]) -> str:
+def render_dashboard(snaps: list[MarketSnapshot]) -> str:
     """Build the full HTML page."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    sections = "\n".join(_model_section(s) for s in model_slugs)
+    model_slugs = [s.slug for s in snaps]
+    sections = "\n".join(_model_section(s) for s in snaps)
 
     return f"""<!doctype html>
 <html lang="en">
@@ -301,8 +299,8 @@ def render_dashboard(model_slugs: list[str]) -> str:
 """
 
 
-def write_dashboard(model_slugs: list[str], out_path: Path) -> Path:
+def write_dashboard(snaps: list[MarketSnapshot], out_path: Path) -> Path:
     """Write the HTML dashboard to disk and return the path."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_dashboard(model_slugs))
+    out_path.write_text(render_dashboard(snaps))
     return out_path

@@ -2,42 +2,31 @@
 Deal scoring: compute market medians and rate listings vs market.
 
 A listing's deal rating is based on its price relative to the median
-price of comparable listings in the DB. Uses the listing_models join
-table so a package listing counts toward every model it contains.
+price of comparable listings. Pure: no I/O. Prices and listings are
+fetched by infrastructure/storage.py and composed in application/market.py.
 """
 
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 from statistics import median
-
-from ..infrastructure.storage import DB_PATH, connect
 
 RATING_DEAL = -0.30
 RATING_GOOD = -0.10
 RATING_FAIR = 0.15
 
 
-def _market_prices(model_slug: str, days: int = 90, db_path=DB_PATH) -> list[float]:
-    """All non-null prices for a model in the last N days (primary listings only)."""
-    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
-    with connect(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT DISTINCT l.price FROM listings l
-            JOIN listing_models m ON m.listing_id = l.id
-            WHERE m.model_slug=?
-              AND l.price IS NOT NULL
-              AND l.price > 100
-              AND l.first_seen >= ?
-              AND l.is_primary = 1
-            """,
-            (model_slug, cutoff),
-        ).fetchall()
-    return [r["price"] for r in rows]
+@dataclass
+class MarketSnapshot:
+    """One model's scored market, as consumed by the CLI and renderers."""
+
+    slug: str
+    stats: dict
+    listings: list[dict]
+    trend: float | None
+    prices: list[float]
 
 
-def market_stats(model_slug: str, days: int = 90, db_path=DB_PATH) -> dict:
-    """Return low/median/high/count for a model's recent market."""
-    prices = _market_prices(model_slug, days, db_path)
+def market_stats(prices: list[float]) -> dict:
+    """Return low/median/high/count for a set of market prices."""
     if not prices:
         return {"low": None, "median": None, "high": None, "count": 0}
     return {
@@ -66,24 +55,16 @@ def rate_listing(price: float | None, median_price: float | None) -> dict:
     return {"rating": rating, "delta_pct": round(delta * 100, 1)}
 
 
-def trend(model_slug: str, db_path=DB_PATH) -> float | None:
-    """Compare median price in last 30 days vs 30-90 days ago."""
-    recent = _market_prices(model_slug, days=30, db_path=db_path)
-    older = [p for p in _market_prices(model_slug, days=90, db_path=db_path) if p not in recent]
+def trend(recent: list[float], window: list[float]) -> float | None:
+    """Percent change of the 30-day median (`recent`) vs the rest of the 90-day `window`."""
+    older = [p for p in window if p not in recent]
     if not recent or not older:
         return None
     return round((median(recent) - median(older)) / median(older) * 100, 1)
 
 
-def score_active(model_slug: str, db_path=DB_PATH) -> list[dict]:
-    """Return all active primary listings for a model, each with a deal rating."""
-    from ..infrastructure.storage import active_listings
-
-    stats = market_stats(model_slug, db_path=db_path)
-    med = stats["median"]
-    scored = []
-    for listing in active_listings(model_slug, primary_only=True, db_path=db_path):
-        rating = rate_listing(listing["price"], med)
-        scored.append({**listing, **rating})
+def score_listings(listings: list[dict], median_price: float | None) -> list[dict]:
+    """Attach a deal rating to each listing, best deals first, unpriced last."""
+    scored = [{**listing, **rate_listing(listing["price"], median_price)} for listing in listings]
     scored.sort(key=lambda x: (x["delta_pct"] is None, x["delta_pct"] or 0))
     return scored
