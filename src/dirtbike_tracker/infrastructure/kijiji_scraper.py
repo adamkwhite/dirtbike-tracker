@@ -49,6 +49,7 @@ class Listing:
     description: str
     model_slugs: list[str]  # one listing can match multiple models (e.g. a package)
     scraped_at: str
+    full_description: str | None = None  # set when the search page already had the whole ad (#76)
 
     def to_dict(self):
         return asdict(self)
@@ -250,29 +251,37 @@ def _is_new_vehicle(ad: dict) -> bool:
     )
 
 
-def _ad_meta(soup: BeautifulSoup) -> tuple[set[str], dict[str, str]]:
+# Search-page descriptions are cut at ~200 chars and end like this; shorter ones are the whole ad.
+TRUNCATION_MARK = "..."
+
+
+def _ad_meta(soup: BeautifulSoup) -> tuple[set[str], dict[str, str], dict[str, str]]:
     """Per-ad facts from the page's __NEXT_DATA__ the HTML cards don't show.
 
-    Returns (ids marked vehicletype=new, {id: activationDate}). New bikes are
-    dealer MSRP stock and drag the median up; activationDate is the original
-    post time (sortingDate moves when an ad is bumped). Missing or reshaped
+    Returns (ids marked vehicletype=new, {id: activationDate}, {id: description}).
+    New bikes are dealer MSRP stock and drag the median up; activationDate is the
+    original post time (sortingDate moves when an ad is bumped); the description
+    is a ~200-char snippet, where the cards mostly have none. Missing or reshaped
     data returns empties, so a Kijiji markup change drops nothing.
     """
     script = soup.find("script", id="__NEXT_DATA__")
     try:
         data = json.loads(script.get_text()) if script else None
     except ValueError:
-        return set(), {}
+        return set(), {}, {}
 
     new_ids: set[str] = set()
     posted: dict[str, str] = {}
+    descriptions: dict[str, str] = {}
     for ad in _iter_ads(data):
         ad_id = str(ad["id"])
         if _is_new_vehicle(ad):
             new_ids.add(ad_id)
         if isinstance(ad.get("activationDate"), str):
             posted[ad_id] = ad["activationDate"]
-    return new_ids, posted
+        if isinstance(ad.get("description"), str) and ad["description"].strip():
+            descriptions[ad_id] = ad["description"].strip()
+    return new_ids, posted, descriptions
 
 
 def _field_text(card: Tag, testid: str, class_pattern: str | None = None, sep: str = "") -> str:
@@ -288,7 +297,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
     soup = BeautifulSoup(html, "html.parser")
     listings = []
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
-    new_ids, posted_at = _ad_meta(soup)
+    new_ids, posted_at, snippets = _ad_meta(soup)
 
     # Kijiji's current markup uses [data-testid='listing-card'] but
     # fall back to older selectors for resilience.
@@ -316,7 +325,8 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         price, price_state = _parse_price(_field_text(card, "price"))
         location = _field_text(card, "location")
         posted = posted_at.get(ad_id) or _field_text(card, "date", r"date|posted")
-        description = _field_text(card, "description", sep=" ")
+        snippet = snippets.get(ad_id)
+        description = snippet or _field_text(card, "description", sep=" ")
 
         listings.append(
             Listing(
@@ -331,6 +341,9 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
                 description=description,
                 model_slugs=model_slugs,
                 scraped_at=now,
+                full_description=(
+                    snippet if snippet and not snippet.endswith(TRUNCATION_MARK) else None
+                ),
             )
         )
 

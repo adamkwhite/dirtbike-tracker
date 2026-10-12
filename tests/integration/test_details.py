@@ -126,3 +126,34 @@ def test_init_db_migrates_an_old_schema_in_place(tmp_path: Path) -> None:
         rows = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
     assert {"full_description", "detail_fetched_at", "dismissed_at", "sold_at"} <= cols
     assert rows == 1
+
+
+def test_complete_search_snippet_skips_the_detail_fetch(db: Path) -> None:
+    whole = _listing("deal", 1200, description="Doesn't run, needs carb clean. Have ownership.")
+    whole.full_description = whole.description
+    upsert_listings([whole], db_path=db)
+
+    listings = snapshot("crf150f", db_path=db).listings
+
+    assert fetch_details(listings, None, {"kijiji": lambda _: pytest.fail("fetched")}, db) == 0
+    assert _by_id(db)["deal"]["fit"] == 10
+
+
+def test_cut_off_snippet_updates_description_and_still_fetches(db: Path) -> None:
+    upsert_listings([_listing("deal", 1200, description="Runs, needs carb ...")], db_path=db)
+
+    listings = snapshot("crf150f", db_path=db).listings
+
+    assert _by_id(db)["deal"]["description"] == "Runs, needs carb ..."
+    assert fetch_details(listings, None, {"kijiji": lambda _: "full"}, db) == 1
+
+
+def test_search_snippet_never_overwrites_a_fetched_body(db: Path) -> None:
+    fetch_details(
+        snapshot("crf150f", db_path=db).listings, None, {"kijiji": lambda _: "fetched body"}, db
+    )
+    short = _listing("deal", 1200, description="short")
+    short.full_description = "short"
+    upsert_listings([short], db_path=db)
+
+    assert _by_id(db)["deal"]["description"] == "fetched body"

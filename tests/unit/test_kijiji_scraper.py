@@ -137,3 +137,32 @@ def test_fetch_ad_description_none_on_http_error(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(kijiji_scraper, "fetch_page", gone)
 
     assert kijiji_scraper.fetch_ad_description("https://www.kijiji.ca/v-x/1744639032") is None
+
+
+def _page_with_snippet(description: str) -> str:
+    page_data = json.dumps({"props": {"ads": [{"id": "1700000001", "description": description}]}})
+    return (
+        '<div data-testid="listing-card"><a href="/v-dirt-bikes-motocross/ontario/x/1700000001">'
+        '<h3>2008 Honda CRF150F</h3></a><p data-testid="listing-description">card text</p></div>'
+        f'<script id="__NEXT_DATA__" type="application/json">{page_data}</script>'
+    )
+
+
+def test_parse_listings_prefers_search_page_description_over_card() -> None:
+    (listing,) = parse_listings(_page_with_snippet("Sat for 3 years, needs carb."), "crf150f")
+
+    assert listing.description == "Sat for 3 years, needs carb."
+    assert listing.full_description == "Sat for 3 years, needs carb."  # short = the whole ad
+
+
+def test_parse_listings_cut_off_snippet_is_not_the_full_ad() -> None:
+    (listing,) = parse_listings(_page_with_snippet("Runs great, electric start, ..."), "crf150f")
+
+    assert listing.description == "Runs great, electric start, ..."
+    assert listing.full_description is None
+
+
+def test_parse_listings_falls_back_to_card_description() -> None:
+    (listing,) = parse_listings(_page_with_snippet("   "), "crf150f")
+
+    assert (listing.description, listing.full_description) == ("card text", None)
