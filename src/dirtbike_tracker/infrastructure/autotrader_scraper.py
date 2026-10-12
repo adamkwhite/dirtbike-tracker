@@ -12,8 +12,8 @@ Weekend 2 ships the simple keyword path. Model-code category mapping
 a reason to filter precisely.
 """
 
+import json
 import random
-import re
 import time
 from datetime import datetime
 from urllib.parse import quote
@@ -46,18 +46,6 @@ def build_search_url(model_slug: str, region: str = "on") -> str:
     return f"{BASE_URL}/motorcycles-atvs/lst/reg_{region}?loc=Ontario&kwd={quote(model_slug)}"
 
 
-def _parse_price(text: str) -> tuple:
-    if not text:
-        return None, PRICE_STATE_UNKNOWN
-    match = re.search(r"[\d,]+", text.replace(",", ""))
-    if not match:
-        return None, PRICE_STATE_UNKNOWN
-    try:
-        return float(match.group().replace(",", "")), PRICE_STATE_NUMERIC
-    except ValueError:
-        return None, PRICE_STATE_UNKNOWN
-
-
 def fetch_page(url: str, timeout: int = 20) -> str:
     time.sleep(RATE_LIMIT_SECONDS + random.uniform(0, 0.8))
     response = requests.get(url, headers=_headers(), timeout=timeout)
@@ -66,51 +54,44 @@ def fetch_page(url: str, timeout: int = 20) -> str:
 
 
 def parse_listings(html: str, model_slug: str) -> list[Listing]:
-    """Extract AutoTrader listing cards. Selectors are best-effort."""
-    soup = BeautifulSoup(html, "html.parser")
+    """Extract listings from the search page's __NEXT_DATA__ (props.pageProps.listings).
+
+    AutoTrader is a Next.js app; the rendered cards have no stable selectors,
+    but the embedded page data does. New stock (offerType "N") is skipped:
+    it's dealer MSRP, not used-market prices.
+    """
+    script = BeautifulSoup(html, "html.parser").find("script", id="__NEXT_DATA__")
+    try:
+        ads = json.loads(script.get_text())["props"]["pageProps"]["listings"] if script else []
+    except (ValueError, KeyError, TypeError):
+        return []
+
     now = datetime.utcnow().isoformat()
     results = []
-
-    # AutoTrader uses React-rendered cards. Common selectors to try:
-    cards = (
-        soup.select("div.result-item")
-        or soup.select("div[class*='ResultItem']")
-        or soup.select("article[data-testid*='listing']")
-    )
-
-    for card in cards:
-        link_el = card.find("a", href=True)
-        if not link_el:
+    for ad in ads:
+        vehicle = ad.get("vehicle") or {}
+        if vehicle.get("offerType") == "N":
             continue
-        href = str(link_el["href"])
-        url = href if href.startswith("http") else f"{BASE_URL}{href}"
 
-        title_el = card.find(["h2", "h3", "span"], class_=re.compile(r"title", re.I))
-        title = title_el.get_text(strip=True) if title_el else link_el.get_text(strip=True)
-
-        price_el = card.find(class_=re.compile(r"price", re.I))
-        price_text = price_el.get_text(strip=True) if price_el else ""
-        price, state = _parse_price(price_text)
-
-        loc_el = card.find(class_=re.compile(r"location|proximity", re.I))
-        location = loc_el.get_text(strip=True) if loc_el else ""
-
+        parts = [vehicle.get("modelYear"), vehicle.get("make"), vehicle.get("model")]
+        parts.append(vehicle.get("modelVersionInput"))
+        title = " ".join(str(p) for p in parts if p)
         detected = detect_models_in_title(title)
         if model_slug not in detected and model_slug.lower() not in title.lower():
             continue
 
-        external_id = re.search(r"([a-f0-9-]{36}|\d{8,})", url)
+        price = (ad.get("price") or {}).get("priceRaw")
         results.append(
             Listing(
                 source="autotrader",
-                external_id=external_id.group() if external_id else url,
-                url=url,
+                external_id=str(ad["id"]),
+                url=ad["url"],
                 title=title,
-                price=price,
-                price_state=state,
-                location=location,
+                price=float(price) if price else None,
+                price_state=PRICE_STATE_NUMERIC if price else PRICE_STATE_UNKNOWN,
+                location=(ad.get("location") or {}).get("city") or "",
                 posted_text="",
-                description="",
+                description=ad.get("description") or "",
                 model_slugs=detected if detected else [model_slug],
                 scraped_at=now,
             )
