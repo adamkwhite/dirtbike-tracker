@@ -284,6 +284,11 @@ def _ad_meta(soup: BeautifulSoup) -> tuple[set[str], dict[str, str], dict[str, s
     return new_ids, posted, descriptions
 
 
+def _whole_ad(snippet: str | None) -> str | None:
+    """The snippet when it is the entire ad (not cut off), else None."""
+    return snippet if snippet and not snippet.endswith(TRUNCATION_MARK) else None
+
+
 def _field_text(card: Tag, testid: str, class_pattern: str | None = None, sep: str = "") -> str:
     """Text of the card element whose data-testid (else class) matches, or ''."""
     el = card.find(attrs={"data-testid": re.compile(testid, re.I)}) or card.find(  # type: ignore[call-overload]
@@ -341,9 +346,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
                 description=description,
                 model_slugs=model_slugs,
                 scraped_at=now,
-                full_description=(
-                    snippet if snippet and not snippet.endswith(TRUNCATION_MARK) else None
-                ),
+                full_description=_whole_ad(snippet),
             )
         )
 
