@@ -41,3 +41,48 @@ def test_cli_registers_commands() -> None:
     assert result.exit_code == 0
     for command in ("scrape", "list", "stats", "report", "watch", "dashboard", "models"):
         assert command in result.output
+
+
+@pytest.fixture
+def stub_watch(snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch) -> list[set]:
+    recorded: list[set] = []
+    monkeypatch.setattr(cli_module, "load_config", lambda: {"priority": [{"slug": "crf150f"}]})
+    monkeypatch.setattr(cli_module, "_scrape_one", lambda *a, **k: [])
+    monkeypatch.setattr(cli_module, "upsert_listings", lambda _: {"new": 0, "updated": 0})
+    monkeypatch.setattr(cli_module, "snapshot", lambda slug: snap)
+    monkeypatch.setattr(cli_module, "_notified_ids", set)
+    monkeypatch.setattr(cli_module, "_record_notified", recorded.append)
+    monkeypatch.setattr(cli_module, "mark_stale", lambda: 0)
+    monkeypatch.setattr(cli_module, "write_dashboard", lambda *a: None)
+    monkeypatch.setattr(cli_module, "_check_source_health", lambda *a: None)
+    monkeypatch.setattr(cli_module, "ping_healthcheck", lambda: True)
+    monkeypatch.setattr(cli_module, "notify_good", lambda _: True)
+    return recorded
+
+
+def _raise_config_error(_: dict) -> bool:
+    raise cli_module.NotifyConfigError("no topic")
+
+
+@pytest.mark.parametrize(
+    ("args", "notify_deal", "deal_recorded"),
+    [
+        ([], lambda _: True, True),
+        ([], lambda _: False, False),  # HTTP failure: retry next run
+        ([], _raise_config_error, False),  # missing NTFY_TOPIC: retry next run
+        (["--no-notify"], _raise_config_error, True),  # silenced on purpose
+    ],
+)
+def test_watch_records_deal_only_when_alert_sent(
+    stub_watch: list[set],
+    monkeypatch: pytest.MonkeyPatch,
+    args: list[str],
+    notify_deal: object,
+    deal_recorded: bool,
+) -> None:
+    monkeypatch.setattr(cli_module, "notify_deal", notify_deal)
+
+    result = CliRunner().invoke(cli, ["watch", *args])
+
+    assert result.exit_code == 0, result.output
+    assert ("kijiji:1400" in stub_watch[0]) is deal_recorded
