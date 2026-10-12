@@ -22,7 +22,13 @@ import yaml
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.dashboard import write_dashboard
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
-from ..infrastructure.notifier import NotifyConfigError, notify, notify_deal, notify_good
+from ..infrastructure.notifier import (
+    NotifyConfigError,
+    notify,
+    notify_deal,
+    notify_good,
+    ping_healthcheck,
+)
 from ..infrastructure.reporter import render_report, write_report
 from ..infrastructure.storage import init_db, mark_stale, upsert_listings
 from .market import snapshot
@@ -305,6 +311,7 @@ def watch(region: str, notify: bool, group: str):
         f"Target hits: {totals['target_hits']}"
     )
     click.echo(f"Dashboard: file://{DASHBOARD_PATH}")
+    ping_healthcheck()
 
 
 @cli.command()

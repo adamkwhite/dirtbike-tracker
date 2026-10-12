@@ -43,6 +43,7 @@ Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
 |---|---|
 | `NTFY_TOPIC` | ntfy topic to push alerts to. Required unless `--no-notify`. |
 | `NTFY_SERVER` | Defaults to `https://ntfy.sh`. |
+| `HEALTHCHECK_URL` | Optional. [healthchecks.io](https://healthchecks.io) ping URL hit after every completed `watch`; it alerts when pings stop. |
 | `ANTHROPIC_API_KEY` | Optional. Enables LLM fact extraction (year, hours). |
 
 ### Cron
@@ -58,7 +59,7 @@ cd ~/Code/dirtbike-tracker-prod
 python3.13 -m venv venv && venv/bin/pip install -e .
 ln -s ~/Code/dirtbike-tracker/data data
 ln -s ~/Code/dirtbike-tracker/dashboard.html dashboard.html
-NTFY_TOPIC=your-topic ./scripts/install_cron.sh   # every 20 min, 6am-11pm
+NTFY_TOPIC=your-topic HEALTHCHECK_URL=https://hc-ping.com/<uuid> ./scripts/install_cron.sh   # every 20 min, 6am-11pm
 
 # deploy after merging to main
 git -C ~/Code/dirtbike-tracker-prod pull --ff-only
