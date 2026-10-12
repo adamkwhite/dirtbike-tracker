@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from dirtbike_tracker.domain.scoring import MarketSnapshot
+from dirtbike_tracker.domain.scoring import MarketSnapshot, score_listings
 from dirtbike_tracker.infrastructure.dashboard import (
     _model_section,
     render_dashboard,
@@ -101,3 +101,17 @@ def test_location_label_without_age() -> None:
 
 def test_nav_shows_active_listing_count_per_model(snap: MarketSnapshot) -> None:
     assert f'<a href="#crf150f">CRF150F ({len(snap.listings)})</a>' in render_dashboard([snap])
+
+
+def test_dashboard_shows_fit_with_flags_tooltip() -> None:
+    (listing,) = score_listings(
+        [{"price": 2000, "title": "CRF150F, runs great", "location": "", "url": "u"}], 2000
+    )
+
+    html = _model_section(
+        MarketSnapshot(
+            slug="crf150f", stats={"count": 0}, listings=[listing], trend=None, prices=[]
+        )
+    )
+
+    assert '<td class="num" title="+runs great">7</td>' in html

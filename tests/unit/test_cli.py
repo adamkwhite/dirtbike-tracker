@@ -168,6 +168,8 @@ def _rated(rating: str, price: float = 2000, drop_from: float | None = None) -> 
         (_rated("GOOD"), None, ("notify_good", "kijiji:9", "goods")),
         (_rated("FAIR", drop_from=2400), None, None),  # dropped, still not a deal
         (_rated("UNKNOWN", price=50), 1500, None),
+        ({**_rated("DEAL"), "fit": 2}, 2500, None),  # red-flagged: no alert at any price
+        ({**_rated("DEAL"), "fit": 5}, None, ("notify_deal", "kijiji:9", "deals")),
     ],
 )
 def test_alert_for(listing: dict, target: float | None, expected: tuple | None) -> None:
