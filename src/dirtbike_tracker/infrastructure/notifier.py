@@ -12,6 +12,7 @@ import requests
 
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
+HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "")
 
 
 class NotifyConfigError(Exception):
@@ -99,3 +100,21 @@ def notify_good(listing: dict) -> bool:
         tags=["eyes"],
         click_url=listing.get("url"),
     )
+
+
+def ping_healthcheck(url: str | None = None, timeout: int = 10) -> bool:
+    """Ping the dead-man's switch (healthchecks.io) after a completed watch run.
+
+    The external service alerts when pings stop, which catches watch never
+    running at all. No-op when HEALTHCHECK_URL is unset; never raises.
+    """
+    url = url or HEALTHCHECK_URL
+    if not url:
+        return False
+    try:
+        requests.get(url, timeout=timeout).raise_for_status()
+    except requests.RequestException as exc:
+        print(f"healthcheck ping failed: {exc}")  # noqa: T201
+        return False
+    else:
+        return True
