@@ -60,7 +60,7 @@ street:
   - slug: cb500f
     goal: ride
     sources: [kijiji, autotrader]
-    target_price: 4500
+    target_price: 3800       # median ~$4300 once cross-posts merge (2026-10-12)
     notes: "Honda CB500F, upright standard"
 
 # Dual sports: plated trail bikes, ready to ride (familiar from the dirt bikes)

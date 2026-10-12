@@ -289,7 +289,8 @@ def test_real_ad_wording_marks_a_project() -> None:
             10,
             ["+ownership", "+runs great", "+safetied"],
         ),
-        ("Rebel 500 sold as is, no safety", 0, ["-no safety", "-sold as is"]),
+        ("Rebel 500 sold as is, no safety", 0, ["-as is", "-no safety"]),
+        ("KLX300 street legal, as-is special", 2, ["-as-is"]),
         ("Rebel 500 project, ready for the trail", 2, ["-project"]),
     ],
 )
