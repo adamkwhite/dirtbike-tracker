@@ -1,8 +1,9 @@
 # dirtbike-tracker
 
-Personal used dirt bike price tracker. Scrapes Kijiji and AutoTrader for the models in
-`config/models.yml`, stores listings in SQLite, rates each one against the model's 90-day
-market median, and pushes DEAL/GOOD/target-price alerts to your phone via [ntfy](https://ntfy.sh).
+Finds a **project bike** to wrench on with the kids: a used dirt bike that needs work, priced
+right, with ownership. Scrapes Kijiji and AutoTrader for the models in `config/models.yml`,
+stores listings in SQLite, rates each one against the model's 90-day market median, scores its
+project fit, and pushes alerts to your phone via [ntfy](https://ntfy.sh).
 
 ## How it works
 
@@ -12,13 +13,13 @@ flowchart TB
     config[/"config/models.yml"/] --> cli
 
     subgraph application
-        cli["cli.py<br/>watch · list · stats · report · dashboard"]
+        cli["cli.py<br/>watch · list · stats · report · dashboard<br/>dismiss · backup"]
         market["market.py<br/>snapshot(slug)"]
         cli --> market
     end
 
     subgraph domain
-        scoring["scoring.py<br/>median · rating · trend · MarketSnapshot<br/><i>pure, no I/O</i>"]
+        scoring["scoring.py<br/>median · rating · project fit · trend<br/><i>pure, no I/O</i>"]
     end
 
     subgraph infrastructure
@@ -27,6 +28,7 @@ flowchart TB
         storage[("storage.py<br/>SQLite")]
         render["dashboard.py<br/>reporter.py"]
         notifier["notifier.py"]
+        backup["backup.py"]
     end
 
     market -->|score| scoring
@@ -34,17 +36,19 @@ flowchart TB
     cli -->|scrape| kij & at
     cli -->|upsert| storage
     cli -->|render snapshot| render
-    cli -->|DEAL / GOOD / target| notifier
+    cli -->|DEAL / GOOD / target / price drop| notifier
 
     kijiji{{Kijiji}} --> kij
     autotrader{{AutoTrader}} --> at
     notifier --> ntfy{{"ntfy.sh → phone"}}
     notifier --> hc{{healthchecks.io}}
+    cli -->|nightly| backup
+    backup --> drive{{"Google Drive (rclone)"}}
 ```
 
 Every 20 minutes `watch` scrapes each model in `config/models.yml`, upserts listings into
-SQLite, scores them against the market via `snapshot()`, alerts on new DEAL/GOOD/target
-listings, and rebuilds `dashboard.html`. The domain layer is pure: it receives prices and
+SQLite, scores them via `snapshot()`, alerts on new DEAL/GOOD/target listings and on price
+drops into GOOD/DEAL, and rebuilds `dashboard.html`. The domain layer is pure: it receives prices and
 listings, never queries.
 
 Ratings are price vs market median: **DEAL** ≤ -30%, **GOOD** ≤ -10%, **FAIR** ≤ +15%,
@@ -55,6 +59,10 @@ phrases in the title/description: +2 per green flag (`doesn't run`, `needs work`
 `ownership`, `trail`, ...), -3 per red flag (`no ownership`, `seized`, `blown`, `race bike`).
 Needing work is the point; "runs great" is neutral. Lists live in `domain/scoring.py`. A listing
 with fit below 5 never alerts, however cheap.
+
+Known limits: the scrapers read search-result cards, which rarely include the ad body, so fit is
+mostly neutral until full ad pages are fetched (#71). Non-runners are rated against the
+all-bikes median, so they skew DEAL (#72).
 
 Layout is hexagonal (`src/dirtbike_tracker/{domain,infrastructure,application}`). See
 [docs/architecture.md](docs/architecture.md) for modules, data model, dedup and scoring.
@@ -70,6 +78,9 @@ dirtbike list --model crf150f        # stored listings with ratings
 dirtbike stats --model crf150f       # low / median / high / count
 dirtbike report --model crf150f --write   # markdown snapshot to reports/
 dirtbike dashboard --open
+dirtbike dismiss <url-or-id>         # hide a listing you've evaluated (survives re-scrapes)
+dirtbike undismiss <url-or-id>
+dirtbike backup [--slot weekly]      # DB + state to Google Drive (see Backups)
 ```
 
 Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
