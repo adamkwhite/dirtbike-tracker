@@ -38,7 +38,9 @@ if [[ "${1:-}" == "--remove" ]]; then
 fi
 
 # Timestamp prefix on every line of output
-CRON_LINE="*/20 6-23 * * * NTFY_TOPIC=${NTFY_TOPIC:-} HEALTHCHECK_URL=${HEALTHCHECK_URL:-} cd ${PROJECT_ROOT} && ${DIRTBIKE} watch 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/watch.log ${MARKER}"
+# Env assignments must prefix the dirtbike command itself: `VAR=x cd dir && cmd`
+# scopes VAR to `cd` only, so watch never saw NTFY_TOPIC.
+CRON_LINE="*/20 6-23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} HEALTHCHECK_URL=${HEALTHCHECK_URL:-} ${DIRTBIKE} watch 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/watch.log ${MARKER}"
 REPORT_LINE="30 23 * * * cd ${PROJECT_ROOT} && ${DIRTBIKE} report --model crf150f --write 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/report.log ${MARKER}"
 
 (crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}") | crontab -

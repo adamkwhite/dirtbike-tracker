@@ -13,6 +13,7 @@ Usage:
 import contextlib
 import json
 from collections import Counter
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -79,6 +80,15 @@ def _record_notified(ids: set) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     path = STATE_DIR / "notified_ids.txt"
     path.write_text("\n".join(sorted(ids)))
+
+
+def _send(alert: Callable[[dict], bool], listing: dict) -> bool:
+    """True only if the alert actually went out."""
+    try:
+        return alert(listing)
+    except NotifyConfigError as exc:
+        click.echo(f"  (notify skipped: {exc})")
+        return False
 
 
 STALE_SOURCE_AFTER = timedelta(hours=24)
@@ -275,23 +285,17 @@ def watch(region: str, notify: bool, group: str):
                 and listing["price"] <= target_price
             )
 
+            # --no-notify still records, so re-enabling doesn't replay old alerts;
+            # a send that fails stays unrecorded and retries next run
             if is_deal or is_target_hit:
-                listing_for_notify = {**listing, "model_slug": slug}
-                if notify:
-                    try:
-                        notify_deal(listing_for_notify)
-                    except NotifyConfigError as exc:
-                        click.echo(f"  (notify skipped: {exc})")
+                if not notify or _send(notify_deal, {**listing, "model_slug": slug}):
+                    newly_notified.add(lid)
                 totals["deals"] += int(is_deal)
                 totals["target_hits"] += int(is_target_hit)
-                newly_notified.add(lid)
             elif is_good:
-                listing_for_notify = {**listing, "model_slug": slug}
-                if notify:
-                    with contextlib.suppress(NotifyConfigError):
-                        notify_good(listing_for_notify)
+                if not notify or _send(notify_good, {**listing, "model_slug": slug}):
+                    newly_notified.add(lid)
                 totals["goods"] += 1
-                newly_notified.add(lid)
 
     mark_stale()
     _record_notified(already_notified | newly_notified)
