@@ -11,10 +11,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # 3. Install dependencies
-pip install -r requirements.txt
+pip install -e .
 
 # 4. Verify
-python src/main.py --help
+dirtbike --help
 ```
 
 ## ntfy notifications
@@ -36,39 +36,38 @@ echo "Your ntfy topic: ${NTFY_TOPIC}"
 # 3. Subscribe to your topic in the app
 
 # 4. Test
-python -c "import sys; sys.path.insert(0, 'src'); from notifier import notify; notify('Test', 'If you see this, ntfy works.')"
+python -c "from dirtbike_tracker.infrastructure.notifier import notify; notify('Test', 'If you see this, ntfy works.')"
 ```
 
 ## Running the watch loop
 
 ```bash
 # One-off: scrape all configured models, score, notify on new deals
-python src/main.py watch
+dirtbike watch
 
 # Only scrape priority group
-python src/main.py watch --group priority
+dirtbike watch --group priority
 
 # Skip notifications (useful for testing)
-python src/main.py watch --no-notify
+dirtbike watch --no-notify
 
 # See what's configured
-python src/main.py models
+dirtbike models
 ```
 
 ## Scheduling via cron
 
-```bash
-# Install the cron job (runs every 20 min, 6am - 11pm local time)
-./scripts/install_cron.sh
+Cron runs from a separate prod clone (`~/Code/dirtbike-tracker-prod`, always `main`),
+**not** this checkout: running `install_cron.sh` here would make cron execute whatever
+branch you have checked out. One-time setup and deploy steps are in the README "Cron"
+section.
 
+```bash
 # Check it was installed
 crontab -l | grep dirtbike-tracker
 
 # Watch the live log
-tail -f logs/watch.log
-
-# Remove when done
-./scripts/install_cron.sh --remove
+tail -f ~/Code/dirtbike-tracker-prod/logs/watch.log
 ```
 
 Default schedule:
@@ -137,14 +136,16 @@ runs/doesn't-run, 'needs X').
 ## Troubleshooting
 
 **No results from Kijiji scrape:**
-- Kijiji changed their HTML. Open the search URL in a browser, inspect, update CSS selectors in `src/scraper.py`
+- Kijiji changed their HTML. Open the search URL in a browser, inspect, update the parsing in `src/dirtbike_tracker/infrastructure/kijiji_scraper.py`. `watch` pushes a warning after 24h of zero results from a source
 
 **No notifications arriving:**
-- Verify `NTFY_TOPIC` is set in the cron environment (shell env doesn't carry over by default; the install script bakes it in)
+- Verify `crontab -l` shows `NTFY_TOPIC=...` **after** `cd ... &&`, directly before the `dirtbike` command. `NTFY_TOPIC=x cd dir && dirtbike watch` scopes the var to `cd` only (fixed in #52); reinstall with `install_cron.sh` from the prod clone
 - Test with the `notify` snippet above
 - Check `logs/watch.log` for `ntfy notify failed` messages
 
 **Cron isn't running:**
+- healthchecks.io alerts when `watch` stops pinging (`HEALTHCHECK_URL` in the cron line)
+- `grep CRON /var/log/syslog`: a command cut off at `%` means an unescaped `%` in the crontab
 - `systemctl status cron` on Ubuntu
 - WSL 1 doesn't run cron reliably. use WSL 2 or Task Scheduler
 
