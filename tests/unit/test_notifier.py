@@ -63,3 +63,25 @@ def test_alert_body_has_year_and_km(sent: list[dict]) -> None:
     notifier.notify_deal({**LISTING, "location": "Kingston", "year": 2018, "km": 16672})
 
     assert sent[0]["body"] == "t\n2018 · 16,672 km\nKingston\nu"
+
+
+def test_alerts_attach_the_listing_photo(sent: list[dict]) -> None:
+    notifier.notify_deal({**LISTING, "image_url": "https://media.kijiji.ca/a.jpg"})
+    notifier.notify_good(LISTING)
+
+    assert sent[0]["attach_url"] == "https://media.kijiji.ca/a.jpg"
+    assert sent[1]["attach_url"] is None
+
+
+def test_notify_sends_attach_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    posted: dict = {}
+
+    def fake_post(url: str, data: bytes, headers: dict, timeout: int) -> object:
+        posted.update(headers)
+        return type("R", (), {"ok": True, "raise_for_status": lambda self: None})()
+
+    monkeypatch.setattr(notifier.requests, "post", fake_post)
+
+    notifier.notify("t", "b", topic="x", attach_url="https://media.kijiji.ca/a.jpg")
+
+    assert posted["Attach"] == "https://media.kijiji.ca/a.jpg"

@@ -84,6 +84,12 @@ def _listing_row(listing: dict) -> str:
     loc = location_label(listing, 28)
     title = (listing["title"] or "")[:65]
     per_year = price_per_year(listing, datetime.now().year)
+    thumb = ""
+    if listing.get("image_url"):
+        thumb = (
+            f'<a href="{_esc(listing["url"])}" target="_blank" rel="noopener">'
+            f'<img class="thumb" src="{_esc(listing["image_url"])}" alt="" loading="lazy"></a>'
+        )
     contacted = ""
     if label := contact_label(listing):
         days = label.split(":")[0]
@@ -98,7 +104,7 @@ def _listing_row(listing: dict) -> str:
                 <td class="num muted" title="{_esc(vs)}">{_esc(delta_str)}</td>
                 <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
                 <td class="muted">{_esc(loc)}</td>
-                <td><a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a>{contacted}</td>
+                <td>{thumb}<a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a>{contacted}</td>
               </tr>"""
 
 
@@ -349,6 +355,14 @@ def render_dashboard(snaps: list[MarketSnapshot]) -> str:
     td.muted, .muted {{ color: var(--muted); }}
     td a {{ color: var(--text); text-decoration: none; }}
     td a:hover {{ color: var(--accent); }}
+    .thumb {{
+      width: 72px;
+      height: 54px;
+      object-fit: cover;
+      border-radius: 4px;
+      vertical-align: middle;
+      margin-right: 8px;
+    }}
     .contacted {{
       margin-left: 6px;
       padding: 1px 6px;

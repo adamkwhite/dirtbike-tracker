@@ -4,7 +4,11 @@ import pytest
 import requests
 
 from dirtbike_tracker.infrastructure import kijiji_scraper
-from dirtbike_tracker.infrastructure.kijiji_scraper import parse_ad_description, parse_listings
+from dirtbike_tracker.infrastructure.kijiji_scraper import (
+    first_image,
+    parse_ad_description,
+    parse_listings,
+)
 
 
 def _card(ad_id: str, title: str) -> str:
@@ -184,3 +188,35 @@ def test_parse_listings_reads_year_and_km_fields() -> None:
 
     assert (listing.year, listing.km) == (2018, 16672)
     assert (blank.year, blank.km) == (2018, None)  # 0 = seller skipped the field
+
+
+@pytest.mark.parametrize(
+    ("images", "url"),
+    [
+        (
+            ["https://media.kijiji.ca/a.jpg?rule=kijijica-200-jpg", "https://b"],
+            "https://media.kijiji.ca/a.jpg?rule=kijijica-200-jpg",
+        ),
+        (["http://insecure/a.jpg"], None),
+        (["javascript:alert(1)"], None),
+        (["https://x/a.jpg\r\nX-Injected: 1"], None),
+        ([], None),
+        (None, None),
+        ([{"href": "https://x"}], None),
+    ],
+)
+def test_first_image_only_plain_https(images: object, url: str | None) -> None:
+    assert first_image(images) == url
+
+
+def test_parse_listings_reads_first_photo() -> None:
+    page_data = json.dumps(
+        {"props": {"ads": [{"id": "1700000001", "imageUrls": ["https://media.kijiji.ca/a.jpg"]}]}}
+    )
+    html = _card("1700000001", "2008 Kawasaki KLX140") + (
+        f'<script id="__NEXT_DATA__" type="application/json">{page_data}</script>'
+    )
+
+    (listing,) = parse_listings(html, "klx140")
+
+    assert listing.image_url == "https://media.kijiji.ca/a.jpg"

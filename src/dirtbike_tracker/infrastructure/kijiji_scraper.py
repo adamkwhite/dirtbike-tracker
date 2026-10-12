@@ -54,6 +54,7 @@ class Listing:
     full_description: str | None = None  # set when the search page already had the whole ad (#76)
     year: int | None = None
     km: int | None = None  # odometer; dirt bikes rarely have one
+    image_url: str | None = None  # first photo, small (#10)
 
     def to_dict(self):
         return asdict(self)
@@ -261,6 +262,17 @@ def _attrs(ad: dict) -> dict[str, list]:
     }
 
 
+def first_image(images: object) -> str | None:
+    """The first photo URL from a site's image list, if it's a plain https URL.
+
+    It lands in an <img src> and an ntfy Attach header, so third-party junk is dropped.
+    """
+    url = images[0] if isinstance(images, list) and images else None
+    if isinstance(url, str) and url.startswith("https://") and not any(c.isspace() for c in url):
+        return url
+    return None
+
+
 def _first(values: list) -> object:
     return values[0] if values else None
 
@@ -277,6 +289,7 @@ def _ad_meta(soup: BeautifulSoup) -> dict[str, dict]:
     - posted: activationDate, the original post time (sortingDate moves on a bump)
     - description: a ~200-char snippet; the cards mostly have none (#76)
     - year, km: the seller's caryear / carmileageinkms form fields
+    - image: the first photo's URL (200px)
     Missing or reshaped data returns {}, so a Kijiji markup change drops nothing.
     """
     script = soup.find("script", id="__NEXT_DATA__")
@@ -300,6 +313,8 @@ def _ad_meta(soup: BeautifulSoup) -> dict[str, dict]:
             facts["year"] = year
         if km := parse_km(_first(attrs.get("carmileageinkms", []))):
             facts["km"] = km
+        if image := first_image(ad.get("imageUrls")):
+            facts["image"] = image
     return meta
 
 
@@ -371,6 +386,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
                 full_description=_whole_ad(snippet),
                 year=facts.get("year"),
                 km=facts.get("km"),
+                image_url=facts.get("image"),
             )
         )
 
