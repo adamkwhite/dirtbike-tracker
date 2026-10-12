@@ -20,6 +20,8 @@ from . import autotrader_scraper, kijiji_scraper
 KIJIJI_SLUGS = ("crf150f", "rebel500")
 AUTOTRADER_SLUG = "rebel500"  # its results include new dealer stock (offerType N)
 PRICE_STATES = {"numeric", "please_contact", "swap_trade", "unknown"}
+AD_PAGE = "kijiji_ad.html"
+AUTOTRADER_PAGE = "autotrader_search.html"
 
 
 def record(out: Path) -> None:
@@ -35,12 +37,12 @@ def record(out: Path) -> None:
     # one ad page, for the full description (#71): the first listing on the first search
     first_search = (out / f"kijiji_search_{KIJIJI_SLUGS[0]}.html").read_text()
     if first := kijiji_scraper.parse_listings(first_search, KIJIJI_SLUGS[0]):
-        (out / "kijiji_ad.html").write_text(kijiji_scraper.fetch_page(first[0].url))
-        pages["kijiji_ad.html"] = {"url": first[0].url, "external_id": first[0].external_id}
+        (out / AD_PAGE).write_text(kijiji_scraper.fetch_page(first[0].url))
+        pages[AD_PAGE] = {"url": first[0].url, "external_id": first[0].external_id}
 
     url = autotrader_scraper.build_search_url(AUTOTRADER_SLUG)
-    (out / "autotrader_search.html").write_text(autotrader_scraper.fetch_page(url))
-    pages["autotrader_search.html"] = {"url": url, "slug": AUTOTRADER_SLUG}
+    (out / AUTOTRADER_PAGE).write_text(autotrader_scraper.fetch_page(url))
+    pages[AUTOTRADER_PAGE] = {"url": url, "slug": AUTOTRADER_SLUG}
 
     manifest = {"recorded_at": datetime.now(UTC).isoformat(timespec="seconds"), "pages": pages}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
@@ -112,10 +114,10 @@ def problems(out: Path) -> list[str]:
         html = (out / name).read_text()
         if name.startswith("kijiji_search_"):
             found += _kijiji_search_problems(name, html, info["slug"])
-        elif name == "kijiji_ad.html":
+        elif name == AD_PAGE:
             if not kijiji_scraper.parse_ad_description(html, info["external_id"]):
                 found.append(f"{name}: __APOLLO_STATE__ description stopped parsing (#71)")
-        elif name == "autotrader_search.html":
+        elif name == AUTOTRADER_PAGE:
             found += _autotrader_problems(name, html, info["slug"])
     return found
 
