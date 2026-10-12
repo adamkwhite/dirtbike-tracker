@@ -10,6 +10,8 @@ import os
 
 import requests
 
+from ..domain.scoring import vs_label
+
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
 HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "")
@@ -74,7 +76,7 @@ def notify_deal(listing: dict) -> bool:
     """Send a push notification for a new DEAL-rated listing."""
     price = f"${int(listing['price'])}" if listing.get("price") else "?"
     delta = listing.get("delta_pct")
-    delta_str = f" ({delta:+.0f}% vs median)" if delta is not None else ""
+    delta_str = f" ({delta:+.0f}% {vs_label(listing)})" if delta is not None else ""
     model = listing.get("model_slug") or "bike"
     location = listing.get("location") or "unknown"
 

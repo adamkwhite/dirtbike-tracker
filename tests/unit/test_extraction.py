@@ -43,3 +43,8 @@ def test_needs_splits_on_whole_word_and_only() -> None:
     facts = extract_regex("", "Needs handlebars, tires and sand paper. Kneads dough")
 
     assert facts.needs == ["handlebars", "tires", "sand paper"]
+
+
+@pytest.mark.parametrize("text", ["Non-runner", "doesnt run", "WON'T START"])
+def test_runs_negative_uses_the_shared_not_running_phrases(text: str) -> None:
+    assert extract_regex("CRF150F", text).runs is False

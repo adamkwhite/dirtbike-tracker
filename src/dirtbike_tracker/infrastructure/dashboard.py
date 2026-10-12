@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from ..domain.scoring import MarketSnapshot
+from ..domain.scoring import FALLBACK_NOTE, MarketSnapshot, project_line, vs_label
 from .reporter import location_label
 
 RATING_HEX = {
@@ -54,11 +54,15 @@ def _tiles(stats: dict, t: float | None) -> str:
         arrow = "▼" if t < 0 else "▲"
         trend_class = "trend-down" if t < 0 else "trend-up"
         trend_html = f'<div class="tile"><div class="label">Trend 30d</div><div class="val {trend_class}">{arrow} {abs(t):.0f}%</div></div>'
+    project_html = ""
+    if stats.get("project_median") is not None:
+        project_html = f'<div class="tile" title="{_esc(project_line(stats) or "")}"><div class="label">Project median</div><div class="val">${int(stats["project_median"])}</div></div>'
     return f"""
           <div class="tile"><div class="label">Count</div><div class="val">{stats["count"]}</div></div>
           <div class="tile"><div class="label">Low</div><div class="val">${int(stats["low"])}</div></div>
           <div class="tile tile-median"><div class="label">Median</div><div class="val">${int(stats["median"])}</div></div>
           <div class="tile"><div class="label">High</div><div class="val">${int(stats["high"])}</div></div>
+          {project_html}
           {trend_html}
         """
 
@@ -67,6 +71,10 @@ def _listing_row(listing: dict) -> str:
     rating = listing["rating"]
     delta = listing["delta_pct"]
     delta_str = f"{delta:+.0f}%" if delta is not None else "—"
+    vs = vs_label(listing)
+    if listing.get("basis") == "fallback":
+        delta_str += "*"
+        vs += f" ({FALLBACK_NOTE.lstrip('* ')})"
     if listing["price"]:
         price_str = f"${int(listing['price'])}"
     else:
@@ -79,7 +87,7 @@ def _listing_row(listing: dict) -> str:
               <tr>
                 <td><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>
                 <td class="num">{_esc(price_str)}</td>
-                <td class="num muted">{_esc(delta_str)}</td>
+                <td class="num muted" title="{_esc(vs)}">{_esc(delta_str)}</td>
                 <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
                 <td class="muted">{_esc(loc)}</td>
                 <td><a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a></td>

@@ -32,10 +32,17 @@ FIT_RED_FLAGS = (
     "seized", "blown",
     "race bike", "race ready", "track bike",
 )  # fmt: skip
-FIT_GREEN_FLAGS = (
-    "doesn't run", "does not run", "won't start", "not running", "non running", "non-running",
+NOT_RUNNING = (
+    "doesn't run", "doesnt run", "does not run", "won't start", "wont start", "not running",
+    "non running", "non-running", "non runner", "non-runner", "nonrunner",
+)  # fmt: skip
+# The bike's condition makes it a project: these define the project market segment (#72)
+PROJECT_FLAGS = NOT_RUNNING + (
     "needs work", "needs tlc", "needs carb", "needs a carb", "carb clean",
+    "needs rings", "needs a top end", "needs a rebuild", "timing chain",
     "project", "barn find", "mechanic special", "sat for",
+)  # fmt: skip
+FIT_GREEN_FLAGS = PROJECT_FLAGS + (
     "ownership", "one owner", "trail", "my son", "my daughter", "my kids",
 )  # fmt: skip
 # Matched and ignored, so they can't trip a green flag ("not a project, ready to ride")
@@ -63,6 +70,15 @@ def project_fit(text: str) -> tuple[int, list[str]]:
     return max(0, min(10, score)), [f"-{r}" for r in reds] + [f"+{g}" for g in greens]
 
 
+# Project bikes are rated against the project median once it has this many prices
+PROJECT_MIN_SAMPLES = 5
+
+
+def is_project(fit_flags: list[str]) -> bool:
+    """A project bike by condition (doesn't run, needs work, ...), per project_fit's flags."""
+    return any(flag[1:] in PROJECT_FLAGS for flag in fit_flags if flag.startswith("+"))
+
+
 @dataclass
 class MarketSnapshot:
     """One model's scored market, as consumed by the CLI and renderers."""
@@ -86,6 +102,36 @@ def market_stats(prices: list[float]) -> dict:
         "high": max(prices),
         "count": len(prices),
     }
+
+
+VS_LABELS = {"project": "vs project median", "fallback": "vs all bikes*"}
+FALLBACK_NOTE = "* project bike, but too few project prices yet for a project median"
+
+
+def vs_label(listing: dict) -> str:
+    """What the listing's delta_pct is relative to."""
+    return VS_LABELS.get(listing.get("basis") or "", "vs median")
+
+
+def project_line(stats: dict) -> str | None:
+    """'Project median $1400 (6 bikes)', or None when there are too few project prices."""
+    if stats.get("project_median") is None:
+        return None
+    return f"Project median ${int(stats['project_median'])} ({stats['project_count']} bikes)"
+
+
+def project_stats(market: list[dict]) -> dict:
+    """Median of the project bikes in a market ({"price", "title", "description"} rows).
+
+    project_median is None below PROJECT_MIN_SAMPLES: too few to rate against.
+    """
+    prices = [
+        x["price"]
+        for x in market
+        if is_project(project_fit(f"{x['title'] or ''} {x['description'] or ''}")[1])
+    ]
+    enough = len(prices) >= PROJECT_MIN_SAMPLES
+    return {"project_median": median(prices) if enough else None, "project_count": len(prices)}
 
 
 def rate_listing(price: float | None, median_price: float | None) -> dict:
@@ -140,14 +186,26 @@ def needs_detail(listing: dict, target_price: float | None) -> bool:
     return listing["rating"] in ("DEAL", "GOOD") or under_target(listing, target_price)
 
 
-def score_listings(listings: list[dict], median_price: float | None) -> list[dict]:
-    """Attach rating, urgency and project fit to each listing, best deals first, unpriced last."""
+def score_listings(
+    listings: list[dict], median_price: float | None, project_median: float | None = None
+) -> list[dict]:
+    """Attach rating, urgency and project fit to each listing, best deals first, unpriced last.
+
+    A project bike is rated against project_median when there is one (basis "project");
+    without it, against the whole market and marked as such (basis "fallback"), since a
+    non-runner looks like a DEAL next to running bikes just for not running.
+    """
     scored = []
     for listing in listings:
-        rated = {**listing, **rate_listing(listing["price"], median_price)}
-        rated["urgency"] = urgency(rated["rating"], listing.get("age_days"))
         text = f"{listing.get('title') or ''} {listing.get('description') or ''}"
-        rated["fit"], rated["fit_flags"] = project_fit(text)
+        fit, fit_flags = project_fit(text)
+        basis = None
+        if is_project(fit_flags):
+            basis = "project" if project_median else "fallback"
+        median_for = project_median if basis == "project" else median_price
+        rated = {**listing, **rate_listing(listing["price"], median_for)}
+        rated["urgency"] = urgency(rated["rating"], listing.get("age_days"))
+        rated["fit"], rated["fit_flags"], rated["basis"] = fit, fit_flags, basis
         scored.append(rated)
     scored.sort(key=lambda x: (x["delta_pct"] is None, x["delta_pct"] or 0))
     return scored

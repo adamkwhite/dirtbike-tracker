@@ -3,10 +3,18 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..domain.scoring import MarketSnapshot, market_stats, score_listings, trend, weekly_medians
+from ..domain.scoring import (
+    MarketSnapshot,
+    market_stats,
+    project_stats,
+    score_listings,
+    trend,
+    weekly_medians,
+)
 from ..infrastructure.storage import (
     DB_PATH,
     active_listings,
+    market_listings,
     market_prices,
     price_drops,
     price_timelines,
@@ -16,8 +24,9 @@ from ..infrastructure.storage import (
 
 def snapshot(slug: str, db_path: Path = DB_PATH) -> MarketSnapshot:
     """Fetch a model's market from the DB and score it."""
-    prices = market_prices(slug, days=90, db_path=db_path)
-    stats = market_stats(prices)
+    market = market_listings(slug, days=90, db_path=db_path)
+    prices = [x["price"] for x in market]
+    stats = {**market_stats(prices), **project_stats(market)}
     drops = price_drops(slug, db_path=db_path)
     listings = [
         {
@@ -30,7 +39,7 @@ def snapshot(slug: str, db_path: Path = DB_PATH) -> MarketSnapshot:
     return MarketSnapshot(
         slug=slug,
         stats=stats,
-        listings=score_listings(listings, stats["median"]),
+        listings=score_listings(listings, stats["median"], stats["project_median"]),
         trend=trend(
             market_prices(slug, days=30, db_path=db_path),
             market_prices(slug, days=90, db_path=db_path, older_than_days=30),

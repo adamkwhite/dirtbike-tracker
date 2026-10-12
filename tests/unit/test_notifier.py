@@ -51,3 +51,9 @@ def test_price_drop_prefix_and_was(sent: list[dict]) -> None:
 
     assert sent[0]["title"] == "PRICE DROP: Good: CRF150F $2000 (-20%)"
     assert sent[0]["body"].startswith("Was $2400. ")
+
+
+def test_deal_says_which_median(sent: list[dict]) -> None:
+    notifier.notify_deal({**LISTING, "basis": "project"})
+
+    assert "(-20% vs project median)" in sent[0]["title"]

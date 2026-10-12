@@ -23,7 +23,7 @@ from pathlib import Path
 import click
 import yaml
 
-from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, under_target
+from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, project_line, under_target, vs_label
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
@@ -250,7 +250,7 @@ def list_cmd(model: str):
         click.echo(
             f"  [{source}] "
             f"{click.style(rating.ljust(7), fg=RATING_COLORS.get(rating, 'white'))} "
-            f"{delta_str.rjust(5)} vs median  {price_str}  fit {listing['fit']:>2}  "
+            f"{delta_str.rjust(5)} {vs_label(listing)}  {price_str}  fit {listing['fit']:>2}  "
             f"{loc:<22}  {title}"
         )
         click.echo(f"           {listing['url']}")
@@ -269,6 +269,8 @@ def stats(model: str):
     click.echo(f"  Listings:  {s['count']}")
     click.echo(f"  Low:       ${int(s['low'])}")
     click.echo(f"  Median:    ${int(s['median'])}")
+    if line := project_line(s):
+        click.echo(f"  {line}")
     click.echo(f"  High:      ${int(s['high'])}")
     if t is not None:
         arrow = "▼" if t < 0 else "▲"

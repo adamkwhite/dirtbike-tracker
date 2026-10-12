@@ -60,10 +60,14 @@ phrases in the title/description: +2 per green flag (`doesn't run`, `needs work`
 Needing work is the point; "runs great" is neutral. Lists live in `domain/scoring.py`. A listing
 with fit below 5 never alerts, however cheap.
 
-Search-result cards rarely include the ad body, so before alerting, `watch` reads the full ad
-of up to 5 listings per model that could alert (DEAL/GOOD or under target), once each, and
-re-scores fit on it. A red flag in the body stops the alert. Known limit: non-runners are rated
-against the all-bikes median, so they skew DEAL (#72).
+Kijiji search pages carry a ~200-char snippet of every ad; a snippet that isn't cut off is the
+whole ad. For a cut-off one that could alert (DEAL/GOOD or under target), `watch` reads the full
+ad (up to 5 per model, once each) and re-scores fit on it. A red flag in the body stops the alert.
+
+**Project bikes** (a condition phrase: `doesn't run`, `needs work`, `needs rings`, `project`, ...)
+are rated against the median of other project bikes, since next to running bikes a non-runner
+looks like a DEAL just for not running. Until a model has 5 project prices in 90 days they fall
+back to the all-bikes median, shown as `vs all bikes*` (dashboard `-40%*`).
 
 Layout is hexagonal (`src/dirtbike_tracker/{domain,infrastructure,application}`). See
 [docs/architecture.md](docs/architecture.md) for modules, data model, dedup and scoring.
