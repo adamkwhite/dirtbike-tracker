@@ -46,13 +46,18 @@ def test_market_stats_many_prices() -> None:
 
 
 def test_trend_recent_vs_older_window() -> None:
-    # recent median 2200, older (window minus recent) median 2000 -> +10%
-    assert trend(recent=[2200], window=[2200, 1900, 2000, 2100]) == 10.0
+    # recent median 2200, older median 2000 -> +10%
+    assert trend(recent=[2200], older=[1900, 2000, 2100]) == 10.0
 
 
-@pytest.mark.parametrize(("recent", "window"), [([], [2000]), ([2000], [2000])])
-def test_trend_none_without_both_windows(recent: list[float], window: list[float]) -> None:
-    assert trend(recent, window) is None
+def test_trend_keeps_older_prices_that_match_recent_ones() -> None:
+    # same sticker price in both windows is still an older data point
+    assert trend(recent=[2000], older=[2000, 2000, 1000]) == 0.0
+
+
+@pytest.mark.parametrize(("recent", "older"), [([], [2000]), ([2000], [])])
+def test_trend_none_without_both_windows(recent: list[float], older: list[float]) -> None:
+    assert trend(recent, older) is None
 
 
 def test_score_listings_sorts_best_deal_first_and_unpriced_last() -> None:

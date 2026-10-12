@@ -233,21 +233,26 @@ def active_listings(
         return [dict(r) for r in rows]
 
 
-def market_prices(model_slug: str, days: int = 90, db_path: Path = DB_PATH) -> list[float]:
-    """Distinct non-null prices for a model first seen in the last N days (primary only)."""
+def market_prices(
+    model_slug: str, days: int = 90, db_path: Path = DB_PATH, older_than_days: int = 0
+) -> list[float]:
+    """One price per primary listing first seen between `days` and `older_than_days` ago."""
     # naive UTC to match how first_seen is stored
-    cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).isoformat()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    cutoff = (now - timedelta(days=days)).isoformat()
+    newest = (now - timedelta(days=older_than_days)).isoformat()
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT DISTINCT l.price FROM listings l
+            SELECT l.price FROM listings l
             JOIN listing_models m ON m.listing_id = l.id
             WHERE m.model_slug=?
               AND l.price IS NOT NULL
               AND l.price > 100
               AND l.first_seen >= ?
+              AND l.first_seen <= ?
               AND l.is_primary = 1
             """,
-            (model_slug, cutoff),
+            (model_slug, cutoff, newest),
         ).fetchall()
     return [r["price"] for r in rows]

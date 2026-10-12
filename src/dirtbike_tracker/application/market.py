@@ -15,6 +15,9 @@ def snapshot(slug: str, db_path: Path = DB_PATH) -> MarketSnapshot:
         slug=slug,
         stats=stats,
         listings=score_listings(listings, stats["median"]),
-        trend=trend(market_prices(slug, days=30, db_path=db_path), prices),
+        trend=trend(
+            market_prices(slug, days=30, db_path=db_path),
+            market_prices(slug, days=90, db_path=db_path, older_than_days=30),
+        ),
         prices=prices,
     )
