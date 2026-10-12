@@ -6,6 +6,7 @@ URL; requests.post records ntfy pushes. Nothing touches data/ (shared with prod)
 """
 
 import json
+import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -200,5 +201,7 @@ def test_db_state_after_a_run(web: FakeWeb, tmp_path: Path) -> None:
 
 
 def test_shared_db_guard_is_active(web: FakeWeb) -> None:  # tests/conftest.py
+    shared = Path(cli_module.ROOT) / "data" / "listings.db"
+
     with pytest.raises(AssertionError, match="shared data/ DB"):
-        storage.connect(Path(cli_module.ROOT) / "data" / "listings.db").__enter__()
+        sqlite3.connect(shared)
