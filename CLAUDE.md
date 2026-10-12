@@ -14,7 +14,7 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 
 ## Tests
 - `tests/e2e/test_watch_e2e.py` runs `watch` end to end, faking only `requests.get`/`requests.post` (canned pages by URL) and `time.sleep`, against SQLite in `tmp_path`. Extend it when changing the watch flow
-- `make drift` re-records real Kijiji/AutoTrader pages into `tests/recorded/` and runs `tests/drift/` against them: a failure means a site changed something a parser reads. The recordings are gitignored and must never be committed (third-party ads with private sellers' details; the repo is public), so CI skips these tests
+- `dirtbike drift` (weekly cron, Sundays 05:00; `make drift` locally) re-records real Kijiji/AutoTrader pages into `tests/recorded/` and runs `infrastructure/drift.py`'s checks over them, alerting via ntfy on problems: a failure means a site changed something a parser reads. When adding a parsed field, add its check there. The recordings are gitignored and must never be committed (third-party ads with private sellers' details; the repo is public), so CI skips `tests/drift`. README "Site drift" has the runbook
 
 ## Common commands
 - `dirtbike watch` - scrape all models, score, notify

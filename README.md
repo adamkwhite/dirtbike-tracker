@@ -32,6 +32,7 @@ flowchart TB
         render["dashboard.py<br/>reporter.py"]
         notifier["notifier.py"]
         backup["backup.py"]
+        drift["drift.py"]
     end
 
     market -->|score| scoring
@@ -46,6 +47,7 @@ flowchart TB
     notifier --> ntfy{{"ntfy.sh → phone"}}
     notifier --> hc{{healthchecks.io}}
     cli -->|nightly| backup
+    cli -->|weekly: site-drift check| drift
     backup --> drive{{"Google Drive (rclone)"}}
 ```
 
@@ -98,6 +100,7 @@ dirtbike dismiss <url-or-id>         # hide a listing you've evaluated (survives
 dirtbike undismiss <url-or-id>
 dirtbike contact <url-or-id> --note "offered 750" [--on 2026-10-01]  # log messaging a seller (--clear to undo)
 dirtbike backup [--slot weekly]      # DB + state to Google Drive (see Backups)
+dirtbike drift [--replay] [--no-notify]   # site-drift check (see Site drift)
 ```
 
 Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
@@ -134,11 +137,22 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 ~/Code/dirtbike-tracker-prod/scripts/install_cron.sh --remove
 ```
 
-Logs go to `~/Code/dirtbike-tracker-prod/logs/watch.log` (timestamped if `moreutils` is installed).
+`install_cron.sh` installs five jobs (Ontario time):
+
+| When | Job | Log |
+|---|---|---|
+| every 20 min, 6:00–23:40 | `dirtbike watch` | `logs/watch.log` |
+| 23:30 daily | `dirtbike report --model crf150f --write` | `logs/report.log` |
+| 23:55 daily, 23:58 Sundays | `dirtbike backup` (nightly / `--slot weekly`) | `logs/backup.log` |
+| 05:00 Sundays | `dirtbike drift` (see Site drift) | `logs/drift.log` |
+
+Logs are in `~/Code/dirtbike-tracker-prod/logs/` (timestamped if `moreutils` is installed). After
+changing the schedule in `install_cron.sh`, re-run it from the prod clone with the same
+`NTFY_TOPIC` / `HEALTHCHECK_URL`: it replaces every `# dirtbike-tracker` line.
 
 ### Docker
 
-An alternative to the WSL cron, e.g. for a VPS. `tracker` runs the same four jobs as
+An alternative to the WSL cron, e.g. for a VPS. `tracker` runs the same five jobs as
 `install_cron.sh` via [supercronic](https://github.com/aptible/supercronic) (Ontario time, logs
 to `docker compose logs`); `dashboard` serves the dashboard on `127.0.0.1:8080`.
 
@@ -169,6 +183,32 @@ cp ~/dirtbike-restore/state/* ~/Code/dirtbike-tracker/data/state/
 ```
 
 Check the row count, not `PRAGMA quick_check`: quick_check passes on an empty file.
+
+### Site drift
+
+Kijiji and AutoTrader change their pages without notice. The source-health alert only fires
+once a scraper has returned **nothing** for 24h; a field that quietly stops parsing (photos,
+km, the new-stock filter) would go unnoticed. `dirtbike drift` catches that:
+
+1. It records a few live pages into `tests/recorded/`: Kijiji searches for `crf150f` and
+   `rebel500`, one Kijiji ad page, and an AutoTrader `rebel500` search (which has dealer stock).
+2. It runs our real parsers over them and checks that listings parse with id, link, title and
+   price state; that snippets, post dates, photos, year and km are read; that new dealer stock
+   is skipped; and that the ad page's description reads. Logic: `infrastructure/drift.py`.
+3. On any problem it prints them, pushes an ntfy alert ("Site drift: N parser problem(s)") and
+   exits 1.
+
+Cron runs it Sundays at 05:00; the Docker crontab does too, recording into `data/drift/`
+because `/app` isn't writable in the container.
+
+**When it alerts:** read `logs/drift.log` for the list, open the recorded page next to the
+parser named in the problem, fix the parser, then check the fix offline against the same pages
+with `dirtbike drift --replay --no-notify`. Locally, `make drift` re-records and checks, and
+`pytest tests/drift` runs the same check over whatever is recorded.
+
+**Never commit `tests/recorded/`** (it's gitignored): the pages are third-party ads with private
+sellers' names and phone numbers, and this repo is public. That's also why CI skips
+`tests/drift`: there are no recordings there.
 
 ## Requirements
 
