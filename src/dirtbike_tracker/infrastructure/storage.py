@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS listings (
     is_active INTEGER DEFAULT 1,
     is_primary INTEGER DEFAULT 1,
     sold_at TEXT,
+    dismissed_at TEXT,
     UNIQUE(source, external_id)
 );
 
@@ -102,6 +103,8 @@ def _migrate_old_schema(db_path: Path = DB_PATH) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN is_primary INTEGER DEFAULT 1")
         if "sold_at" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN sold_at TEXT")
+        if "dismissed_at" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN dismissed_at TEXT")
 
 
 def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
@@ -245,6 +248,7 @@ def active_listings(
     Return active listings, optionally filtered by model and primary-only.
 
     primary_only=True hides cross-posted duplicates (keeps the first-seen copy).
+    Dismissed listings are always excluded (they still count toward the market).
     age_days counts from the source's post time when known (Kijiji's
     activationDate in posted_text), else from when we first saw it.
     """
@@ -254,11 +258,11 @@ def active_listings(
             sql = f"""
                 SELECT l.*, {age} FROM listings l
                 JOIN listing_models m ON m.listing_id = l.id
-                WHERE l.is_active=1 AND m.model_slug=?
+                WHERE l.is_active=1 AND l.dismissed_at IS NULL AND m.model_slug=?
             """
             params = [model_slug]
         else:
-            sql = f"SELECT *, {age} FROM listings WHERE is_active=1"
+            sql = f"SELECT *, {age} FROM listings WHERE is_active=1 AND dismissed_at IS NULL"
             params = []
         if primary_only:
             sql += " AND is_primary=1"
@@ -371,3 +375,23 @@ def price_drops(model_slug: str, db_path: Path = DB_PATH) -> dict[int, float]:
             (model_slug,),
         ).fetchall()
     return {r["listing_id"]: r["prev"] for r in rows}
+
+
+def set_dismissed(ref: str, dismissed: bool, db_path: Path = DB_PATH) -> list[str]:
+    """Dismiss (or restore) the listing matching an external id or listing URL.
+
+    Persists across scrapes: upsert never touches dismissed_at. Returns the
+    titles of matched listings (empty if nothing matched).
+    """
+    ref = ref.strip().split("?")[0].split("#")[0].rstrip("/")
+    stamp = datetime.now(UTC).replace(tzinfo=None).isoformat() if dismissed else None
+    with connect(db_path) as conn:
+        # external ids are 10-digit Kijiji ids or AutoTrader UUIDs, which end their URLs
+        rows = conn.execute(
+            "SELECT id, title FROM listings WHERE external_id=? OR ? LIKE '%' || external_id",
+            (ref, ref),
+        ).fetchall()
+        conn.executemany(
+            "UPDATE listings SET dismissed_at=? WHERE id=?", [(stamp, r["id"]) for r in rows]
+        )
+    return [r["title"] for r in rows]
