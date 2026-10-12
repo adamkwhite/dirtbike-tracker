@@ -12,6 +12,9 @@ Usage:
 
 import contextlib
 import json
+import platform
+import subprocess  # nosec B404 - fixed argv, no shell
+import webbrowser
 from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -89,6 +92,21 @@ def _send(alert: Callable[[dict], bool], listing: dict) -> bool:
     except NotifyConfigError as exc:
         click.echo(f"  (notify skipped: {exc})")
         return False
+
+
+def _open_in_browser(path: Path) -> None:
+    """Open a local file in the default browser, including from WSL.
+
+    Under WSL, webbrowser.open finds no Windows browser and silently does
+    nothing; hand the file to Windows via its \\wsl.localhost path instead.
+    """
+    if "microsoft" in platform.uname().release.lower():
+        win_path = subprocess.run(
+            ["wslpath", "-w", str(path)], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        subprocess.run(["explorer.exe", win_path], check=False)  # exits 1 even on success
+    else:
+        webbrowser.open(f"file://{path}")
 
 
 STALE_SOURCE_AFTER = timedelta(hours=24)
@@ -342,9 +360,7 @@ def dashboard(models: str, open_browser: bool):
     path = write_dashboard([snapshot(s) for s in slugs], DASHBOARD_PATH)
     click.echo(f"Dashboard written: file://{path}")
     if open_browser:
-        import webbrowser
-
-        webbrowser.open(f"file://{path}")
+        _open_in_browser(path)
 
 
 @cli.command()
