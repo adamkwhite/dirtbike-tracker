@@ -56,4 +56,6 @@ def test_dashboard_shows_recently_sold(snap: MarketSnapshot) -> None:
     page = render_dashboard([snap])
 
     assert "Recently sold (likely)" in page
-    assert "$3600" in page and "12d" in page and "2026-10-09" in page
+    assert "$3600" in page
+    assert "12d" in page
+    assert "2026-10-09" in page

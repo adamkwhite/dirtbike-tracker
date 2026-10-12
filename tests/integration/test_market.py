@@ -94,7 +94,9 @@ def test_mark_stale_tags_likely_sold_only_for_sources_that_scraped(tmp_path: Pat
 
     assert mark_stale(["kijiji"], db_path=db) == 2
 
-    assert _row(db, "gone-4d")[0] == 0 and _row(db, "gone-4d")[1] is not None
+    is_active, sold_at = _row(db, "gone-4d")
+    assert is_active == 0
+    assert sold_at is not None
     assert _row(db, "gone-2d") == (0, None)  # inactive, not yet "sold"
     assert _row(db, "fresh") == (1, None)
     assert _row(db, "at-gone-4d") == (1, None)
