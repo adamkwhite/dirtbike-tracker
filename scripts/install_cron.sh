@@ -42,8 +42,11 @@ fi
 # scopes VAR to `cd` only, so watch never saw NTFY_TOPIC.
 CRON_LINE="*/20 6-23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} HEALTHCHECK_URL=${HEALTHCHECK_URL:-} ${DIRTBIKE} watch 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/watch.log ${MARKER}"
 REPORT_LINE="30 23 * * * cd ${PROJECT_ROOT} && ${DIRTBIKE} report --model crf150f --write 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/report.log ${MARKER}"
+# Off-box backup after the day's last scrape; weekly slot on Sundays (#26)
+BACKUP_LINE="55 23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"
+WEEKLY_BACKUP_LINE="58 23 * * 0 cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup --slot weekly 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"
 
-(crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}") | crontab -
+(crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}"; echo "${BACKUP_LINE}"; echo "${WEEKLY_BACKUP_LINE}") | crontab -
 
 echo "Installed cron entries:"
 crontab -l | grep "${MARKER}"

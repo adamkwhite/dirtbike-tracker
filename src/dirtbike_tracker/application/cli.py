@@ -24,6 +24,7 @@ import click
 import yaml
 
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
+from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.notifier import (
@@ -361,6 +362,25 @@ def dashboard(models: str, open_browser: bool):
     click.echo(f"Dashboard written: file://{path}")
     if open_browser:
         _open_in_browser(path)
+
+
+@cli.command()
+@click.option("--slot", type=click.Choice(["nightly", "weekly"]), default="nightly")
+def backup(slot: str):
+    """Upload a DB + state snapshot to Google Drive (rclone `jobbackup` remote)."""
+    try:
+        rows, size = backup_offsite(slot, state_dir=STATE_DIR)
+    except BackupError as exc:
+        click.echo(f"Backup FAILED ({slot}): {exc}")
+        with contextlib.suppress(NotifyConfigError):
+            notify(
+                title=f"dirtbike backup FAILED ({slot})",
+                body=str(exc),
+                priority=4,
+                tags=["warning"],
+            )
+        raise SystemExit(1) from exc
+    click.echo(f"Backup OK ({slot}): {rows} listings, {size} bytes")
 
 
 @cli.command()
