@@ -180,8 +180,9 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                 conn.execute(
                     # reappearing clears a likely-sold tag (relisted, or a false positive)
                     "UPDATE listings SET last_seen=?, is_active=1, sold_at=NULL,"
-                    " posted_text=COALESCE(NULLIF(?, ''), posted_text) WHERE id=?",
-                    (now, listing.posted_text, listing_id),
+                    " posted_text=COALESCE(NULLIF(?, ''), posted_text),"
+                    " description=COALESCE(NULLIF(?, ''), description) WHERE id=?",
+                    (now, listing.posted_text, listing.description, listing_id),
                 )
                 stats["updated"] += 1
                 if existing["price"] != listing.price:
@@ -194,6 +195,15 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                         (listing_id, listing.price, now),
                     )
                     stats["price_changed"] += 1
+
+            if listing.full_description:
+                # The search page already had the whole ad (#76): no detail fetch needed.
+                # Never overwrites a body #71 fetched.
+                conn.execute(
+                    "UPDATE listings SET full_description=?, detail_fetched_at=?"
+                    " WHERE id=? AND detail_fetched_at IS NULL",
+                    (listing.full_description, now, listing_id),
+                )
 
             # Tag with every detected model (unique per listing)
             for slug in listing.model_slugs:

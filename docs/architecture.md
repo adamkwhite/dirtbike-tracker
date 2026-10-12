@@ -14,7 +14,7 @@ one copy to keep current. Dependency rule: `application` → {`domain`, `infrast
 | application | `market.py` | `snapshot(slug)`: reads prices + active listings from storage, scores them (full ad text when fetched, else the card snippet), returns a `MarketSnapshot` |
 | application | `details.py` | `AdDetailFetcher` port (`url -> description \| None`) and `fetch_details()`: reads the full ad of up to `DETAIL_BUDGET` listings per model that could alert. The first real port, see #74 |
 | domain | `scoring.py` | Pure: `market_stats`, `rate_listing`, `score_listings`, `project_fit`, `urgency`, `under_target`, `needs_detail`, `trend`, `weekly_medians`, `MarketSnapshot` |
-| infrastructure | `kijiji_scraper.py` | Kijiji search fetch, HTML card parsing, model detection; skips `vehicletype=new` ads via `__NEXT_DATA__`; `fetch_ad_description` adapter reads the ad page's `__APOLLO_STATE__` |
+| infrastructure | `kijiji_scraper.py` | Kijiji search fetch, HTML card parsing, model detection; reads `vehicletype` (skips `new`), `activationDate` and the description snippet from `__NEXT_DATA__` (an uncut snippet is the full ad, #76); `fetch_ad_description` adapter reads the ad page's `__APOLLO_STATE__` |
 | infrastructure | `autotrader_scraper.py` | AutoTrader keyword search; parses `__NEXT_DATA__` listings (description included), skips `offerType=N` |
 | infrastructure | `storage.py` | SQLite schema + in-place migrations, upsert, fingerprint dedup, multi-model tagging, `market_prices`, `price_drops`, likely-sold, dismiss, `save_full_description` |
 | infrastructure | `notifier.py` | ntfy.sh push (DEAL/GOOD/target/price drop, source-health warnings), healthchecks.io ping |
@@ -31,7 +31,7 @@ listings:
      | first_seen | last_seen | is_active | is_primary
      | sold_at            -- likely sold: gone from a healthy source for 72h
      | dismissed_at       -- `dirtbike dismiss`; upsert never clears it
-     | full_description   -- full ad body (#71); upsert never overwrites it
+     | full_description   -- full ad body (#71), or an uncut search snippet (#76); never overwritten once set
      | detail_fetched_at
 
 listing_models:
