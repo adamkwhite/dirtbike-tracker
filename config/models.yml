@@ -21,7 +21,7 @@ secondary:
     notes: "TTR125LE electric start preferred"
 
   - slug: klx140
-    sources: [kijiji]
+    sources: [kijiji, autotrader]
     target_price: 2000
     notes: "Alternative to CRF150F"
 
