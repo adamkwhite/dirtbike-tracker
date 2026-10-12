@@ -209,7 +209,6 @@ def _model_section(snap: MarketSnapshot) -> str:
 def render_dashboard(snaps: list[MarketSnapshot]) -> str:
     """Build the full HTML page."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    model_slugs = [s.slug for s in snaps]
     sections = "\n".join(_model_section(s) for s in snaps)
 
     return f"""<!doctype html>
@@ -353,7 +352,7 @@ def render_dashboard(snaps: list[MarketSnapshot]) -> str:
     <div class="meta">Updated {now}</div>
   </header>
   <nav class="nav">
-    {"".join(f'<a href="#{s}">{s.upper()}</a>' for s in model_slugs)}
+    {"".join(f'<a href="#{s.slug}">{s.slug.upper()} ({len(s.listings)})</a>' for s in snaps)}
   </nav>
   <main>
     {sections}

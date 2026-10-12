@@ -84,3 +84,7 @@ def test_listing_rows_show_days_on_market(snap: MarketSnapshot) -> None:
 
 def test_location_label_without_age() -> None:
     assert location_label({"location": "Barrie, ON"}, 28) == "Barrie"
+
+
+def test_nav_shows_active_listing_count_per_model(snap: MarketSnapshot) -> None:
+    assert f'<a href="#crf150f">CRF150F ({len(snap.listings)})</a>' in render_dashboard([snap])
