@@ -70,14 +70,15 @@ def notify_deal(listing: dict) -> bool:
     model = listing.get("model_slug") or "bike"
     location = listing.get("location") or "unknown"
 
-    title = f"DEAL: {model.upper()} {price}{delta_str}"
+    urgent = listing.get("urgency") == "URGENT"
+    title = f"{'URGENT DEAL' if urgent else 'DEAL'}: {model.upper()} {price}{delta_str}"
     body = f"{listing.get('title', '')}\n{location}\n{listing.get('url', '')}"
 
     return notify(
         title=title,
         body=body,
-        priority=5,
-        tags=["money", "fire"],
+        priority=5 if urgent else 4,
+        tags=["money", "fire"] if urgent else ["money"],
         click_url=listing.get("url"),
     )
 
@@ -90,14 +91,22 @@ def notify_good(listing: dict) -> bool:
     model = listing.get("model_slug") or "bike"
     location = listing.get("location") or "unknown"
 
-    title = f"Good: {model.upper()} {price}{delta_str}"
     body = f"{listing.get('title', '')}\n{location}\n{listing.get('url', '')}"
+    negotiable = listing.get("urgency") == "NEGOTIABLE" and listing.get("price")
+    if negotiable:
+        # ponytail: flat 10% under asking, rounded to $50; tune once #22 sold data shows real discounts
+        offer = round(listing["price"] * 0.9 / 50) * 50
+        age = int(listing.get("age_days") or 0)
+        title = f"Negotiable: {model.upper()} {price}{delta_str}, listed {age}d"
+        body = f"Listed {age} days. Try ~${offer}.\n{body}"
+    else:
+        title = f"Good: {model.upper()} {price}{delta_str}"
 
     return notify(
         title=title,
         body=body,
-        priority=3,
-        tags=["eyes"],
+        priority=3 if negotiable else 2,
+        tags=["handshake"] if negotiable else ["eyes"],
         click_url=listing.get("url"),
     )
 

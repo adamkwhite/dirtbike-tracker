@@ -13,6 +13,9 @@ RATING_DEAL = -0.30
 RATING_GOOD = -0.10
 RATING_FAIR = 0.15
 
+URGENT_MAX_DAYS = 2  # fresh DEAL: someone else will grab it
+NEGOTIABLE_MIN_DAYS = 14  # stale GOOD: seller may take less
+
 
 @dataclass
 class MarketSnapshot:
@@ -63,8 +66,23 @@ def trend(recent: list[float], older: list[float]) -> float | None:
     return round((median(recent) - median(older)) / median(older) * 100, 1)
 
 
+def urgency(rating: str, age_days: float | None) -> str | None:
+    """URGENT for a fresh DEAL, NEGOTIABLE for a stale GOOD, else None."""
+    if age_days is None:
+        return None
+    if rating == "DEAL" and age_days < URGENT_MAX_DAYS:
+        return "URGENT"
+    if rating == "GOOD" and age_days > NEGOTIABLE_MIN_DAYS:
+        return "NEGOTIABLE"
+    return None
+
+
 def score_listings(listings: list[dict], median_price: float | None) -> list[dict]:
-    """Attach a deal rating to each listing, best deals first, unpriced last."""
-    scored = [{**listing, **rate_listing(listing["price"], median_price)} for listing in listings]
+    """Attach rating and urgency to each listing, best deals first, unpriced last."""
+    scored = []
+    for listing in listings:
+        rated = {**listing, **rate_listing(listing["price"], median_price)}
+        rated["urgency"] = urgency(rated["rating"], listing.get("age_days"))
+        scored.append(rated)
     scored.sort(key=lambda x: (x["delta_pct"] is None, x["delta_pct"] or 0))
     return scored
