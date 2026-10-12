@@ -90,31 +90,7 @@ priority:
 ```
 
 Model slugs must match one of the entries in `KNOWN_MODEL_SLUGS` in
-`src/scraper.py`. Add new ones there if needed.
-
-## LLM extraction (optional)
-
-To parse year, hours, condition from descriptions using Claude:
-
-```bash
-# Install the Anthropic SDK
-pip install anthropic
-
-# Set your API key
-export ANTHROPIC_API_KEY=sk-ant-...
-echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.bashrc
-
-# Use it in Python
-python -c "
-import sys; sys.path.insert(0, 'src')
-from extractor import extract
-f = extract('2015 Honda CRF150F', 'Runs great, 50 hours, needs new chain and sprockets. $2500.', prefer_llm=True)
-print(f.to_dict())
-"
-```
-
-Without an API key, extraction falls back to regex (handles year, hours, km,
-runs/doesn't-run, 'needs X').
+`src/dirtbike_tracker/infrastructure/kijiji_scraper.py`. Add new ones there if needed.
 
 ## Daily operations
 
