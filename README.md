@@ -113,7 +113,6 @@ Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
 | `NTFY_TOPIC` | ntfy topic to push alerts to. Required unless `--no-notify`. |
 | `NTFY_SERVER` | Defaults to `https://ntfy.sh`. |
 | `HEALTHCHECK_URL` | Optional. [healthchecks.io](https://healthchecks.io) ping URL hit after every completed `watch`; it alerts when pings stop. |
-| `ANTHROPIC_API_KEY` | Optional. Enables LLM fact extraction (year, hours). |
 
 ### Cron
 
