@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dirtbike_tracker.domain.scoring import MarketSnapshot
 from dirtbike_tracker.infrastructure.dashboard import render_dashboard, write_dashboard
-from dirtbike_tracker.infrastructure.reporter import render_report, write_report
+from dirtbike_tracker.infrastructure.reporter import location_label, render_report, write_report
 
 
 def test_render_report_groups_by_rating(snap: MarketSnapshot) -> None:
@@ -73,3 +73,14 @@ def test_dashboard_weekly_chart_needs_two_weeks(snap: MarketSnapshot) -> None:
 
 def test_dashboard_has_inline_favicon(snap: MarketSnapshot) -> None:
     assert '<link rel="icon" href="data:image/svg+xml,' in render_dashboard([snap])
+
+
+def test_listing_rows_show_days_on_market(snap: MarketSnapshot) -> None:
+    snap.listings = [{**snap.listings[0], "age_days": 14.7}]
+
+    assert "Barrie (14d)" in render_dashboard([snap])
+    assert "Barrie (14d)" in render_report(snap)
+
+
+def test_location_label_without_age() -> None:
+    assert location_label({"location": "Barrie, ON"}, 28) == "Barrie"

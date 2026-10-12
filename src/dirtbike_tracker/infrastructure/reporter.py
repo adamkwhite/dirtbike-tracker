@@ -10,6 +10,13 @@ from pathlib import Path
 from ..domain.scoring import MarketSnapshot
 
 
+def location_label(listing: dict, width: int) -> str:
+    """'Barrie (14d)': city plus days on market (from the source post date when known)."""
+    loc = (listing.get("location") or "").split(",")[0][:width]
+    age = listing.get("age_days")
+    return f"{loc} ({int(age)}d)" if age is not None else loc
+
+
 def render_report(snap: MarketSnapshot) -> str:
     """Build a markdown snapshot of the current market for a model."""
     model_slug, stats, listings, t = snap.slug, snap.stats, snap.listings, snap.trend
@@ -56,7 +63,7 @@ def render_report(snap: MarketSnapshot) -> str:
                 f"${int(listing['price'])}" if listing["price"] else listing.get("price_state", "?")
             )
             delta = f"({listing['delta_pct']:+.0f}%)" if listing["delta_pct"] is not None else ""
-            loc = (listing["location"] or "").split(",")[0][:25]
+            loc = location_label(listing, 25)
             title = (listing["title"] or "")[:60]
             lines.append(f"- **{price}** {delta} - {loc} - [{title}]({listing['url']})")
         lines.append("")

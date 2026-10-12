@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..domain.scoring import MarketSnapshot
+from .reporter import location_label
 
 RATING_HEX = {
     "DEAL": "#10b981",  # emerald
@@ -82,7 +83,7 @@ def _model_section(snap: MarketSnapshot) -> str:
                     listing.get("price_state", ""), "?"
                 )
                 price_str = label
-            loc = (listing["location"] or "").split(",")[0][:28]
+            loc = location_label(listing, 28)
             title = (listing["title"] or "")[:65]
             rows.append(f"""
               <tr>
