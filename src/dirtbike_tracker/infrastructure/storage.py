@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS listings (
     dismissed_at TEXT,
     full_description TEXT,
     detail_fetched_at TEXT,
+    contacted_at TEXT,
+    contact_note TEXT,
     UNIQUE(source, external_id)
 );
 
@@ -110,6 +112,9 @@ def _migrate_old_schema(db_path: Path = DB_PATH) -> None:
         if "full_description" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN full_description TEXT")
             conn.execute("ALTER TABLE listings ADD COLUMN detail_fetched_at TEXT")
+        if "contacted_at" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN contacted_at TEXT")
+            conn.execute("ALTER TABLE listings ADD COLUMN contact_note TEXT")
 
 
 def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
@@ -267,7 +272,10 @@ def active_listings(
     age_days counts from the source's post time when known (Kijiji's
     activationDate in posted_text), else from when we first saw it.
     """
-    age = "julianday('now') - julianday(COALESCE(NULLIF(posted_text, ''), first_seen)) AS age_days"
+    age = (
+        "julianday('now') - julianday(COALESCE(NULLIF(posted_text, ''), first_seen)) AS age_days,"
+        " julianday('now') - julianday(contacted_at) AS contacted_days"
+    )
     with connect(db_path) as conn:
         if model_slug:
             sql = f"""
@@ -416,15 +424,40 @@ def set_dismissed(ref: str, dismissed: bool, db_path: Path = DB_PATH) -> list[st
     Persists across scrapes: upsert never touches dismissed_at. Returns the
     titles of matched listings (empty if nothing matched).
     """
-    ref = ref.strip().split("?")[0].split("#")[0].rstrip("/")
     stamp = datetime.now(UTC).replace(tzinfo=None).isoformat() if dismissed else None
     with connect(db_path) as conn:
-        # external ids are 10-digit Kijiji ids or AutoTrader UUIDs, which end their URLs
-        rows = conn.execute(
-            "SELECT id, title FROM listings WHERE external_id=? OR ? LIKE '%' || external_id",
-            (ref, ref),
-        ).fetchall()
+        rows = _match_listings(conn, ref)
         conn.executemany(
             "UPDATE listings SET dismissed_at=? WHERE id=?", [(stamp, r["id"]) for r in rows]
         )
     return [r["title"] for r in rows]
+
+
+def set_contact(
+    ref: str, at: datetime | None, note: str | None = None, db_path: Path = DB_PATH
+) -> list[str]:
+    """Log contacting a listing's seller (#23), or clear it with at=None.
+
+    A new note replaces the old one; no note keeps it. upsert never touches these
+    columns. Returns the titles of matched listings (empty if nothing matched).
+    """
+    stamp = at.isoformat() if at else None
+    with connect(db_path) as conn:
+        rows = _match_listings(conn, ref)
+        conn.executemany(
+            "UPDATE listings SET contacted_at=?,"
+            " contact_note=CASE WHEN ? IS NULL THEN NULL ELSE COALESCE(?, contact_note) END"
+            " WHERE id=?",
+            [(stamp, stamp, note, r["id"]) for r in rows],
+        )
+    return [r["title"] for r in rows]
+
+
+def _match_listings(conn: sqlite3.Connection, ref: str) -> list[sqlite3.Row]:
+    """Listings matching an external id or a listing URL (query string and fragment ignored)."""
+    ref = ref.strip().split("?")[0].split("#")[0].rstrip("/")
+    # external ids are 10-digit Kijiji ids or AutoTrader UUIDs, which end their URLs
+    return conn.execute(
+        "SELECT id, title FROM listings WHERE external_id=? OR ? LIKE '%' || external_id",
+        (ref, ref),
+    ).fetchall()

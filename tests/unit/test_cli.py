@@ -1,5 +1,6 @@
 """CLI commands, with snapshot() stubbed so no DB is touched."""
 
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -236,3 +237,24 @@ def test_watch_rescores_after_fetching_details(
 
     assert result.exit_code == 0, result.output
     assert calls[:2] == ["crf150f", "crf150f"]  # scored, read full ads, re-scored
+
+
+def test_contact_logs_date_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple] = []
+
+    def fake_set_contact(ref: str, at: object, note: str | None) -> list[str]:
+        calls.append((ref, at, note))
+        return ["2003 honda crf150f"] if ref == "1742579252" else []
+
+    monkeypatch.setattr(cli_module, "set_contact", fake_set_contact)
+
+    ok = CliRunner().invoke(
+        cli, ["contact", "1742579252", "--on", "2026-10-01", "--note", "offered 750"]
+    )
+    cleared = CliRunner().invoke(cli, ["contact", "1742579252", "--clear"])
+    missing = CliRunner().invoke(cli, ["contact", "nope"])
+
+    assert "Contacted: 2003 honda crf150f" in ok.output
+    assert calls[0] == ("1742579252", datetime(2026, 10, 1), "offered 750")
+    assert "Cleared contact" in cleared.output and calls[1][1] is None
+    assert missing.exit_code == 1

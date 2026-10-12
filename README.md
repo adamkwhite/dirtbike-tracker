@@ -13,7 +13,7 @@ flowchart TB
     config[/"config/models.yml"/] --> cli
 
     subgraph application
-        cli["cli.py<br/>watch · list · stats · report · dashboard<br/>dismiss · backup"]
+        cli["cli.py<br/>watch · list · stats · report · dashboard<br/>dismiss · contact · backup"]
         market["market.py<br/>snapshot(slug)"]
         cli --> market
     end
@@ -85,6 +85,7 @@ dirtbike report --model crf150f --write   # markdown snapshot to reports/
 dirtbike dashboard --open
 dirtbike dismiss <url-or-id>         # hide a listing you've evaluated (survives re-scrapes)
 dirtbike undismiss <url-or-id>
+dirtbike contact <url-or-id> --note "offered 750" [--on 2026-10-01]  # log messaging a seller (--clear to undo)
 dirtbike backup [--slot weekly]      # DB + state to Google Drive (see Backups)
 ```
 

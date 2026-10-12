@@ -17,6 +17,16 @@ def location_label(listing: dict, width: int) -> str:
     return f"{loc} ({int(age)}d)" if age is not None else loc
 
 
+def contact_label(listing: dict) -> str | None:
+    """'contacted 11d ago' (plus the note) once the seller was messaged (#23), else None."""
+    days = listing.get("contacted_days")
+    if days is None:
+        return None
+    when = "today" if days < 1 else f"{int(days)}d ago"
+    note = listing.get("contact_note")
+    return f"contacted {when}" + (f": {note}" if note else "")
+
+
 RATING_ORDER = ("DEAL", "GOOD", "FAIR", "HIGH", "UNKNOWN")
 
 
@@ -43,7 +53,8 @@ def _listing_line(listing: dict) -> str:
         else ""
     )
     title = (listing["title"] or "")[:60]
-    return f"- **{price}** {delta} - {location_label(listing, 25)} - [{title}]({listing['url']})"
+    contacted = f" - *{c}*" if (c := contact_label(listing)) else ""
+    return f"- **{price}** {delta} - {location_label(listing, 25)} - [{title}]({listing['url']}){contacted}"
 
 
 def render_report(snap: MarketSnapshot) -> str:
