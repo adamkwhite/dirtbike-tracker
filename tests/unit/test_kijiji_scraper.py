@@ -1,6 +1,10 @@
 import json
 
-from dirtbike_tracker.infrastructure.kijiji_scraper import parse_listings
+import pytest
+import requests
+
+from dirtbike_tracker.infrastructure import kijiji_scraper
+from dirtbike_tracker.infrastructure.kijiji_scraper import parse_ad_description, parse_listings
 
 
 def _card(ad_id: str, title: str) -> str:
@@ -87,3 +91,49 @@ def test_parse_listings_skips_cards_without_link_or_outside_category() -> None:
     )
 
     assert parse_listings(html, "crf150f") == []
+
+
+def _ad_page(cache: object) -> str:
+    payload = json.dumps({"props": {"pageProps": {"__APOLLO_STATE__": cache}}})
+    return f'<script id="__NEXT_DATA__" type="application/json">{payload}</script>'
+
+
+def test_parse_ad_description_reads_apollo_cache() -> None:
+    html = _ad_page(
+        {
+            "StandardListing:1744639032": {"description": "Both bikes run well."},
+            "StandardListing:1700000001": {"description": "someone else's ad"},
+        }
+    )
+
+    assert parse_ad_description(html, "1744639032") == "Both bikes run well."
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<html>no page data</html>",
+        '<script id="__NEXT_DATA__">{oops</script>',
+        _ad_page({"StandardListing:1744639032": {"title": "no description"}}),
+        _ad_page({"StandardListing:1700000001": {"description": "other ad"}}),
+    ],
+)
+def test_parse_ad_description_none_when_missing(html: str) -> None:
+    assert parse_ad_description(html, "1744639032") is None
+
+
+def test_fetch_ad_description_by_url_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    page = _ad_page({"StandardListing:1744639032": {"description": "Sat for 3 years."}})
+    monkeypatch.setattr(kijiji_scraper, "fetch_page", lambda url: page)
+
+    url = "https://www.kijiji.ca/v-dirt-bikes-motocross/barrie/crf/1744639032"
+    assert kijiji_scraper.fetch_ad_description(url) == "Sat for 3 years."
+
+
+def test_fetch_ad_description_none_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def gone(url: str) -> str:
+        raise requests.HTTPError("404")
+
+    monkeypatch.setattr(kijiji_scraper, "fetch_page", gone)
+
+    assert kijiji_scraper.fetch_ad_description("https://www.kijiji.ca/v-x/1744639032") is None

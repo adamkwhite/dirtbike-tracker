@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS listings (
     is_primary INTEGER DEFAULT 1,
     sold_at TEXT,
     dismissed_at TEXT,
+    full_description TEXT,
+    detail_fetched_at TEXT,
     UNIQUE(source, external_id)
 );
 
@@ -105,6 +107,9 @@ def _migrate_old_schema(db_path: Path = DB_PATH) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN sold_at TEXT")
         if "dismissed_at" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN dismissed_at TEXT")
+        if "full_description" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN full_description TEXT")
+            conn.execute("ALTER TABLE listings ADD COLUMN detail_fetched_at TEXT")
 
 
 def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
@@ -375,6 +380,16 @@ def price_drops(model_slug: str, db_path: Path = DB_PATH) -> dict[int, float]:
             (model_slug,),
         ).fetchall()
     return {r["listing_id"]: r["prev"] for r in rows}
+
+
+def save_full_description(listing_id: int, text: str, db_path: Path = DB_PATH) -> None:
+    """Store the full ad text. upsert never touches it, so card snippets can't clobber it."""
+    stamp = datetime.now(UTC).replace(tzinfo=None).isoformat()
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE listings SET full_description=?, detail_fetched_at=? WHERE id=?",
+            (text, stamp, listing_id),
+        )
 
 
 def set_dismissed(ref: str, dismissed: bool, db_path: Path = DB_PATH) -> list[str]:

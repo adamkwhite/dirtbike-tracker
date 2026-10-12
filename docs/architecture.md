@@ -10,14 +10,16 @@ one copy to keep current. Dependency rule: `application` → {`domain`, `infrast
 
 | Layer | Module | Responsibility |
 |---|---|---|
-| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `models`); orchestrates scrape → upsert → score → notify; source-health check, healthcheck ping |
-| application | `market.py` | `snapshot(slug)`: reads prices + active listings from storage, scores them, returns a `MarketSnapshot` |
-| domain | `scoring.py` | Pure: `market_stats`, `rate_listing`, `score_listings`, `trend`, `MarketSnapshot` |
-| infrastructure | `kijiji_scraper.py` | Kijiji search fetch, HTML card parsing, model detection; skips `vehicletype=new` ads via `__NEXT_DATA__` |
-| infrastructure | `autotrader_scraper.py` | AutoTrader keyword search; parses `__NEXT_DATA__` listings, skips `offerType=N` |
-| infrastructure | `storage.py` | SQLite schema, upsert, fingerprint dedup, multi-model tagging, `market_prices` |
-| infrastructure | `notifier.py` | ntfy.sh push (DEAL/GOOD/target, source-health warnings), healthchecks.io ping |
+| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `models`, `dismiss`, `undismiss`, `backup`); orchestrates scrape → upsert → score → read full ads → re-score → notify; source-health check, healthcheck ping. Composition root for `DETAIL_FETCHERS` |
+| application | `market.py` | `snapshot(slug)`: reads prices + active listings from storage, scores them (full ad text when fetched, else the card snippet), returns a `MarketSnapshot` |
+| application | `details.py` | `AdDetailFetcher` port (`url -> description \| None`) and `fetch_details()`: reads the full ad of up to `DETAIL_BUDGET` listings per model that could alert. The first real port, see #74 |
+| domain | `scoring.py` | Pure: `market_stats`, `rate_listing`, `score_listings`, `project_fit`, `urgency`, `under_target`, `needs_detail`, `trend`, `weekly_medians`, `MarketSnapshot` |
+| infrastructure | `kijiji_scraper.py` | Kijiji search fetch, HTML card parsing, model detection; skips `vehicletype=new` ads via `__NEXT_DATA__`; `fetch_ad_description` adapter reads the ad page's `__APOLLO_STATE__` |
+| infrastructure | `autotrader_scraper.py` | AutoTrader keyword search; parses `__NEXT_DATA__` listings (description included), skips `offerType=N` |
+| infrastructure | `storage.py` | SQLite schema + in-place migrations, upsert, fingerprint dedup, multi-model tagging, `market_prices`, `price_drops`, likely-sold, dismiss, `save_full_description` |
+| infrastructure | `notifier.py` | ntfy.sh push (DEAL/GOOD/target/price drop, source-health warnings), healthchecks.io ping |
 | infrastructure | `dashboard.py`, `reporter.py` | Render a `MarketSnapshot` to HTML / markdown |
+| infrastructure | `backup.py` | Nightly/weekly DB + state snapshot to Google Drive via rclone |
 | infrastructure | `extraction.py` | Regex + optional LLM fact extraction (year, hours, needs). Not yet wired into the pipeline |
 
 ## Data model
@@ -27,6 +29,10 @@ listings:
   id | source | external_id | url | title | price | price_state
      | location | posted_text | description | fingerprint
      | first_seen | last_seen | is_active | is_primary
+     | sold_at            -- likely sold: gone from a healthy source for 72h
+     | dismissed_at       -- `dirtbike dismiss`; upsert never clears it
+     | full_description   -- full ad body (#71); upsert never overwrites it
+     | detail_fetched_at
 
 listing_models:
   listing_id | model_slug          -- many-to-many; package listings get 2+ rows

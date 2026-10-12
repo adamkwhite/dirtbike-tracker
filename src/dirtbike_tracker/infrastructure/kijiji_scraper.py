@@ -196,6 +196,33 @@ def fetch_page(url: str, timeout: int = 20) -> str:
     return str(response.text)
 
 
+def fetch_ad_description(url: str) -> str | None:
+    """Full description from an ad page. None on any fetch or parse failure."""
+    try:
+        html = fetch_page(url)
+    except requests.RequestException:
+        return None
+    return parse_ad_description(html, _extract_external_id(url))
+
+
+def parse_ad_description(html: str, ad_id: str) -> str | None:
+    """The ad's description from its page's __NEXT_DATA__ Apollo cache.
+
+    Keyed like "StandardListing:<id>" (verified 2026-10-12); match any type prefix.
+    """
+    script = BeautifulSoup(html, "html.parser").find("script", id="__NEXT_DATA__")
+    try:
+        cache = json.loads(script.get_text())["props"]["pageProps"]["__APOLLO_STATE__"]  # type: ignore[union-attr]
+    except (AttributeError, ValueError, KeyError, TypeError):
+        return None
+    for key, entry in cache.items():
+        if key.endswith(f":{ad_id}") and isinstance(entry, dict):
+            text = entry.get("description")
+            if isinstance(text, str):
+                return text
+    return None
+
+
 def _iter_ads(data: object) -> Iterator[dict]:
     """Every dict with an id anywhere in the __NEXT_DATA__ tree."""
     stack = [data]

@@ -6,6 +6,7 @@ import pytest
 
 from dirtbike_tracker.domain.scoring import (
     market_stats,
+    needs_detail,
     project_fit,
     rate_listing,
     score_listings,
@@ -198,3 +199,22 @@ def test_score_listings_reads_fit_from_title_and_description() -> None:
     )
 
     assert listing["fit"] == 2
+
+
+@pytest.mark.parametrize(
+    ("rating", "price", "target", "fetched_at", "expected"),
+    [
+        ("DEAL", 1200, None, None, True),
+        ("GOOD", 1800, None, None, True),
+        ("FAIR", 2400, 2500, None, True),  # under target
+        ("FAIR", 2400, None, None, False),
+        ("UNKNOWN", 50, 2500, None, False),  # junk price is never a target hit
+        ("DEAL", 1200, None, "2026-10-12T10:00:00", False),  # already read
+    ],
+)
+def test_needs_detail(
+    rating: str, price: float, target: float | None, fetched_at: str | None, expected: bool
+) -> None:
+    listing = {"rating": rating, "price": price, "detail_fetched_at": fetched_at}
+
+    assert needs_detail(listing, target) is expected
