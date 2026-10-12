@@ -309,3 +309,11 @@ def test_contact_by_url_keeps_note_survives_rescrape_and_clears(tmp_path: Path) 
     (listing,) = snapshot("crf150f", db_path=db).listings
     assert (listing["contacted_days"], listing["contact_note"]) == (None, None)
     assert set_contact("999", None, db_path=db) == []
+
+
+def test_ride_snapshot_skips_the_project_median(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    upsert_listings([_listing("kijiji", "1700000001", "https://x/1700000001", 4000)], db_path=db)
+
+    assert "project_median" not in snapshot("crf150f", goal="ride", db_path=db).stats

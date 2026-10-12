@@ -141,6 +141,7 @@ KNOWN_MODEL_SLUGS = [
     "dr125",
     "dr200",
     "dr350",
+    "rebel500",
 ]
 
 

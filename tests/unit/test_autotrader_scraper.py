@@ -1,6 +1,6 @@
 import json
 
-from dirtbike_tracker.infrastructure.autotrader_scraper import parse_listings
+from dirtbike_tracker.infrastructure.autotrader_scraper import build_search_url, parse_listings
 
 
 def _ad(ad_id: str, model: str, offer_type: str, price: int | None, year: int = 2022) -> dict:
@@ -40,3 +40,8 @@ def test_parses_used_matching_listings_from_next_data() -> None:
 def test_missing_or_malformed_page_data_returns_nothing() -> None:
     assert parse_listings("<html></html>", "crf250f") == []
     assert parse_listings('<script id="__NEXT_DATA__">{"props": {}}</script>', "crf250f") == []
+
+
+def test_search_keyword_override() -> None:
+    assert build_search_url("rebel500").endswith("kwd=rebel%20500")
+    assert build_search_url("crf150f").endswith("kwd=crf150f")

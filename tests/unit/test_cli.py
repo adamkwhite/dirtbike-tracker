@@ -14,7 +14,7 @@ from dirtbike_tracker.domain.scoring import MarketSnapshot, score_listings
 
 @pytest.fixture
 def stub_snapshot(snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(cli_module, "snapshot", lambda slug: snap)
+    monkeypatch.setattr(cli_module, "snapshot", lambda slug, goal: snap)
     monkeypatch.setattr(cli_module, "REPORTS_DIR", tmp_path / "reports")
     monkeypatch.setattr(cli_module, "DASHBOARD_PATH", tmp_path / "dashboard.html")
 
@@ -52,7 +52,7 @@ def stub_watch(snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch) -> list[se
     monkeypatch.setattr(cli_module, "_scrape_one", lambda *a, **k: [])
     monkeypatch.setattr(cli_module, "DETAIL_FETCHERS", {})  # no network
     monkeypatch.setattr(cli_module, "upsert_listings", lambda _: {"new": 0, "updated": 0})
-    monkeypatch.setattr(cli_module, "snapshot", lambda slug: snap)
+    monkeypatch.setattr(cli_module, "snapshot", lambda slug, goal: snap)
     monkeypatch.setattr(cli_module, "_notified_ids", set)
     monkeypatch.setattr(cli_module, "_record_notified", recorded.append)
     monkeypatch.setattr(cli_module, "mark_stale", lambda sources: 0)
@@ -226,7 +226,7 @@ def test_watch_rescores_after_fetching_details(
 ) -> None:
     calls: list[str] = []
 
-    def counting_snapshot(slug: str) -> MarketSnapshot:
+    def counting_snapshot(slug: str, goal: str) -> MarketSnapshot:
         calls.append(slug)
         return snap
 
@@ -259,3 +259,36 @@ def test_contact_logs_date_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Cleared contact" in cleared.output
     assert calls[1][1] is None
     assert missing.exit_code == 1
+
+
+def test_snapshot_uses_the_models_goal(
+    monkeypatch: pytest.MonkeyPatch, snap: MarketSnapshot
+) -> None:
+    goals: list[str] = []
+    monkeypatch.setattr(
+        cli_module,
+        "load_config",
+        lambda: {"street": [{"slug": "rebel500", "goal": "ride"}], "x": None},
+    )
+
+    def fake_snapshot(slug: str, goal: str) -> MarketSnapshot:
+        goals.append(goal)
+        return snap
+
+    monkeypatch.setattr(cli_module, "snapshot", fake_snapshot)
+
+    cli_module._snapshot("rebel500")
+    cli_module._snapshot("crf150f")  # not configured: project
+
+    assert goals == ["ride", "project"]
+
+
+def test_unknown_goal_is_a_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cli_module, "load_config", lambda: {"g": [{"slug": "rebel500", "goal": "tour"}]}
+    )
+
+    result = CliRunner().invoke(cli, ["stats", "--model", "rebel500"])
+
+    assert result.exit_code == 1
+    assert "unknown goal 'tour'" in result.output

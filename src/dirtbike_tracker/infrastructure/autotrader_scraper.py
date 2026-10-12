@@ -41,9 +41,14 @@ def _headers() -> dict:
     }
 
 
+# Slugs AutoTrader's keyword search only finds spelled another way ("rebel500" returns 0)
+KEYWORDS = {"rebel500": "rebel 500"}
+
+
 def build_search_url(model_slug: str, region: str = "on") -> str:
     """Keyword-based AutoTrader search URL in a province."""
-    return f"{BASE_URL}/motorcycles-atvs/lst/reg_{region}?loc=Ontario&kwd={quote(model_slug)}"
+    keyword = KEYWORDS.get(model_slug, model_slug)
+    return f"{BASE_URL}/motorcycles-atvs/lst/reg_{region}?loc=Ontario&kwd={quote(keyword)}"
 
 
 def fetch_page(url: str, timeout: int = 20) -> str:

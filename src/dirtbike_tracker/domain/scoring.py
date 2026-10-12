@@ -48,24 +48,40 @@ FIT_GREEN_FLAGS = PROJECT_FLAGS + (
 # Matched and ignored, so they can't trip a green flag ("not a project, ready to ride")
 FIT_IGNORE = ("not a project", "no project")
 
+# goal: ride (models.yml): a bike to ride as-is, e.g. a street bike for spring.
+# Needing work is now a red flag, and an Ontario safety certificate is a green one.
+RIDE_RED_FLAGS = FIT_RED_FLAGS + PROJECT_FLAGS + (
+    "no safety", "without safety", "not safetied", "not certified", "sold as is",
+)  # fmt: skip
+RIDE_GREEN_FLAGS = (
+    "runs great", "runs well", "runs good", "runs perfect", "runs and rides",
+    "ownership", "one owner", "safety", "safetied", "certified",
+    "low km", "low kms", "serviced", "new tires", "new tire", "winter stored", "stored inside",
+)  # fmt: skip
+GOALS = ("project", "ride")
+
 
 def _flags_re(flags: tuple[str, ...]) -> re.Pattern[str]:
     return re.compile(r"\b(?:" + "|".join(map(re.escape, flags)) + r")\b")
 
 
-_RED_RE, _GREEN_RE = _flags_re(FIT_RED_FLAGS), _flags_re(FIT_GREEN_FLAGS)
+_FLAG_RES = {
+    "project": (_flags_re(FIT_RED_FLAGS), _flags_re(FIT_GREEN_FLAGS)),
+    "ride": (_flags_re(RIDE_RED_FLAGS), _flags_re(RIDE_GREEN_FLAGS)),
+}
 _IGNORE_RE = _flags_re(FIT_IGNORE)
 
 
-def project_fit(text: str) -> tuple[int, list[str]]:
-    """0-10 fit from red/green phrases, plus the phrases hit ('-seized', '+project').
+def project_fit(text: str, goal: str = "project") -> tuple[int, list[str]]:
+    """0-10 fit for the model's goal from red/green phrases, plus the phrases hit ('-seized', '+project').
 
     Red and ignored phrases are removed before green matching, so "no ownership"
     never also counts as "ownership".
     """
+    red_re, green_re = _FLAG_RES[goal]
     text = _IGNORE_RE.sub(" ", text.lower().replace("\u2019", "'"))
-    reds = sorted(set(_RED_RE.findall(text)))
-    greens = sorted(set(_GREEN_RE.findall(_RED_RE.sub(" ", text))))
+    reds = sorted(set(red_re.findall(text)))
+    greens = sorted(set(green_re.findall(red_re.sub(" ", text))))
     score = FIT_NEUTRAL + 2 * len(greens) - 3 * len(reds)
     return max(0, min(10, score)), [f"-{r}" for r in reds] + [f"+{g}" for g in greens]
 
@@ -187,20 +203,24 @@ def needs_detail(listing: dict, target_price: float | None) -> bool:
 
 
 def score_listings(
-    listings: list[dict], median_price: float | None, project_median: float | None = None
+    listings: list[dict],
+    median_price: float | None,
+    project_median: float | None = None,
+    goal: str = "project",
 ) -> list[dict]:
     """Attach rating, urgency and project fit to each listing, best deals first, unpriced last.
 
     A project bike is rated against project_median when there is one (basis "project");
     without it, against the whole market and marked as such (basis "fallback"), since a
     non-runner looks like a DEAL next to running bikes just for not running.
+    A "ride" goal has no project segment: needing work only lowers fit.
     """
     scored = []
     for listing in listings:
         text = f"{listing.get('title') or ''} {listing.get('description') or ''}"
-        fit, fit_flags = project_fit(text)
+        fit, fit_flags = project_fit(text, goal)
         basis = None
-        if is_project(fit_flags):
+        if goal == "project" and is_project(fit_flags):
             basis = "project" if project_median else "fallback"
         median_for = project_median if basis == "project" else median_price
         rated = {**listing, **rate_listing(listing["price"], median_for)}

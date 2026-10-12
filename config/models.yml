@@ -39,3 +39,11 @@ future:
   - slug: xr250
     sources: [kijiji]
     target_price: 2500
+
+# Street (ready to ride in spring, not a project)
+street:
+  - slug: rebel500
+    goal: ride             # fit favours runners/safetied; non-runners never alert
+    sources: [kijiji, autotrader]
+    target_price: 4500
+    notes: "Honda Rebel 500 (CMX500)"
