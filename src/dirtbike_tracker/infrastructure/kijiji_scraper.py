@@ -10,7 +10,7 @@ import random
 import re
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from urllib.parse import quote, urljoin
 
 import requests
@@ -231,7 +231,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
     """Extract listing data from a Kijiji search results page."""
     soup = BeautifulSoup(html, "html.parser")
     listings = []
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).replace(tzinfo=None).isoformat()
     new_ids = _new_vehicle_ids(soup)
 
     # Kijiji's current markup uses [data-testid='listing-card'] but
