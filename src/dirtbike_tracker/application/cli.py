@@ -282,9 +282,10 @@ def watch(region: str, notify: bool, group: str):
 
             is_deal = listing["rating"] == "DEAL"
             is_good = listing["rating"] == "GOOD"
+            # an unrated price (parts ad, placeholder) can't be a target hit either
             is_target_hit = (
                 target_price is not None
-                and listing.get("price") is not None
+                and listing["rating"] != "UNKNOWN"
                 and listing["price"] <= target_price
             )
 
