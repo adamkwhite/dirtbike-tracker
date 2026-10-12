@@ -105,7 +105,7 @@ def test_nav_shows_active_listing_count_per_model(snap: MarketSnapshot) -> None:
 
 def test_dashboard_shows_fit_with_flags_tooltip() -> None:
     (listing,) = score_listings(
-        [{"price": 2000, "title": "CRF150F, runs great", "location": "", "url": "u"}], 2000
+        [{"price": 2000, "title": "CRF150F project, runs great", "location": "", "url": "u"}], 2000
     )
 
     html = _model_section(
@@ -114,4 +114,4 @@ def test_dashboard_shows_fit_with_flags_tooltip() -> None:
         )
     )
 
-    assert '<td class="num" title="+runs great">7</td>' in html
+    assert '<td class="num" title="+project">7</td>' in html

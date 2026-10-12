@@ -23,21 +23,23 @@ URGENT_MAX_DAYS = 2  # fresh DEAL: someone else will grab it
 NEGOTIABLE_MIN_DAYS = 14  # stale GOOD: seller may take less
 
 
-# Project fit (#21): is this a bike for two kids on trails, not just a good price?
+# Project fit (#21): is this a project bike to wrench on with the kids?
+# Needing work is the point; red flags are what make the project not worth it.
 FIT_NEUTRAL = 5
 FIT_ALERT_MIN = 5  # below this, a DEAL/GOOD/target hit doesn't alert
 FIT_RED_FLAGS = (
     "no ownership", "no title", "no papers", "lost ownership",
-    "parts bike", "for parts", "parts only", "parting out",
-    "seized", "blown", "doesn't run", "does not run", "won't start", "not running",
-    "non running", "non-running", "needs engine", "needs rebuild",
+    "seized", "blown",
     "race bike", "race ready", "track bike",
 )  # fmt: skip
 FIT_GREEN_FLAGS = (
-    "ownership", "runs great", "runs well", "runs good", "runs like new", "runs perfect",
-    "starts first kick", "fires right up", "trail", "one owner", "well maintained",
-    "my son", "my daughter", "my kids",
+    "doesn't run", "does not run", "won't start", "not running", "non running", "non-running",
+    "needs work", "needs tlc", "needs carb", "needs a carb", "carb clean",
+    "project", "barn find", "mechanic special", "sat for",
+    "ownership", "one owner", "trail", "my son", "my daughter", "my kids",
 )  # fmt: skip
+# Matched and ignored, so they can't trip a green flag ("not a project, ready to ride")
+FIT_IGNORE = ("not a project", "no project")
 
 
 def _flags_re(flags: tuple[str, ...]) -> re.Pattern[str]:
@@ -45,15 +47,16 @@ def _flags_re(flags: tuple[str, ...]) -> re.Pattern[str]:
 
 
 _RED_RE, _GREEN_RE = _flags_re(FIT_RED_FLAGS), _flags_re(FIT_GREEN_FLAGS)
+_IGNORE_RE = _flags_re(FIT_IGNORE)
 
 
 def project_fit(text: str) -> tuple[int, list[str]]:
-    """0-10 fit from red/green phrases, plus the phrases hit ('-seized', '+trail').
+    """0-10 fit from red/green phrases, plus the phrases hit ('-seized', '+project').
 
-    Red flags are removed before green matching, so "no ownership" never also
-    counts as "ownership".
+    Red and ignored phrases are removed before green matching, so "no ownership"
+    never also counts as "ownership".
     """
-    text = text.lower().replace("\u2019", "'")
+    text = _IGNORE_RE.sub(" ", text.lower().replace("\u2019", "'"))
     reds = sorted(set(_RED_RE.findall(text)))
     greens = sorted(set(_GREEN_RE.findall(_RED_RE.sub(" ", text))))
     score = FIT_NEUTRAL + 2 * len(greens) - 3 * len(reds)

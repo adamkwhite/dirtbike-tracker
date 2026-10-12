@@ -176,11 +176,16 @@ def test_weekly_medians_gaps_and_junk_prices() -> None:
     ("text", "fit", "flags"),
     [
         ("2007 ttr-125", 5, []),
-        ("CRF150F | Plated + Ownership | Runs Like New", 9, ["+ownership", "+runs like new"]),
-        ("No ownership, runs great", 4, ["-no ownership", "+runs great"]),
-        ("Seized engine, parts bike", 0, ["-parts bike", "-seized"]),
-        ("Doesn\u2019t run", 2, ["-doesn't run"]),  # curly apostrophe
-        ("Never raced, trail riding with my son this season", 9, ["+my son", "+trail"]),
+        ("CRF150F | Plated + Ownership | Runs Like New", 7, ["+ownership"]),  # runner: neutral
+        (
+            "Doesn\u2019t run, needs carb clean. Have ownership",
+            10,
+            ["+doesn't run", "+needs carb", "+ownership"],
+        ),
+        ("No ownership, project bike", 4, ["-no ownership", "+project"]),
+        ("Seized engine, parts bike", 2, ["-seized"]),  # parts: neutral
+        ("Not a project, ready to ride", 5, []),
+        ("Ex race bike, trail riding with my son", 6, ["-race bike", "+my son", "+trail"]),
     ],
 )
 def test_project_fit(text: str, fit: int, flags: list[str]) -> None:
@@ -192,4 +197,4 @@ def test_score_listings_reads_fit_from_title_and_description() -> None:
         [{"price": 2000, "title": "CRF150F", "description": "no title, runs great"}], 2000
     )
 
-    assert listing["fit"] == 4
+    assert listing["fit"] == 2
