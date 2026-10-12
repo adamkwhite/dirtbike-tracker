@@ -16,6 +16,8 @@ import os
 import re
 from dataclasses import asdict, dataclass, field
 
+from ..domain.scoring import NOT_RUNNING
+
 
 @dataclass
 class ExtractedFacts:
@@ -40,9 +42,7 @@ NEEDS_SPLIT_RE = re.compile(r"\band\b|[&,/]", re.I)
 RUNS_POSITIVE = re.compile(
     r"\b(runs great|starts first kick|fires right up|runs well|runs good|bike starts)\b", re.I
 )
-RUNS_NEGATIVE = re.compile(
-    r"\b(doesn'?t run|does not run|won'?t start|not running|non running|non.runner)\b", re.I
-)
+RUNS_NEGATIVE = re.compile(r"\b(?:" + "|".join(map(re.escape, NOT_RUNNING)) + r")\b", re.I)
 
 
 def extract_regex(title: str, description: str) -> ExtractedFacts:

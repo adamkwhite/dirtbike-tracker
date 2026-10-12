@@ -290,6 +290,13 @@ def market_prices(
     model_slug: str, days: int = 90, db_path: Path = DB_PATH, older_than_days: int = 0
 ) -> list[float]:
     """One price per primary listing first seen between `days` and `older_than_days` ago."""
+    return [x["price"] for x in market_listings(model_slug, days, db_path, older_than_days)]
+
+
+def market_listings(
+    model_slug: str, days: int = 90, db_path: Path = DB_PATH, older_than_days: int = 0
+) -> list[dict]:
+    """market_prices' listings, with the text needed to tell project bikes apart (#72)."""
     # naive UTC to match how first_seen is stored
     now = datetime.now(UTC).replace(tzinfo=None)
     cutoff = (now - timedelta(days=days)).isoformat()
@@ -297,7 +304,8 @@ def market_prices(
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT l.price FROM listings l
+            SELECT l.price, l.title, COALESCE(l.full_description, l.description) AS description
+            FROM listings l
             JOIN listing_models m ON m.listing_id = l.id
             WHERE m.model_slug=?
               AND l.price IS NOT NULL
@@ -308,7 +316,7 @@ def market_prices(
             """,
             (model_slug, MIN_BIKE_PRICE, cutoff, newest),
         ).fetchall()
-    return [r["price"] for r in rows]
+    return [dict(r) for r in rows]
 
 
 def sold_listings(

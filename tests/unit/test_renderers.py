@@ -115,3 +115,27 @@ def test_dashboard_shows_fit_with_flags_tooltip() -> None:
     )
 
     assert '<td class="num" title="+project">7</td>' in html
+
+
+def test_dashboard_shows_project_median_tile_and_marks_fallback() -> None:
+    (listing,) = score_listings(
+        [{"price": 1000, "title": "CRF150F project", "location": "", "url": "u"}], 2000
+    )
+    stats = {"count": 6, "low": 1000, "median": 2000, "high": 3000}
+
+    with_projects = _model_section(
+        MarketSnapshot(
+            slug="crf150f",
+            stats={**stats, "project_median": 1200, "project_count": 5},
+            listings=[listing],
+            trend=None,
+            prices=[],
+        )
+    )
+    without = _model_section(
+        MarketSnapshot(slug="crf150f", stats=stats, listings=[listing], trend=None, prices=[])
+    )
+
+    assert 'Project median</div><div class="val">$1200' in with_projects
+    assert "Project median" not in without
+    assert ">-50%*</td>" in without

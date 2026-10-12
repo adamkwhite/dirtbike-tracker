@@ -8,6 +8,7 @@ from dirtbike_tracker.domain.scoring import (
     market_stats,
     needs_detail,
     project_fit,
+    project_stats,
     rate_listing,
     score_listings,
     trend,
@@ -218,3 +219,62 @@ def test_needs_detail(
     listing = {"rating": rating, "price": price, "detail_fetched_at": fetched_at}
 
     assert needs_detail(listing, target) is expected
+
+
+def _market(*prices: float, text: str = "doesn't run") -> list[dict]:
+    return [{"price": p, "title": "CRF150F", "description": text} for p in prices]
+
+
+def test_project_median_needs_enough_project_prices() -> None:
+    runners = _market(3000, 3200, text="runs great, ownership")
+
+    assert project_stats(runners + _market(800, 900, 1000, 1100, 1200)) == {
+        "project_median": 1000,
+        "project_count": 5,
+    }
+    assert project_stats(runners + _market(800, 900, 1000, 1100)) == {
+        "project_median": None,
+        "project_count": 4,
+    }
+
+
+def test_project_bike_rated_against_project_median() -> None:
+    bikes = [
+        {"price": 1000, "title": "CRF150F, won't start"},
+        {"price": 2000, "title": "CRF150F, runs great, ownership"},
+    ]
+
+    runner, project = score_listings(bikes, median_price=3000, project_median=1000)  # by delta
+
+    assert (project["rating"], project["basis"]) == ("FAIR", "project")
+    assert (runner["rating"], runner["basis"]) == ("DEAL", None)
+
+
+def test_project_bike_without_project_median_falls_back_and_is_marked() -> None:
+    (listing,) = score_listings([{"price": 1000, "title": "CRF150F project"}], median_price=3000)
+
+    assert (listing["rating"], listing["basis"]) == ("DEAL", "fallback")
+
+
+@pytest.mark.parametrize("text", ["ownership, trail ready", "seized engine", "not a project"])
+def test_bonus_and_red_flags_are_not_project_condition(text: str) -> None:
+    (listing,) = score_listings([{"price": 1000, "title": text}], 3000, project_median=1000)
+
+    assert listing["basis"] is None
+
+
+def test_real_ad_wording_marks_a_project() -> None:
+    # 2003 CRF150F on Kijiji, 2026-10-12
+    (listing,) = score_listings(
+        [
+            {
+                "price": 1500,
+                "title": "2003 honda crf150f",
+                "description": "needs rings and the timing chain done",
+            }
+        ],
+        3000,
+    )
+
+    assert listing["basis"] == "fallback"
+    assert listing["fit_flags"] == ["+needs rings", "+timing chain"]

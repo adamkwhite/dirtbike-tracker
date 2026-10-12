@@ -7,7 +7,7 @@ Output is suitable for pasting into a note, email, or chat message.
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..domain.scoring import MarketSnapshot
+from ..domain.scoring import MarketSnapshot, project_line, vs_label
 
 
 def location_label(listing: dict, width: int) -> str:
@@ -27,6 +27,8 @@ def _summary_lines(stats: dict, trend: float | None) -> list[str]:
         f"- Median: **${int(stats['median'])}**",
         f"- High: **${int(stats['high'])}**",
     ]
+    if line := project_line(stats):
+        lines.append(f"- {line}")
     if trend is not None:
         arrow = "▼" if trend < 0 else "▲"
         lines.append(f"- Trend (30d vs 30-90d): {arrow} {abs(trend)}%")
@@ -35,7 +37,11 @@ def _summary_lines(stats: dict, trend: float | None) -> list[str]:
 
 def _listing_line(listing: dict) -> str:
     price = f"${int(listing['price'])}" if listing["price"] else listing.get("price_state", "?")
-    delta = f"({listing['delta_pct']:+.0f}%)" if listing["delta_pct"] is not None else ""
+    delta = (
+        f"({listing['delta_pct']:+.0f}% {vs_label(listing)})"
+        if listing["delta_pct"] is not None
+        else ""
+    )
     title = (listing["title"] or "")[:60]
     return f"- **{price}** {delta} - {location_label(listing, 25)} - [{title}]({listing['url']})"
 

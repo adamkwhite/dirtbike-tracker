@@ -56,7 +56,14 @@ def test_snapshot_scores_active_primary_listings(tmp_path: Path) -> None:
 
     snap = snapshot("crf150f", db_path=db)
 
-    assert snap.stats == {"low": 1400, "median": 2000, "high": 2600, "count": 3}
+    assert snap.stats == {
+        "low": 1400,
+        "median": 2000,
+        "high": 2600,
+        "count": 3,
+        "project_median": None,
+        "project_count": 0,
+    }
     assert snap.trend == -39.1  # recent 1400 vs older median 2300
     assert snap.listings[0]["external_id"] == "cheap"  # -30%, best deal first
     assert snap.listings[-1]["external_id"] == "junk"
@@ -79,7 +86,14 @@ def test_same_price_listings_each_count(tmp_path: Path) -> None:
 
     snap = snapshot("crf150f", db_path=db)
 
-    assert snap.stats == {"low": 3000, "median": 4749, "high": 4749, "count": 3}
+    assert snap.stats == {
+        "low": 3000,
+        "median": 4749,
+        "high": 4749,
+        "count": 3,
+        "project_median": None,
+        "project_count": 0,
+    }
 
 
 def _row(db: Path, ext_id: str) -> tuple:
