@@ -12,7 +12,6 @@ from ..domain.scoring import (
     weekly_medians,
 )
 from ..infrastructure.storage import (
-    DB_PATH,
     active_listings,
     market_listings,
     market_prices,
@@ -22,7 +21,7 @@ from ..infrastructure.storage import (
 )
 
 
-def snapshot(slug: str, goal: str = "project", db_path: Path = DB_PATH) -> MarketSnapshot:
+def snapshot(slug: str, goal: str = "project", db_path: Path | None = None) -> MarketSnapshot:
     """Fetch a model's market from the DB and score it for the model's goal (models.yml)."""
     market = market_listings(slug, days=90, db_path=db_path)
     prices = [x["price"] for x in market]

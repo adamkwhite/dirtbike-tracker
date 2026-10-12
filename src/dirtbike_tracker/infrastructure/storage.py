@@ -75,7 +75,9 @@ CREATE INDEX IF NOT EXISTS idx_lm_model ON listing_models(model_slug);
 
 
 @contextmanager
-def connect(db_path: Path = DB_PATH):
+def connect(db_path: Path | None = None):
+    # None = DB_PATH looked up now, not at import, so tests can redirect the module's DB_PATH
+    db_path = db_path or DB_PATH
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -86,7 +88,7 @@ def connect(db_path: Path = DB_PATH):
         conn.close()
 
 
-def init_db(db_path: Path = DB_PATH) -> None:
+def init_db(db_path: Path | None = None) -> None:
     # Order matters: tables first, then migrate old schemas to add new
     # columns (fingerprint, price_state, is_primary) before building indexes
     # that reference them. An existing DB from Weekend 1 is missing those
@@ -98,7 +100,7 @@ def init_db(db_path: Path = DB_PATH) -> None:
         conn.executescript(SCHEMA_INDEXES)
 
 
-def _migrate_old_schema(db_path: Path = DB_PATH) -> None:
+def _migrate_old_schema(db_path: Path | None = None) -> None:
     """Add new columns to pre-Weekend-2 databases without destroying data."""
     with connect(db_path) as conn:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(listings)").fetchall()}
@@ -134,7 +136,7 @@ def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
     return hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:16]
 
 
-def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dict:
+def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) -> dict:
     """Insert new listings, log price changes, dedup cross-posts, tag with all models."""
     stats = {"new": 0, "updated": 0, "price_changed": 0, "cross_posts": 0}
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -246,7 +248,7 @@ def mark_stale(
     sources: Iterable[str],
     cutoff_hours: int = 48,
     sold_after_hours: int = 72,
-    db_path: Path = DB_PATH,
+    db_path: Path | None = None,
 ) -> int:
     """Age out listings from `sources` not seen recently. Returns count marked inactive.
 
@@ -284,7 +286,7 @@ def mark_stale(
 def active_listings(
     model_slug: str | None = None,
     primary_only: bool = True,
-    db_path: Path = DB_PATH,
+    db_path: Path | None = None,
 ) -> list[dict]:
     """
     Return active listings, optionally filtered by model and primary-only.
@@ -317,14 +319,14 @@ def active_listings(
 
 
 def market_prices(
-    model_slug: str, days: int = 90, db_path: Path = DB_PATH, older_than_days: int = 0
+    model_slug: str, days: int = 90, db_path: Path | None = None, older_than_days: int = 0
 ) -> list[float]:
     """One price per primary listing first seen between `days` and `older_than_days` ago."""
     return [x["price"] for x in market_listings(model_slug, days, db_path, older_than_days)]
 
 
 def market_listings(
-    model_slug: str, days: int = 90, db_path: Path = DB_PATH, older_than_days: int = 0
+    model_slug: str, days: int = 90, db_path: Path | None = None, older_than_days: int = 0
 ) -> list[dict]:
     """market_prices' listings, with the text needed to tell project bikes apart (#72)."""
     # naive UTC to match how first_seen is stored
@@ -350,7 +352,7 @@ def market_listings(
 
 
 def sold_listings(
-    model_slug: str, days: int = 90, limit: int = 5, db_path: Path = DB_PATH
+    model_slug: str, days: int = 90, limit: int = 5, db_path: Path | None = None
 ) -> list[dict]:
     """Most recent likely-sold primary listings for a model, with days on market."""
     cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).isoformat()
@@ -370,7 +372,7 @@ def sold_listings(
     return [dict(r) for r in rows]
 
 
-def price_timelines(model_slug: str, days: int = 91, db_path: Path = DB_PATH) -> list[dict]:
+def price_timelines(model_slug: str, days: int = 91, db_path: Path | None = None) -> list[dict]:
     """On-market span and price observations per primary listing seen in the last N days.
 
     start = source post date (Kijiji activationDate) when known, else first_seen.
@@ -407,7 +409,7 @@ def price_timelines(model_slug: str, days: int = 91, db_path: Path = DB_PATH) ->
     return list(timelines.values())
 
 
-def price_drops(model_slug: str, db_path: Path = DB_PATH) -> dict[int, float]:
+def price_drops(model_slug: str, db_path: Path | None = None) -> dict[int, float]:
     """{listing id: previous price} for listings whose latest price is below the one before.
 
     Read from price_history rather than flagged at upsert time, so a drop whose
@@ -430,7 +432,7 @@ def price_drops(model_slug: str, db_path: Path = DB_PATH) -> dict[int, float]:
     return {r["listing_id"]: r["prev"] for r in rows}
 
 
-def save_full_description(listing_id: int, text: str, db_path: Path = DB_PATH) -> None:
+def save_full_description(listing_id: int, text: str, db_path: Path | None = None) -> None:
     """Store the full ad text. upsert never touches it, so card snippets can't clobber it."""
     stamp = datetime.now(UTC).replace(tzinfo=None).isoformat()
     with connect(db_path) as conn:
@@ -440,7 +442,7 @@ def save_full_description(listing_id: int, text: str, db_path: Path = DB_PATH) -
         )
 
 
-def set_dismissed(ref: str, dismissed: bool, db_path: Path = DB_PATH) -> list[str]:
+def set_dismissed(ref: str, dismissed: bool, db_path: Path | None = None) -> list[str]:
     """Dismiss (or restore) the listing matching an external id or listing URL.
 
     Persists across scrapes: upsert never touches dismissed_at. Returns the
@@ -456,7 +458,7 @@ def set_dismissed(ref: str, dismissed: bool, db_path: Path = DB_PATH) -> list[st
 
 
 def set_contact(
-    ref: str, at: datetime | None, note: str | None = None, db_path: Path = DB_PATH
+    ref: str, at: datetime | None, note: str | None = None, db_path: Path | None = None
 ) -> list[str]:
     """Log contacting a listing's seller (#23), or clear it with at=None.
 
