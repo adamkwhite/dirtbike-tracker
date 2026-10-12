@@ -1,5 +1,7 @@
 """Pure domain scoring: no DB, no network, no mocks."""
 
+from datetime import datetime, timedelta
+
 import pytest
 
 from dirtbike_tracker.domain.scoring import (
@@ -8,6 +10,7 @@ from dirtbike_tracker.domain.scoring import (
     score_listings,
     trend,
     urgency,
+    weekly_medians,
 )
 
 
@@ -116,3 +119,43 @@ def test_score_listings_attaches_urgency_from_age() -> None:
         ("DEAL", "URGENT"),
         ("GOOD", "NEGOTIABLE"),
     ]
+
+
+NOW = datetime(2026, 10, 12, 12, 0)
+
+
+def _timeline(
+    start_days_ago: float, end_days_ago: float, *prices: tuple[float, float | None]
+) -> dict:
+    """prices: (days_ago observed, price), oldest first."""
+    return {
+        "start": NOW - timedelta(days=start_days_ago),
+        "end": NOW - timedelta(days=end_days_ago),
+        "history": [(NOW - timedelta(days=d), p) for d, p in prices],
+    }
+
+
+def test_weekly_medians_tracks_listings_on_market_each_week() -> None:
+    timelines = [
+        _timeline(20, 0, (20, 3000)),  # listed throughout
+        _timeline(20, 0, (20, 2000), (3, 1500)),  # price drop this week
+        _timeline(20, 10, (20, 4000)),  # gone 10 days ago
+    ]
+
+    weeks = weekly_medians(timelines, NOW, weeks=3)
+
+    assert [w for w, _ in weeks] == ["2026-09-21", "2026-09-28", "2026-10-05"]
+    assert [m for _, m in weeks] == [3000, 3000, 2250]
+
+
+def test_weekly_medians_uses_first_seen_price_before_first_observation() -> None:
+    # posted 20 days ago (Kijiji date) but we only started watching 1 day ago
+    weeks = weekly_medians([_timeline(20, 0, (1, 2500))], NOW, weeks=3)
+
+    assert [m for _, m in weeks] == [2500, 2500, 2500]
+
+
+def test_weekly_medians_gaps_and_junk_prices() -> None:
+    weeks = weekly_medians([_timeline(3, 0, (3, 50)), _timeline(3, 0, (3, None))], NOW, weeks=2)
+
+    assert [m for _, m in weeks] == [None, None]
