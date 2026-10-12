@@ -1,14 +1,64 @@
-# Project Template
+# dirtbike-tracker
 
-AI/ML project template with pre-configured tooling for Python development.
+Personal used dirt bike price tracker. Scrapes Kijiji and AutoTrader for the models in
+`config/models.yml`, stores listings in SQLite, rates each one against the model's 90-day
+market median, and pushes DEAL/GOOD/target-price alerts to your phone via [ntfy](https://ntfy.sh).
+
+## How it works
+
+```
+cron (every 20 min) → dirtbike watch
+  ├─ scrape    Kijiji + AutoTrader     infrastructure/*_scraper.py
+  ├─ store     SQLite, dedup, tagging  infrastructure/storage.py → data/listings.db
+  ├─ score     median + rating         domain/scoring.py
+  ├─ notify    ntfy push               infrastructure/notifier.py
+  └─ render    HTML dashboard          infrastructure/dashboard.py → dashboard.html
+```
+
+Ratings are price vs market median: **DEAL** ≤ -30%, **GOOD** ≤ -10%, **FAIR** ≤ +15%,
+**HIGH** above that. A listing under a model's `target_price` alerts regardless of market.
+
+Layout is hexagonal (`src/dirtbike_tracker/{domain,infrastructure,application}`). See
+[docs/architecture.md](docs/architecture.md) for the data model.
+
+## Usage
+
+```bash
+dirtbike models                      # tracked models from config/models.yml
+dirtbike watch                       # scrape all, score, notify, rebuild dashboard
+dirtbike watch --no-notify --group priority
+dirtbike scrape --model crf150f --source all
+dirtbike list --model crf150f        # stored listings with ratings
+dirtbike stats --model crf150f       # low / median / high / count
+dirtbike report --model crf150f --write   # markdown snapshot to reports/
+dirtbike dashboard --open
+```
+
+Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
+`infrastructure/kijiji_scraper.py:KNOWN_MODEL_SLUGS`.
+
+### Environment
+
+| Var | Purpose |
+|---|---|
+| `NTFY_TOPIC` | ntfy topic to push alerts to. Required unless `--no-notify`. |
+| `NTFY_SERVER` | Defaults to `https://ntfy.sh`. |
+| `ANTHROPIC_API_KEY` | Optional. Enables LLM fact extraction (year, hours). |
+
+### Cron
+
+```bash
+NTFY_TOPIC=your-topic ./scripts/install_cron.sh   # every 20 min, 6am-11pm
+./scripts/install_cron.sh --remove
+```
+
+Logs go to `logs/watch.log` (timestamped if `moreutils` is installed).
 
 ## Requirements
 
 - Python 3.13+
-- Git
-- GitHub CLI (`gh`) - for repository setup
 
-## Quick Start
+## Development
 
 ### 1. Install Dependencies
 
@@ -53,46 +103,13 @@ pre-commit run --all-files
 3. Pre-commit auto-fixes formatting
 4. Commit succeeds with clean code
 
-### 3. Customize Your Project
-
-Use the automated setup script to customize this template for your project:
+### 3. Tests
 
 ```bash
-# Interactive mode - prompts for details
-./scripts/setup-repo.sh
-
-# Preview changes without applying
-./scripts/setup-repo.sh --dry-run
-
-# Non-interactive mode
-./scripts/setup-repo.sh --name my_agent --author "Your Name" \
-  --email your.email@example.com --github-user yourusername
+pytest tests/ --cov=src
 ```
 
-The script will:
-- Rename `src/your_agent` to `src/{your_project_name}`
-- Update `pyproject.toml` with your details
-- Update all Python imports
-- Configure GitHub repository settings
-
-## Setup
-
-### SonarCloud Integration
-
-This template includes SonarCloud for continuous code quality and security analysis.
-
-**Initial Setup:**
-1. Go to [SonarCloud](https://sonarcloud.io) and sign in with GitHub
-2. Import your repository
-3. Add `SONAR_TOKEN` to your repository secrets:
-   - Go to repository Settings > Secrets and variables > Actions
-   - Add new secret: `SONAR_TOKEN` (get from SonarCloud account settings)
-4. Update `sonar-project.properties`:
-   - Set `sonar.projectKey` to your project key
-   - Set `sonar.organization` to your SonarCloud organization
-5. Push to trigger the first analysis
-
-The SonarCloud workflow will run on every push and pull request to analyze code quality, security vulnerabilities, and test coverage.
+CI runs pre-commit, pytest and SonarCloud on every push and PR.
 
 ### Exception Handling & `noqa` Conventions
 
