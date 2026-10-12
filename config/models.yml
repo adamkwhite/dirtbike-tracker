@@ -1,14 +1,18 @@
 # Models to track. One file per project phase.
 # Add/remove here; the next `dirtbike watch` (cron, from the prod clone after deploy) picks it up.
+# Every entry sets goal: project (a bike to wrench on: needing work scores up) or ride (ready to
+# ride: needing work scores down, safety/certified scores up). See README "Fit".
 
 # Priority targets right now (dad-and-sons trail bikes)
 priority:
   - slug: crf150f
+    goal: project
     sources: [kijiji, autotrader]
     target_price: 2500       # alert immediately if below this, regardless of market
     notes: "12yo's primary bike. Both brothers ride."
 
   - slug: crf230f
+    goal: project
     sources: [kijiji, autotrader]
     target_price: 3000
     notes: "15yo's bike. Discontinued 2019, tight supply."
@@ -16,16 +20,19 @@ priority:
 # Secondary targets (step-up options, parts donors)
 secondary:
   - slug: ttr125
+    goal: project
     sources: [kijiji]
     target_price: 1500
     notes: "TTR125LE electric start preferred"
 
   - slug: klx140
+    goal: project
     sources: [kijiji, autotrader]
     target_price: 2000
     notes: "Alternative to CRF150F"
 
   - slug: crf100f
+    goal: project
     sources: [kijiji]
     target_price: 1500
     notes: "Smaller fallback"
@@ -33,10 +40,12 @@ secondary:
 # Future (15yo step-up when he outgrows the CRF230F)
 future:
   - slug: crf250f
+    goal: project
     sources: [kijiji, autotrader]
     target_price: 4500
 
   - slug: xr250
+    goal: project
     sources: [kijiji]
     target_price: 2500
 
@@ -47,3 +56,39 @@ street:
     sources: [kijiji, autotrader]
     target_price: 4500
     notes: "Honda Rebel 500 (CMX500)"
+
+  - slug: cb500f
+    goal: ride
+    sources: [kijiji, autotrader]
+    target_price: 4500
+    notes: "Honda CB500F, upright standard"
+
+# Dual sports: plated trail bikes, ready to ride (familiar from the dirt bikes)
+dualsport:
+  - slug: crf300l
+    goal: ride
+    sources: [kijiji, autotrader]
+    target_price: 5000
+
+  - slug: klx300
+    goal: ride
+    sources: [kijiji, autotrader]
+    target_price: 4000
+    notes: "Search also finds the KLX300R (off-road only, not plated)"
+
+  - slug: xt250
+    goal: ride
+    sources: [kijiji, autotrader]
+    target_price: 3800
+
+  - slug: cb500x
+    goal: ride
+    sources: [kijiji, autotrader]
+    target_price: 4800
+    notes: "Replaced by the NX500 in 2024"
+
+  - slug: nx500
+    goal: ride
+    sources: [kijiji, autotrader]
+    target_price: 6500
+    notes: "New for 2024, few used yet"

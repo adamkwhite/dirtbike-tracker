@@ -106,6 +106,7 @@ KNOWN_MODEL_SLUGS = [
     "crf250f",
     "crf250r",
     "crf250l",
+    "crf300l",
     "crf450r",
     "ttr50",
     "ttr110",
@@ -142,6 +143,10 @@ KNOWN_MODEL_SLUGS = [
     "dr200",
     "dr350",
     "rebel500",
+    "cb500f",
+    "cb500x",
+    "nx500",
+    "xt250",
 ]
 
 
