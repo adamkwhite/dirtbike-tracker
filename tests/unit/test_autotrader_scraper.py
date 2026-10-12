@@ -10,7 +10,13 @@ def _ad(ad_id: str, model: str, offer_type: str, price: int | None, year: int = 
         "price": {"priceRaw": price} if price else {},
         "location": {"city": "Oakville"},
         "description": "Runs great",
-        "vehicle": {"make": "Honda", "model": model, "modelYear": year, "offerType": offer_type},
+        "vehicle": {
+            "make": "Honda",
+            "model": model,
+            "modelYear": year,
+            "offerType": offer_type,
+            "mileageInKm": "25,538 km",
+        },
     }
 
 
@@ -45,3 +51,9 @@ def test_missing_or_malformed_page_data_returns_nothing() -> None:
 def test_search_keyword_override() -> None:
     assert build_search_url("rebel500").endswith("kwd=rebel%20500")
     assert build_search_url("crf150f").endswith("kwd=crf150f")
+
+
+def test_reads_year_and_km() -> None:
+    (listing,) = parse_listings(_page(_ad("used-1", "CRF250F", "U", 5499)), "crf250f")
+
+    assert (listing.year, listing.km) == (2022, 25538)

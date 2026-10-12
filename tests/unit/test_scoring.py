@@ -7,10 +7,14 @@ import pytest
 from dirtbike_tracker.domain.scoring import (
     market_stats,
     needs_detail,
+    parse_km,
+    parse_year,
+    price_per_year,
     project_fit,
     project_stats,
     rate_listing,
     score_listings,
+    specs_label,
     trend,
     urgency,
     weekly_medians,
@@ -304,3 +308,36 @@ def test_ride_goal_has_no_project_segment() -> None:
     )
 
     assert (listing["rating"], listing["basis"], listing["fit"]) == ("DEAL", None, 2)
+
+
+@pytest.mark.parametrize(
+    ("raw", "km"),
+    [
+        (16672, 16672),
+        ("16672", 16672),
+        ("25,538 km", 25538),
+        ("0", None),
+        ("1", None),
+        (None, None),
+    ],
+)
+def test_parse_km_skips_placeholders(raw: object, km: int | None) -> None:
+    assert parse_km(raw) == km
+
+
+@pytest.mark.parametrize(
+    ("raw", "year"), [("2018", 2018), (2027, 2027), ("2028", None), ("1899", None), ("abc", None)]
+)
+def test_parse_year_rejects_implausible(raw: object, year: int | None) -> None:
+    assert parse_year(raw, this_year=2026) == year
+
+
+def test_specs_and_price_per_year() -> None:
+    bike = {"price": 2500, "year": 2015, "km": 16672}
+
+    assert specs_label(bike) == "2015 · 16,672 km"
+    assert specs_label({"year": 2015}) == "2015"
+    assert specs_label({}) == ""
+    assert price_per_year(bike, this_year=2026) == 227  # #16's example
+    assert price_per_year({"price": 9000, "year": 2026}, this_year=2026) == 9000
+    assert price_per_year({"price": 2500}, this_year=2026) is None

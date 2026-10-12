@@ -10,7 +10,7 @@ import os
 
 import requests
 
-from ..domain.scoring import vs_label
+from ..domain.scoring import specs_label, vs_label
 
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
@@ -72,6 +72,12 @@ def _drop_prefix(listing: dict) -> tuple[str, str]:
     return "PRICE DROP: ", f"Was ${int(was)}. "
 
 
+def _specs_line(listing: dict) -> str:
+    """'2018 · 16,672 km' plus a newline when year or km is known, else ''."""
+    specs = specs_label(listing)
+    return f"{specs}\n" if specs else ""
+
+
 def notify_deal(listing: dict) -> bool:
     """Send a push notification for a new DEAL-rated listing."""
     price = f"${int(listing['price'])}" if listing.get("price") else "?"
@@ -83,7 +89,7 @@ def notify_deal(listing: dict) -> bool:
     urgent = listing.get("urgency") == "URGENT"
     prefix, was = _drop_prefix(listing)
     title = f"{prefix}{'URGENT DEAL' if urgent else 'DEAL'}: {model.upper()} {price}{delta_str}"
-    body = f"{was}{listing.get('title', '')}\n{location}\n{listing.get('url', '')}"
+    body = f"{was}{listing.get('title', '')}\n{_specs_line(listing)}{location}\n{listing.get('url', '')}"
 
     return notify(
         title=title,
@@ -103,7 +109,7 @@ def notify_good(listing: dict) -> bool:
     location = listing.get("location") or "unknown"
 
     prefix, was = _drop_prefix(listing)
-    body = f"{was}{listing.get('title', '')}\n{location}\n{listing.get('url', '')}"
+    body = f"{was}{listing.get('title', '')}\n{_specs_line(listing)}{location}\n{listing.get('url', '')}"
     negotiable = listing.get("urgency") == "NEGOTIABLE" and listing.get("price")
     if negotiable:
         # ponytail: flat 10% under asking, rounded to $50; tune once #22 sold data shows real discounts

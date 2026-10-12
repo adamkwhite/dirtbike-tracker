@@ -21,6 +21,7 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
+from ..domain.scoring import parse_km, parse_year
 from .kijiji_scraper import (
     PRICE_STATE_NUMERIC,
     PRICE_STATE_UNKNOWN,
@@ -102,6 +103,8 @@ def _ad_to_listing(ad: dict, model_slug: str, now: str) -> Listing | None:
         description=ad.get("description") or "",
         model_slugs=detected if detected else [model_slug],
         scraped_at=now,
+        year=parse_year(vehicle.get("modelYear"), datetime.now(UTC).year),
+        km=parse_km(vehicle.get("mileageInKm")),
     )
 
 

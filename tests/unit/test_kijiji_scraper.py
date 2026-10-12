@@ -166,3 +166,21 @@ def test_parse_listings_falls_back_to_card_description() -> None:
     (listing,) = parse_listings(_page_with_snippet("   "), "crf150f")
 
     assert (listing.description, listing.full_description) == ("card text", None)
+
+
+def _attrs_page(**attrs: str) -> str:
+    fields = [{"canonicalName": k, "canonicalValues": [v]} for k, v in attrs.items()]
+    page_data = json.dumps(
+        {"props": {"ads": [{"id": "1700000001", "attributes": {"all": fields}}]}}
+    )
+    return _card("1700000001", "2018 Honda CB500X") + (
+        f'<script id="__NEXT_DATA__" type="application/json">{page_data}</script>'
+    )
+
+
+def test_parse_listings_reads_year_and_km_fields() -> None:
+    (listing,) = parse_listings(_attrs_page(caryear="2018", carmileageinkms="16672"), "cb500x")
+    (blank,) = parse_listings(_attrs_page(caryear="2018", carmileageinkms="0"), "cb500x")
+
+    assert (listing.year, listing.km) == (2018, 16672)
+    assert (blank.year, blank.km) == (2018, None)  # 0 = seller skipped the field

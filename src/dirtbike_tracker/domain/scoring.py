@@ -130,6 +130,39 @@ def vs_label(listing: dict) -> str:
     return VS_LABELS.get(listing.get("basis") or "", "vs median")
 
 
+# Sellers who skip Kijiji's km field leave 0 or 1; nothing this low is a real reading
+MIN_REAL_KM = 10
+
+
+def parse_km(value: object) -> int | None:
+    """Odometer km from 16672, "16672" or "25,538 km"; None when missing or a placeholder."""
+    digits = "".join(c for c in str(value or "") if c.isdigit())
+    km = int(digits) if digits else 0
+    return km if km >= MIN_REAL_KM else None
+
+
+def parse_year(value: object, this_year: int) -> int | None:
+    """Model year, or None when missing or implausible."""
+    text = str(value or "")
+    year = int(text) if text.isdigit() else 0
+    return year if 1970 <= year <= this_year + 1 else None
+
+
+def specs_label(listing: dict) -> str:
+    """'2018 · 16,672 km', whichever parts are known."""
+    parts = [str(listing["year"])] if listing.get("year") else []
+    if listing.get("km"):
+        parts.append(f"{listing['km']:,} km")
+    return " · ".join(parts)
+
+
+def price_per_year(listing: dict, this_year: int) -> int | None:
+    """Price per year of age (#16): a 2015 at $2500 in 2026 is $227/yr. None if unknown."""
+    if not listing.get("price") or not listing.get("year"):
+        return None
+    return round(float(listing["price"]) / max(1, this_year - int(listing["year"])))
+
+
 def project_line(stats: dict) -> str | None:
     """'Project median $1400 (6 bikes)', or None when there are too few project prices."""
     if stats.get("project_median") is None:
