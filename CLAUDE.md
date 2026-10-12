@@ -21,4 +21,5 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 ## Conventions
 - Python 3.13, mypy strict, ruff + bandit via pre-commit
 - Model slugs listed in `src/dirtbike_tracker/infrastructure/kijiji_scraper.py:KNOWN_MODEL_SLUGS`
-- Cron runs every 20 min from `scripts/install_cron.sh`
+- Cron runs every 20 min from the prod clone `~/Code/dirtbike-tracker-prod` (always `main`), installed via its `scripts/install_cron.sh`. Deploy = `git -C ~/Code/dirtbike-tracker-prod pull --ff-only`. `data/` and `dashboard.html` there are symlinks into this repo
+- Never put an unescaped `%` in a crontab line (cron reads it as newline)
