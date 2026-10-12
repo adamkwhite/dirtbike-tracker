@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS listings (
     contact_note TEXT,
     year INTEGER,
     km INTEGER,
+    image_url TEXT,
     UNIQUE(source, external_id)
 );
 
@@ -120,6 +121,8 @@ def _migrate_old_schema(db_path: Path = DB_PATH) -> None:
         if "year" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN year INTEGER")
             conn.execute("ALTER TABLE listings ADD COLUMN km INTEGER")
+        if "image_url" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN image_url TEXT")
 
 
 def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
@@ -161,8 +164,8 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                     INSERT INTO listings
                     (source, external_id, url, title, price, price_state, location,
                      posted_text, description, fingerprint, first_seen, last_seen, is_primary,
-                     year, km)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     year, km, image_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         listing.source,
@@ -180,6 +183,7 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                         is_primary,
                         listing.year,
                         listing.km,
+                        listing.image_url,
                     ),
                 )
                 listing_id = cursor.lastrowid
@@ -195,13 +199,15 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                     "UPDATE listings SET last_seen=?, is_active=1, sold_at=NULL,"
                     " posted_text=COALESCE(NULLIF(?, ''), posted_text),"
                     " description=COALESCE(NULLIF(?, ''), description),"
-                    " year=COALESCE(?, year), km=COALESCE(?, km) WHERE id=?",
+                    " year=COALESCE(?, year), km=COALESCE(?, km),"
+                    " image_url=COALESCE(?, image_url) WHERE id=?",
                     (
                         now,
                         listing.posted_text,
                         listing.description,
                         listing.year,
                         listing.km,
+                        listing.image_url,
                         listing_id,
                     ),
                 )

@@ -27,6 +27,7 @@ def notify(
     priority: int = 3,
     tags: list[str] | None = None,
     click_url: str | None = None,
+    attach_url: str | None = None,
     topic: str | None = None,
     timeout: int = 10,
 ) -> bool:
@@ -35,6 +36,7 @@ def notify(
 
     priority: 1=min, 3=default, 4=high, 5=max (bypasses DND)
     tags: ntfy emoji shortcodes, e.g. ["money", "fire"]
+    attach_url: an image URL the ntfy app shows inline (the listing photo, #10)
     """
     topic = topic or NTFY_TOPIC
     if not topic:
@@ -52,6 +54,8 @@ def notify(
         headers["Tags"] = ",".join(tags)
     if click_url:
         headers["Click"] = click_url
+    if attach_url:
+        headers["Attach"] = attach_url
 
     url = f"{NTFY_SERVER}/{topic}"
     try:
@@ -97,6 +101,7 @@ def notify_deal(listing: dict) -> bool:
         priority=5 if urgent else 4,
         tags=["money", "fire"] if urgent else ["money"],
         click_url=listing.get("url"),
+        attach_url=listing.get("image_url"),
     )
 
 
@@ -126,6 +131,7 @@ def notify_good(listing: dict) -> bool:
         priority=3 if negotiable else 2,
         tags=["handshake"] if negotiable else ["eyes"],
         click_url=listing.get("url"),
+        attach_url=listing.get("image_url"),
     )
 
 

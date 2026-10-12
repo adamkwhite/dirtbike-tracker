@@ -28,6 +28,7 @@ from .kijiji_scraper import (
     USER_AGENTS,
     Listing,
     detect_models_in_title,
+    first_image,
 )
 
 BASE_URL = "https://www.autotrader.ca"
@@ -105,6 +106,7 @@ def _ad_to_listing(ad: dict, model_slug: str, now: str) -> Listing | None:
         scraped_at=now,
         year=parse_year(vehicle.get("modelYear"), datetime.now(UTC).year),
         km=parse_km(vehicle.get("mileageInKm")),
+        image_url=first_image(ad.get("images")),
     )
 
 

@@ -179,3 +179,17 @@ def test_row_shows_year_km_and_price_per_year() -> None:
     assert '<td class="num muted">16,672</td>' in html
     per_year = round(5250 / (datetime.now().year - 2018))
     assert f'<td class="num muted">${per_year:,}</td>' in html
+
+
+def test_row_shows_lazy_thumbnail_only_when_there_is_a_photo() -> None:
+    listing = {
+        "price": 5250, "rating": "GOOD", "delta_pct": -12.0, "fit": 5, "fit_flags": [],
+        "title": "2018 Honda CB500X", "location": "Kingston", "url": "u",
+        "image_url": "https://media.kijiji.ca/a.jpg?rule=kijijica-200-jpg&x=1",
+    }  # fmt: skip
+
+    assert (
+        '<img class="thumb" src="https://media.kijiji.ca/a.jpg?rule=kijijica-200-jpg&amp;x=1"'
+        ' alt="" loading="lazy">'
+    ) in _listing_row(listing)
+    assert "<img" not in _listing_row({**listing, "image_url": None})
