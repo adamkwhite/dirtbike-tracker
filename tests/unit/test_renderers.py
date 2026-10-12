@@ -69,3 +69,7 @@ def test_dashboard_weekly_chart_needs_two_weeks(snap: MarketSnapshot) -> None:
     page = render_dashboard([snap])
     assert 'id="trend-crf150f"' in page
     assert '"data": [3000.0, 3100.0]' in page
+
+
+def test_dashboard_has_inline_favicon(snap: MarketSnapshot) -> None:
+    assert '<link rel="icon" href="data:image/svg+xml,' in render_dashboard([snap])
