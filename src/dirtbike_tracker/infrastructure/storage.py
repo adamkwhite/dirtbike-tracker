@@ -15,8 +15,8 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from ..domain.listing import Listing
 from ..domain.scoring import MIN_BIKE_PRICE
-from .kijiji_scraper import Listing
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "listings.db"
 
@@ -485,3 +485,42 @@ def _match_listings(conn: sqlite3.Connection, ref: str) -> list[sqlite3.Row]:
         "SELECT id, title FROM listings WHERE external_id=? OR ? LIKE '%' || external_id",
         (ref, ref),
     ).fetchall()
+
+
+class SqliteStore:
+    """The ListingStore port (application/ports.py) over this module, bound to one DB file."""
+
+    def __init__(self, db_path: Path | None = None) -> None:
+        self.db_path = db_path  # None = DB_PATH at call time
+
+    def upsert_listings(self, listings: Iterable[Listing]) -> dict:
+        return upsert_listings(listings, db_path=self.db_path)
+
+    def mark_stale(self, sources: Iterable[str]) -> int:
+        return mark_stale(sources, db_path=self.db_path)
+
+    def active_listings(self, model_slug: str) -> list[dict]:
+        return active_listings(model_slug, primary_only=True, db_path=self.db_path)
+
+    def market_listings(
+        self, model_slug: str, days: int = 90, older_than_days: int = 0
+    ) -> list[dict]:
+        return market_listings(model_slug, days, self.db_path, older_than_days)
+
+    def price_drops(self, model_slug: str) -> dict[int, float]:
+        return price_drops(model_slug, db_path=self.db_path)
+
+    def price_timelines(self, model_slug: str) -> list[dict]:
+        return price_timelines(model_slug, db_path=self.db_path)
+
+    def sold_listings(self, model_slug: str) -> list[dict]:
+        return sold_listings(model_slug, db_path=self.db_path)
+
+    def save_full_description(self, listing_id: int, text: str) -> None:
+        save_full_description(listing_id, text, db_path=self.db_path)
+
+    def set_dismissed(self, ref: str, dismissed: bool) -> list[str]:
+        return set_dismissed(ref, dismissed, db_path=self.db_path)
+
+    def set_contact(self, ref: str, at: datetime | None, note: str | None = None) -> list[str]:
+        return set_contact(ref, at, note, db_path=self.db_path)

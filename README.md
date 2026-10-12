@@ -13,9 +13,12 @@ flowchart TB
     config[/"config/models.yml"/] --> cli
 
     subgraph application
-        cli["cli.py<br/>watch · list · stats · report · dashboard<br/>dismiss · contact · backup"]
-        market["market.py<br/>snapshot(slug)"]
-        cli --> market
+        cli["cli.py: commands + composition root<br/>watch · list · stats · report · dashboard<br/>dismiss · contact · backup"]
+        watch["watch.py<br/>scrape → store → score → alert"]
+        market["market.py<br/>snapshot(slug, store)"]
+        ports["ports.py<br/>ListingStore · ListingSource<br/>AdDetailFetcher · Notifier"]
+        cli --> watch --> market
+        cli -.->|wires adapters into| ports
     end
 
     subgraph domain
@@ -32,11 +35,11 @@ flowchart TB
     end
 
     market -->|score| scoring
-    market -->|read prices + listings| storage
-    cli -->|scrape| kij & at
-    cli -->|upsert| storage
+    market -->|read via ListingStore| storage
+    watch -->|ListingSource| kij & at
+    watch -->|upsert via ListingStore| storage
     cli -->|render snapshot| render
-    cli -->|DEAL / GOOD / target / price drop| notifier
+    watch -->|DEAL / GOOD / target / price drop via Notifier| notifier
 
     kijiji{{Kijiji}} --> kij
     autotrader{{AutoTrader}} --> at

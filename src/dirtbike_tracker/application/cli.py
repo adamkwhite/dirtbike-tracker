@@ -10,60 +10,34 @@ Usage:
     python main.py watch                      # scrape all models from config, notify on deals
 """
 
-import contextlib
-import json
 import platform
 import subprocess  # nosec B404 - fixed argv, no shell
 import webbrowser
 from collections import Counter
-from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
 import yaml
 
-from ..domain.scoring import (
-    FIT_ALERT_MIN,
-    FIT_NEUTRAL,
-    GOALS,
-    MarketSnapshot,
-    project_line,
-    specs_label,
-    under_target,
-    vs_label,
-)
+from ..domain.listing import Listing
+from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
+from ..infrastructure import notifier
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
 from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_description
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
-from ..infrastructure.notifier import (
-    NotifyConfigError,
-    notify,
-    notify_deal,
-    notify_good,
-    ping_healthcheck,
-)
 from ..infrastructure.reporter import contact_label, render_report, write_report
-from ..infrastructure.storage import (
-    init_db,
-    mark_stale,
-    set_contact,
-    set_dismissed,
-    upsert_listings,
-)
-from .details import AdDetailFetcher, fetch_details
-from .market import snapshot
+from ..infrastructure.storage import SqliteStore, init_db
+from .ports import App, Notifier
+from .watch import check_source_health, model_snapshot, notified_ids, record_notified, watch_model
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 CONFIG_PATH = ROOT / "config" / "models.yml"
 REPORTS_DIR = ROOT / "reports"
 STATE_DIR = ROOT / "data" / "state"
 DASHBOARD_PATH = ROOT / "dashboard.html"
-# Adapters for the full-ad port, by source. AutoTrader's search page already
-# carries the description, so it has none.
-DETAIL_FETCHERS: dict[str, AdDetailFetcher] = {"kijiji": kijiji_ad_description}
 
 RATING_COLORS = {
     "DEAL": "green",
@@ -82,56 +56,46 @@ def load_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _snapshot(slug: str) -> MarketSnapshot:
-    """snapshot() scored for the model's goal in models.yml (project unless it says ride)."""
-    goal = next(
-        (
-            e.get("goal", "project")
-            for g in load_config().values()
-            for e in g or []
-            if e["slug"] == slug
-        ),
-        "project",
+def _autotrader_source(slug: str, region: str, pages: int) -> list[Listing]:  # noqa: ARG001
+    """AutoTrader as a ListingSource: one keyword page, province code instead of a region slug."""
+    return scrape_autotrader(slug, "on" if region.lower() == "ontario" else region)
+
+
+def skip_unconfigured(send: Notifier) -> Notifier:
+    """A Notifier that reports a missing NTFY_TOPIC and returns False instead of raising."""
+
+    def wrapped(title: str, body: str, **kwargs: object) -> bool:
+        try:
+            return send(title, body, **kwargs)  # type: ignore[arg-type]
+        except notifier.NotifyConfigError as exc:
+            click.echo(f"  (notify skipped: {exc})")
+            return False
+
+    return wrapped  # type: ignore[return-value]
+
+
+def build_app() -> App:
+    """The composition root: real adapters for every port (ports.py)."""
+    init_db()
+    return App(
+        store=SqliteStore(),
+        sources={"kijiji": scrape_kijiji, "autotrader": _autotrader_source},
+        # AutoTrader's search page already carries the description, so it has no fetcher
+        detail_fetchers={"kijiji": kijiji_ad_description},
+        notify=skip_unconfigured(notifier.notify),
+        config=load_config(),
+        state_dir=STATE_DIR,
+        dashboard_path=DASHBOARD_PATH,
+        reports_dir=REPORTS_DIR,
+        ping=notifier.ping_healthcheck,
     )
-    if goal not in GOALS:
-        raise click.ClickException(
-            f"{slug}: unknown goal {goal!r} in models.yml (use {', '.join(GOALS)})"
-        )
-    return snapshot(slug, goal=goal)
 
 
-def _scrape_one(model: str, region: str, source: str, pages: int) -> list:
-    """Scrape one source for one model and return the raw listings."""
-    if source == "kijiji":
-        return scrape_kijiji(model, region, pages)
-    if source == "autotrader":
-        region_code = "on" if region.lower() == "ontario" else region
-        return scrape_autotrader(model, region_code)
-    return []
-
-
-def _notified_ids() -> set:
-    """Load the set of listing external_ids we've already notified on."""
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    path = STATE_DIR / "notified_ids.txt"
-    if not path.exists():
-        return set()
-    return set(path.read_text().splitlines())
-
-
-def _record_notified(ids: set) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    path = STATE_DIR / "notified_ids.txt"
-    path.write_text("\n".join(sorted(ids)))
-
-
-def _send(alert: Callable[[dict], bool], listing: dict) -> bool:
-    """True only if the alert actually went out."""
+def _snapshot(app: App, slug: str) -> MarketSnapshot:
     try:
-        return alert(listing)
-    except NotifyConfigError as exc:
-        click.echo(f"  (notify skipped: {exc})")
-        return False
+        return model_snapshot(app, slug)
+    except ValueError as exc:  # unknown goal in models.yml
+        raise click.ClickException(str(exc)) from exc
 
 
 def _open_in_browser(path: Path) -> None:
@@ -149,85 +113,12 @@ def _open_in_browser(path: Path) -> None:
         webbrowser.open(f"file://{path}")
 
 
-def _alert_for(
-    listing: dict, target_price: float | None
-) -> tuple[Callable[[dict], bool], str, str] | None:
-    """(alert fn, dedupe key, totals bucket) for a listing this run, or None.
-
-    Price drops are keyed by the new price, so a listing already alerted on
-    alerts again each time it drops into GOOD/DEAL territory.
-    """
-    # red flags (no ownership, parts bike...) make a cheap price irrelevant
-    if listing.get("fit", FIT_NEUTRAL) < FIT_ALERT_MIN:
-        return None
-    lid = f"{listing['source']}:{listing['external_id']}"
-    rating = listing["rating"]
-    if listing.get("price_drop_from") is not None and rating in ("DEAL", "GOOD"):
-        alert = notify_deal if rating == "DEAL" else notify_good
-        return alert, f"drop:{lid}:{listing['price']:.0f}", "drops"
-    if rating == "DEAL":
-        return notify_deal, lid, "deals"
-    if under_target(listing, target_price):
-        return notify_deal, lid, "target_hits"
-    if rating == "GOOD":
-        return notify_good, lid, "goods"
-    return None
-
-
-STALE_SOURCE_AFTER = timedelta(hours=24)
-
-
-def _stale_sources(health: dict, counts: Counter, now: datetime) -> list[str]:
-    """Update per-source health in place; return sources due a 'no results' alert.
-
-    A source is stale when it has returned 0 listings across every model for
-    STALE_SOURCE_AFTER. Alerts repeat at most once per STALE_SOURCE_AFTER.
-    """
-    due = []
-    for source, n in counts.items():
-        h = health.setdefault(source, {"last_ok": now.isoformat(), "last_alert": None})
-        if n:
-            h["last_ok"], h["last_alert"] = now.isoformat(), None
-            continue
-        quiet_for = now - datetime.fromisoformat(h["last_ok"])
-        last_alert = h["last_alert"] and datetime.fromisoformat(h["last_alert"])
-        if quiet_for >= STALE_SOURCE_AFTER and (
-            not last_alert or now - last_alert >= STALE_SOURCE_AFTER
-        ):
-            h["last_alert"] = now.isoformat()
-            due.append(source)
-    return due
-
-
-def _check_source_health(counts: Counter, notify_enabled: bool) -> None:
-    """Persist source health and alert on scrapers that have gone quiet."""
-    path = STATE_DIR / "source_health.json"
-    health = json.loads(path.read_text()) if path.exists() else {}
-    stale = _stale_sources(health, counts, datetime.now(UTC))
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(health, indent=1))
-
-    for source in stale:
-        since = health[source]["last_ok"][:16].replace("T", " ")
-        click.echo(f"  WARNING: {source} returned 0 listings for every model since {since} UTC")
-        if notify_enabled:
-            with contextlib.suppress(NotifyConfigError):
-                notify(
-                    title=f"{source} scraper returned nothing for 24h",
-                    body=(
-                        f"0 listings across all models since {since} UTC. "
-                        f"Likely the site's markup or search URL changed: "
-                        f"check infrastructure/{source}_scraper.py."
-                    ),
-                    priority=4,
-                    tags=["warning"],
-                )
-
-
 @click.group()
-def cli():
+@click.pass_context
+def cli(ctx: click.Context):
     """Dirt bike price tracker."""
-    init_db()
+    if ctx.obj is None:  # tests pass their own App
+        ctx.obj = build_app()
 
 
 @cli.command()
@@ -235,21 +126,22 @@ def cli():
 @click.option("--region", default="ontario", help="Region slug")
 @click.option("--source", type=click.Choice(["kijiji", "autotrader", "all"]), default="kijiji")
 @click.option("--pages", default=3, help="Max pages to scrape (Kijiji only)")
-def scrape(model: str, region: str, source: str, pages: int):
+@click.pass_obj
+def scrape(app: App, model: str, region: str, source: str, pages: int):
     """Scrape a source for a model, save to DB."""
     all_listings = []
     scraped_ok = []
     sources = [source] if source != "all" else ["kijiji", "autotrader"]
     for src in sources:
         click.echo(f"Scraping {src} for {model} in {region}...")
-        listings = _scrape_one(model, region, src, pages)
+        listings = app.sources[src](model, region, pages)
         all_listings.extend(listings)
         if listings:
             scraped_ok.append(src)
         click.echo(f"  {src}: {len(listings)} listings")
 
-    stats = upsert_listings(all_listings)
-    stale = mark_stale(scraped_ok)
+    stats = app.store.upsert_listings(all_listings)
+    stale = app.store.mark_stale(scraped_ok)
     click.echo(
         f"\nTotal {len(all_listings)}. "
         f"New: {stats['new']}, Updated: {stats['updated']}, "
@@ -260,9 +152,10 @@ def scrape(model: str, region: str, source: str, pages: int):
 
 @cli.command("list")
 @click.option("--model", required=True)
-def list_cmd(model: str):
+@click.pass_obj
+def list_cmd(app: App, model: str):
     """List active listings for a model with deal ratings."""
-    scored = _snapshot(model).listings
+    scored = _snapshot(app, model).listings
     if not scored:
         click.echo(f"No active listings for {model}.")
         return
@@ -295,9 +188,10 @@ def list_cmd(model: str):
 
 @cli.command()
 @click.option("--model", required=True)
-def stats(model: str):
+@click.pass_obj
+def stats(app: App, model: str):
     """Market stats for a model."""
-    snap = _snapshot(model)
+    snap = _snapshot(app, model)
     s, t = snap.stats, snap.trend
     click.echo(f"\nMarket stats for {model} (last 90 days):")
     if s["count"] == 0:
@@ -317,61 +211,27 @@ def stats(model: str):
 @cli.command()
 @click.option("--model", required=True)
 @click.option("--write", is_flag=True)
-def report(model: str, write: bool):
+@click.pass_obj
+def report(app: App, model: str, write: bool):
     """Generate a markdown market report."""
     if write:
-        path = write_report(_snapshot(model), out_dir=REPORTS_DIR)
+        path = write_report(_snapshot(app, model), out_dir=app.reports_dir)
         click.echo(f"Report written to {path}")
     else:
-        click.echo(render_report(_snapshot(model)))
-
-
-def _watch_model(
-    target: dict,
-    region: str,
-    notify: bool,
-    already_notified: set,
-    source_counts: Counter,
-    totals: dict,
-) -> set:
-    """Scrape, upsert and alert for one configured model. Returns the newly notified keys."""
-    slug = target["slug"]
-    for source in target.get("sources", ["kijiji"]):
-        listings = _scrape_one(slug, region, source, pages=3)
-        stats = upsert_listings(listings)
-        totals["new"] += stats["new"]
-        totals["updated"] += stats["updated"]
-        source_counts[source] += len(listings)
-
-    # Re-score after upsert. Read the full ad of anything that could alert first,
-    # so a red flag in the body stops the alert before its dedupe key is spent.
-    scored = _snapshot(slug).listings
-    if fetch_details(scored, target.get("target_price"), DETAIL_FETCHERS):
-        scored = _snapshot(slug).listings
-    newly_notified = set()
-    for listing in scored:
-        choice = _alert_for(listing, target.get("target_price"))
-        if choice is None or choice[1] in already_notified:
-            continue
-        alert, key, bucket = choice
-        # --no-notify still records, so re-enabling doesn't replay old alerts;
-        # a send that fails stays unrecorded and retries next run
-        if not notify or _send(alert, {**listing, "model_slug": slug}):
-            newly_notified.add(key)
-        totals[bucket] += 1
-    return newly_notified
+        click.echo(render_report(_snapshot(app, model)))
 
 
 @cli.command()
 @click.option("--region", default="ontario")
 @click.option("--notify/--no-notify", default=True)
 @click.option("--group", default=None, help="Only this group from models.yml")
-def watch(region: str, notify: bool, group: str):
+@click.pass_obj
+def watch(app: App, region: str, notify: bool, group: str):
     """
     Scrape all configured models, score, notify on new deals.
     Designed to run on a cron schedule.
     """
-    config = load_config()
+    config = app.config
     if not config:
         click.echo(f"No config at {CONFIG_PATH}. Create one from the example.")
         return
@@ -380,25 +240,26 @@ def watch(region: str, notify: bool, group: str):
     all_targets = [{**entry, "group": g} for g in groups for entry in config.get(g) or []]
 
     click.echo(f"Watching {len(all_targets)} models from groups: {', '.join(groups)}")
-    already_notified = _notified_ids()
+    already_notified = notified_ids(app)
     source_counts: Counter = Counter()
     newly_notified = set()
     totals = {"new": 0, "updated": 0, "deals": 0, "goods": 0, "target_hits": 0, "drops": 0}
 
     for target in all_targets:
-        newly_notified |= _watch_model(
-            target, region, notify, already_notified, source_counts, totals
+        newly_notified |= watch_model(
+            app, target, region, notify, already_notified, source_counts, totals
         )
 
-    mark_stale([s for s, n in source_counts.items() if n])
-    _record_notified(already_notified | newly_notified)
+    app.store.mark_stale([s for s, n in source_counts.items() if n])
+    record_notified(app, already_notified | newly_notified)
     if not group:  # a subset of models coming back empty doesn't mean a scraper broke
-        _check_source_health(source_counts, notify)
+        for warning in check_source_health(app, source_counts, notify):
+            click.echo(f"  WARNING: {warning}")
 
     # Refresh the dashboard with every watch run
     all_slugs = [t["slug"] for t in all_targets]
     try:
-        write_dashboard([_snapshot(s) for s in all_slugs], DASHBOARD_PATH)
+        write_dashboard([_snapshot(app, s) for s in all_slugs], app.dashboard_path)
     except Exception as exc:  # noqa: BLE001
         click.echo(f"  (dashboard write failed: {exc})")
 
@@ -407,28 +268,28 @@ def watch(region: str, notify: bool, group: str):
         f"DEAL alerts: {totals['deals']}, GOOD alerts: {totals['goods']}, "
         f"Target hits: {totals['target_hits']}, Price drops: {totals['drops']}"
     )
-    click.echo(f"Dashboard: file://{DASHBOARD_PATH}")
-    ping_healthcheck()
+    click.echo(f"Dashboard: file://{app.dashboard_path}")
+    app.ping()
 
 
 @cli.command()
 @click.option("--models", help="Comma-separated model slugs. Defaults to all from models.yml")
 @click.option("--open", "open_browser", is_flag=True, help="Open in browser after writing")
-def dashboard(models: str, open_browser: bool):
+@click.pass_obj
+def dashboard(app: App, models: str, open_browser: bool):
     """Write the HTML dashboard to dashboard.html at the project root."""
     if models:
         slugs = [s.strip() for s in models.split(",")]
     else:
-        config = load_config()
         slugs = []
-        for group_entries in config.values():
+        for group_entries in app.config.values():
             for entry in group_entries or []:
                 slugs.append(entry["slug"])
         if not slugs:
             click.echo("No models configured. Pass --models or populate config/models.yml")
             return
 
-    path = write_dashboard([_snapshot(s) for s in slugs], DASHBOARD_PATH)
+    path = write_dashboard([_snapshot(app, s) for s in slugs], app.dashboard_path)
     click.echo(f"Dashboard written: file://{path}")
     if open_browser:
         _open_in_browser(path)
@@ -436,39 +297,38 @@ def dashboard(models: str, open_browser: bool):
 
 @cli.command()
 @click.option("--slot", type=click.Choice(["nightly", "weekly"]), default="nightly")
-def backup(slot: str):
+@click.pass_obj
+def backup(app: App, slot: str):
     """Upload a DB + state snapshot to Google Drive (rclone `jobbackup` remote)."""
     try:
-        rows, size = backup_offsite(slot, state_dir=STATE_DIR)
+        rows, size = backup_offsite(slot, state_dir=app.state_dir)
     except BackupError as exc:
         click.echo(f"Backup FAILED ({slot}): {exc}")
-        with contextlib.suppress(NotifyConfigError):
-            notify(
-                title=f"dirtbike backup FAILED ({slot})",
-                body=str(exc),
-                priority=4,
-                tags=["warning"],
-            )
+        app.notify(
+            title=f"dirtbike backup FAILED ({slot})", body=str(exc), priority=4, tags=["warning"]
+        )
         raise SystemExit(1) from exc
     click.echo(f"Backup OK ({slot}): {rows} listings, {size} bytes")
 
 
 @cli.command()
 @click.argument("ref")
-def dismiss(ref: str):
+@click.pass_obj
+def dismiss(app: App, ref: str):
     """Hide a listing (Kijiji/AutoTrader URL or external id) from alerts and the dashboard."""
-    _set_dismissed(ref, dismissed=True)
+    _set_dismissed(app, ref, dismissed=True)
 
 
 @cli.command()
 @click.argument("ref")
-def undismiss(ref: str):
+@click.pass_obj
+def undismiss(app: App, ref: str):
     """Reverse `dismiss`."""
-    _set_dismissed(ref, dismissed=False)
+    _set_dismissed(app, ref, dismissed=False)
 
 
-def _set_dismissed(ref: str, dismissed: bool) -> None:
-    titles = set_dismissed(ref, dismissed)
+def _set_dismissed(app: App, ref: str, dismissed: bool) -> None:
+    titles = app.store.set_dismissed(ref, dismissed)
     if not titles:
         click.echo(f"No listing matches {ref!r}")
         raise SystemExit(1)
@@ -484,10 +344,11 @@ def _set_dismissed(ref: str, dismissed: bool) -> None:
     "--on", "on_date", type=click.DateTime(["%Y-%m-%d"]), help="Contact date (default now)"
 )
 @click.option("--clear", is_flag=True, help="Forget the contact")
-def contact(ref: str, note: str | None, on_date: datetime | None, clear: bool):
+@click.pass_obj
+def contact(app: App, ref: str, note: str | None, on_date: datetime | None, clear: bool):
     """Log messaging a listing's seller (URL or external id); shown on the dashboard."""
     at = None if clear else on_date or datetime.now(UTC).replace(tzinfo=None)
-    titles = set_contact(ref, at, note)
+    titles = app.store.set_contact(ref, at, note)
     if not titles:
         click.echo(f"No listing matches {ref!r}")
         raise SystemExit(1)
@@ -496,9 +357,10 @@ def contact(ref: str, note: str | None, on_date: datetime | None, clear: bool):
 
 
 @cli.command()
-def models():
+@click.pass_obj
+def models(app: App):
     """Show configured models from models.yml."""
-    config = load_config()
+    config = app.config
     if not config:
         click.echo(f"No config at {CONFIG_PATH}")
         return

@@ -10,13 +10,13 @@ import random
 import re
 import time
 from collections.abc import Iterator
-from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from urllib.parse import quote, urljoin
 
 import requests
 from bs4 import BeautifulSoup, Tag
 
+from ..domain.listing import Listing
 from ..domain.scoring import parse_km, parse_year
 
 USER_AGENTS = [
@@ -34,30 +34,6 @@ PRICE_STATE_NUMERIC = "numeric"
 PRICE_STATE_CONTACT = "please_contact"
 PRICE_STATE_TRADE = "swap_trade"
 PRICE_STATE_UNKNOWN = "unknown"
-
-
-@dataclass
-class Listing:
-    """A single Kijiji listing."""
-
-    source: str
-    external_id: str
-    url: str
-    title: str
-    price: float | None
-    price_state: str  # numeric | please_contact | swap_trade | unknown
-    location: str
-    posted_text: str
-    description: str
-    model_slugs: list[str]  # one listing can match multiple models (e.g. a package)
-    scraped_at: str
-    full_description: str | None = None  # set when the search page already had the whole ad (#76)
-    year: int | None = None
-    km: int | None = None  # odometer; dirt bikes rarely have one
-    image_url: str | None = None  # first photo, small (#10)
-
-    def to_dict(self):
-        return asdict(self)
 
 
 def _headers() -> dict:

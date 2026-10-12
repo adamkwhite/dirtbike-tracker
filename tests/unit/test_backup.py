@@ -8,9 +8,12 @@ from click.testing import CliRunner
 
 from dirtbike_tracker.application import cli as cli_module
 from dirtbike_tracker.application.cli import cli
+from dirtbike_tracker.application.ports import App
 from dirtbike_tracker.infrastructure import backup as backup_module
 from dirtbike_tracker.infrastructure.backup import BackupError, backup_offsite
 from dirtbike_tracker.infrastructure.storage import connect, init_db
+
+from .conftest import PushSpy
 
 
 @pytest.fixture
@@ -86,21 +89,16 @@ def test_backup_detects_remote_size_mismatch(
         backup_offsite("nightly", state_dir, db_path=db, remote="r:dir")
 
 
-def test_backup_command_alerts_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    sent: list[str] = []
-
+def test_backup_command_alerts_on_failure(
+    monkeypatch: pytest.MonkeyPatch, app: App, sent: PushSpy
+) -> None:
     def failing_backup(slot: str, **_: object) -> tuple[int, int]:
         raise BackupError("rclone copyto failed: token expired")
 
-    def fake_notify(title: str, **_: object) -> bool:
-        sent.append(title)
-        return True
+    monkeypatch.setattr(cli_module, "backup_offsite", failing_backup)  # backup: outside #74's ports
 
-    monkeypatch.setattr(cli_module, "backup_offsite", failing_backup)
-    monkeypatch.setattr(cli_module, "notify", fake_notify)
-
-    result = CliRunner().invoke(cli, ["backup", "--slot", "weekly"])
+    result = CliRunner().invoke(cli, ["backup", "--slot", "weekly"], obj=app)
 
     assert result.exit_code == 1
     assert "token expired" in result.output
-    assert sent == ["dirtbike backup FAILED (weekly)"]
+    assert [p["title"] for p in sent] == ["dirtbike backup FAILED (weekly)"]

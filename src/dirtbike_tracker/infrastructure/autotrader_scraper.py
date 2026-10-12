@@ -21,12 +21,12 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
+from ..domain.listing import Listing
 from ..domain.scoring import parse_km, parse_year
 from .kijiji_scraper import (
     PRICE_STATE_NUMERIC,
     PRICE_STATE_UNKNOWN,
     USER_AGENTS,
-    Listing,
     detect_models_in_title,
     first_image,
 )
