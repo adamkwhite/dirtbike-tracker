@@ -60,6 +60,14 @@ phrases in the title/description: +2 per green flag (`doesn't run`, `needs work`
 Needing work is the point; "runs great" is neutral. Lists live in `domain/scoring.py`. A listing
 with fit below 5 never alerts, however cheap.
 
+A model with `goal: ride` in `models.yml` (e.g. the Rebel 500, to ride in spring) flips that:
+needing work, `no safety` and `sold as is` are red flags, and `runs great`, `safetied`,
+`certified`, `low kms`, `new tires` are green. Ride models have no project-bike median.
+Adding a model: an entry in `models.yml` (plus its slug in `KNOWN_MODEL_SLUGS`), and if
+AutoTrader's keyword search misses the slug, a spelling in `autotrader_scraper.KEYWORDS`.
+Run `dirtbike watch --group <group> --no-notify` once after deploying, or every listing
+already on the market alerts as new.
+
 Kijiji search pages carry a ~200-char snippet of every ad; a snippet that isn't cut off is the
 whole ad. For a cut-off one that could alert (DEAL/GOOD or under target), `watch` reads the full
 ad (up to 5 per model, once each) and re-scores fit on it. A red flag in the body stops the alert.

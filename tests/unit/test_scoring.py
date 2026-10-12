@@ -278,3 +278,28 @@ def test_real_ad_wording_marks_a_project() -> None:
 
     assert listing["basis"] == "fallback"
     assert listing["fit_flags"] == ["+needs rings", "+timing chain"]
+
+
+@pytest.mark.parametrize(
+    ("text", "fit", "flags"),
+    [
+        ("Rebel 500, won't start, needs carb", 0, ["-needs carb", "-won't start"]),
+        (
+            "Rebel 500, runs great, safetied, ownership",
+            10,
+            ["+ownership", "+runs great", "+safetied"],
+        ),
+        ("Rebel 500 sold as is, no safety", 0, ["-no safety", "-sold as is"]),
+        ("Rebel 500 project, ready for the trail", 2, ["-project"]),
+    ],
+)
+def test_ride_goal_wants_a_runner(text: str, fit: int, flags: list[str]) -> None:
+    assert project_fit(text, "ride") == (fit, flags)
+
+
+def test_ride_goal_has_no_project_segment() -> None:
+    (listing,) = score_listings(
+        [{"price": 1000, "title": "Rebel 500, doesn't run"}], 3000, project_median=1000, goal="ride"
+    )
+
+    assert (listing["rating"], listing["basis"], listing["fit"]) == ("DEAL", None, 2)

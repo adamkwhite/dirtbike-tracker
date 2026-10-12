@@ -23,7 +23,15 @@ from pathlib import Path
 import click
 import yaml
 
-from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, project_line, under_target, vs_label
+from ..domain.scoring import (
+    FIT_ALERT_MIN,
+    FIT_NEUTRAL,
+    GOALS,
+    MarketSnapshot,
+    project_line,
+    under_target,
+    vs_label,
+)
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
@@ -71,6 +79,24 @@ def load_config() -> dict:
         return {}
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f) or {}
+
+
+def _snapshot(slug: str) -> MarketSnapshot:
+    """snapshot() scored for the model's goal in models.yml (project unless it says ride)."""
+    goal = next(
+        (
+            e.get("goal", "project")
+            for g in load_config().values()
+            for e in g or []
+            if e["slug"] == slug
+        ),
+        "project",
+    )
+    if goal not in GOALS:
+        raise click.ClickException(
+            f"{slug}: unknown goal {goal!r} in models.yml (use {', '.join(GOALS)})"
+        )
+    return snapshot(slug, goal=goal)
 
 
 def _scrape_one(model: str, region: str, source: str, pages: int) -> list:
@@ -235,7 +261,7 @@ def scrape(model: str, region: str, source: str, pages: int):
 @click.option("--model", required=True)
 def list_cmd(model: str):
     """List active listings for a model with deal ratings."""
-    scored = snapshot(model).listings
+    scored = _snapshot(model).listings
     if not scored:
         click.echo(f"No active listings for {model}.")
         return
@@ -268,7 +294,7 @@ def list_cmd(model: str):
 @click.option("--model", required=True)
 def stats(model: str):
     """Market stats for a model."""
-    snap = snapshot(model)
+    snap = _snapshot(model)
     s, t = snap.stats, snap.trend
     click.echo(f"\nMarket stats for {model} (last 90 days):")
     if s["count"] == 0:
@@ -291,10 +317,10 @@ def stats(model: str):
 def report(model: str, write: bool):
     """Generate a markdown market report."""
     if write:
-        path = write_report(snapshot(model), out_dir=REPORTS_DIR)
+        path = write_report(_snapshot(model), out_dir=REPORTS_DIR)
         click.echo(f"Report written to {path}")
     else:
-        click.echo(render_report(snapshot(model)))
+        click.echo(render_report(_snapshot(model)))
 
 
 def _watch_model(
@@ -316,9 +342,9 @@ def _watch_model(
 
     # Re-score after upsert. Read the full ad of anything that could alert first,
     # so a red flag in the body stops the alert before its dedupe key is spent.
-    scored = snapshot(slug).listings
+    scored = _snapshot(slug).listings
     if fetch_details(scored, target.get("target_price"), DETAIL_FETCHERS):
-        scored = snapshot(slug).listings
+        scored = _snapshot(slug).listings
     newly_notified = set()
     for listing in scored:
         choice = _alert_for(listing, target.get("target_price"))
@@ -369,7 +395,7 @@ def watch(region: str, notify: bool, group: str):
     # Refresh the dashboard with every watch run
     all_slugs = [t["slug"] for t in all_targets]
     try:
-        write_dashboard([snapshot(s) for s in all_slugs], DASHBOARD_PATH)
+        write_dashboard([_snapshot(s) for s in all_slugs], DASHBOARD_PATH)
     except Exception as exc:  # noqa: BLE001
         click.echo(f"  (dashboard write failed: {exc})")
 
@@ -399,7 +425,7 @@ def dashboard(models: str, open_browser: bool):
             click.echo("No models configured. Pass --models or populate config/models.yml")
             return
 
-    path = write_dashboard([snapshot(s) for s in slugs], DASHBOARD_PATH)
+    path = write_dashboard([_snapshot(s) for s in slugs], DASHBOARD_PATH)
     click.echo(f"Dashboard written: file://{path}")
     if open_browser:
         _open_in_browser(path)
