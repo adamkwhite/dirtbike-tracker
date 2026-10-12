@@ -17,17 +17,27 @@ from dirtbike_tracker.domain.scoring import (
 @pytest.mark.parametrize(
     ("price", "rating", "delta_pct"),
     [
-        (69, "DEAL", -31.0),
-        (70, "DEAL", -30.0),  # -30% boundary is inclusive
-        (71, "GOOD", -29.0),
-        (90, "GOOD", -10.0),  # -10% boundary is inclusive
-        (91, "FAIR", -9.0),
-        (115, "FAIR", 15.0),  # +15% boundary is inclusive
-        (116, "HIGH", 16.0),
+        (690, "DEAL", -31.0),
+        (700, "DEAL", -30.0),  # -30% boundary is inclusive
+        (710, "GOOD", -29.0),
+        (900, "GOOD", -10.0),  # -10% boundary is inclusive
+        (910, "FAIR", -9.0),
+        (1150, "FAIR", 15.0),  # +15% boundary is inclusive
+        (1160, "HIGH", 16.0),
     ],
 )
 def test_rate_listing_thresholds(price: float, rating: str, delta_pct: float) -> None:
-    assert rate_listing(price, 100) == {"rating": rating, "delta_pct": delta_pct}
+    assert rate_listing(price, 1000) == {"rating": rating, "delta_pct": delta_pct}
+
+
+@pytest.mark.parametrize("price", [1, 50, 100])  # MIN_BIKE_PRICE is inclusive
+def test_rate_listing_never_rates_junk_prices(price: float) -> None:
+    # a $100 set of plastics was rated DEAL (-97%) against a $3,400 TT-R125 median
+    assert rate_listing(price, 3400) == {"rating": "UNKNOWN", "delta_pct": None}
+
+
+def test_rate_listing_rates_just_above_floor() -> None:
+    assert rate_listing(101, 3400)["rating"] == "DEAL"
 
 
 @pytest.mark.parametrize(("price", "median_price"), [(None, 100), (100, None), (100, 0)])
@@ -71,13 +81,13 @@ def test_trend_none_without_both_windows(recent: list[float], older: list[float]
 
 def test_score_listings_sorts_best_deal_first_and_unpriced_last() -> None:
     listings: list[dict] = [
-        {"id": "high", "price": 120},
+        {"id": "high", "price": 1200},
         {"id": "unpriced", "price": None},
-        {"id": "deal", "price": 60},
-        {"id": "fair", "price": 100},
+        {"id": "deal", "price": 600},
+        {"id": "fair", "price": 1000},
     ]
 
-    scored = score_listings(listings, median_price=100)
+    scored = score_listings(listings, median_price=1000)
 
     assert [(s["id"], s["rating"]) for s in scored] == [
         ("deal", "DEAL"),
@@ -112,7 +122,7 @@ def test_urgency(rating: str, age_days: float | None, expected: str | None) -> N
 
 def test_score_listings_attaches_urgency_from_age() -> None:
     scored = score_listings(
-        [{"price": 60, "age_days": 0.2}, {"price": 85, "age_days": 20}], median_price=100
+        [{"price": 600, "age_days": 0.2}, {"price": 850, "age_days": 20}], median_price=1000
     )
 
     assert [(s["rating"], s["urgency"]) for s in scored] == [

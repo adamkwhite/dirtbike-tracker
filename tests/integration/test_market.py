@@ -49,13 +49,15 @@ def test_snapshot_scores_active_primary_listings(tmp_path: Path) -> None:
     _add(db, "pricey", 2600, days_ago=60)
     _add(db, "crosspost", 1000, days_ago=5, is_primary=0)  # excluded from market + listings
     _add(db, "ancient", 9000, days_ago=200)  # outside 90d market window, still active
-    _add(db, "junk", 50, days_ago=5)  # <= $100 ignored for market
+    _add(db, "junk", 50, days_ago=5)  # <= MIN_BIKE_PRICE: not market, not rated
 
     snap = snapshot("crf150f", db_path=db)
 
     assert snap.stats == {"low": 1400, "median": 2000, "high": 2600, "count": 3}
     assert snap.trend == -39.1  # recent 1400 vs older median 2300
-    assert snap.listings[0]["external_id"] == "junk"  # -97.5%, best "deal" first
+    assert snap.listings[0]["external_id"] == "cheap"  # -30%, best deal first
+    assert snap.listings[-1]["external_id"] == "junk"
+    assert snap.listings[-1]["rating"] == "UNKNOWN"
     assert {s["external_id"] for s in snap.listings} == {
         "cheap",
         "mid",

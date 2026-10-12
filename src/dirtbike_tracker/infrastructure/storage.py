@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from ..domain.scoring import MIN_BIKE_PRICE
 from .kijiji_scraper import Listing
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent.parent / "data" / "listings.db"
@@ -281,12 +282,12 @@ def market_prices(
             JOIN listing_models m ON m.listing_id = l.id
             WHERE m.model_slug=?
               AND l.price IS NOT NULL
-              AND l.price > 100
+              AND l.price > ?
               AND l.first_seen >= ?
               AND l.first_seen <= ?
               AND l.is_primary = 1
             """,
-            (model_slug, cutoff, newest),
+            (model_slug, MIN_BIKE_PRICE, cutoff, newest),
         ).fetchall()
     return [r["price"] for r in rows]
 

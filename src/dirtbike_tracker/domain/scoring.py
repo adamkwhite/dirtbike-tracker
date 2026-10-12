@@ -10,6 +10,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from statistics import median
 
+# At or below this a "price" is a parts ad or placeholder, not a bike: it is
+# excluded from the market AND never rated or alerted on.
+MIN_BIKE_PRICE = 100
+
 RATING_DEAL = -0.30
 RATING_GOOD = -0.10
 RATING_FAIR = 0.15
@@ -45,7 +49,7 @@ def market_stats(prices: list[float]) -> dict:
 
 def rate_listing(price: float | None, median_price: float | None) -> dict:
     """Rate one listing's price against the market median."""
-    if price is None or median_price is None or median_price == 0:
+    if price is None or price <= MIN_BIKE_PRICE or not median_price:
         return {"rating": "UNKNOWN", "delta_pct": None}
 
     delta = (price - median_price) / median_price
@@ -116,4 +120,4 @@ def _price_in_window(t: dict, w_start: datetime, w_end: datetime) -> float | Non
     # ponytail: before our first observation, assume the first price we saw.
     # Kijiji post dates reach back months; without this the chart starts empty.
     price = known[-1] if known else t["history"][0][1]
-    return price if price and price > 100 else None
+    return price if price and price > MIN_BIKE_PRICE else None

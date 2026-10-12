@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from dirtbike_tracker.application import cli as cli_module
 from dirtbike_tracker.application.cli import cli
-from dirtbike_tracker.domain.scoring import MarketSnapshot
+from dirtbike_tracker.domain.scoring import MarketSnapshot, score_listings
 
 
 @pytest.fixture
@@ -86,3 +86,27 @@ def test_watch_records_deal_only_when_alert_sent(
 
     assert result.exit_code == 0, result.output
     assert ("kijiji:1400" in stub_watch[0]) is deal_recorded
+
+
+def test_watch_does_not_alert_on_junk_price_under_target(
+    stub_watch: list[set], snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snap.listings = score_listings(
+        [*snap.listings, {**snap.listings[0], "external_id": "plastics", "price": 50.0}],
+        snap.stats["median"],
+    )
+    monkeypatch.setattr(
+        cli_module, "load_config", lambda: {"p": [{"slug": "crf150f", "target_price": 1500}]}
+    )
+    alerted: list[str] = []
+
+    def fake_notify_deal(listing: dict) -> bool:
+        alerted.append(listing["external_id"])
+        return True
+
+    monkeypatch.setattr(cli_module, "notify_deal", fake_notify_deal)
+
+    result = CliRunner().invoke(cli, ["watch"])
+
+    assert result.exit_code == 0, result.output
+    assert alerted == ["1400"]
