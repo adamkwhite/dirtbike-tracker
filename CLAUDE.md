@@ -10,7 +10,7 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 - `application/cli.py` - orchestration via click
 
 ## Known tech debt
-- Scrapers, notifier, dashboard and storage writes are untested. See issues tagged `area:testing`
+- Untested: scraper HTTP/pagination (`scrape_model`), storage writes (`upsert_listings`, `mark_stale`), ntfy message formatting. See issues tagged `area:testing`
 - `docs/architecture.md` module table predates the hexagonal port (old flat filenames)
 
 ## Common commands
@@ -23,3 +23,5 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 - Model slugs listed in `src/dirtbike_tracker/infrastructure/kijiji_scraper.py:KNOWN_MODEL_SLUGS`
 - Cron runs every 20 min from the prod clone `~/Code/dirtbike-tracker-prod` (always `main`), installed via its `scripts/install_cron.sh`. Deploy = `git -C ~/Code/dirtbike-tracker-prod pull --ff-only`. `data/` and `dashboard.html` there are symlinks into this repo
 - Never put an unescaped `%` in a crontab line (cron reads it as newline)
+- Cron env vars go directly before the command: `cd dir && NTFY_TOPIC=x dirtbike watch`. `NTFY_TOPIC=x cd dir && ...` scopes it to `cd` only. `NTFY_TOPIC` / `HEALTHCHECK_URL` live only in the crontab, never the repo
+- AutoTrader parses listings from the page's `__NEXT_DATA__` JSON; Kijiji parses HTML cards and reads `__NEXT_DATA__` only for per-ad `vehicletype`. Both skip new-vehicle dealer stock (Kijiji `vehicletype=new`, AutoTrader `offerType=N`) so MSRP doesn't set the used-market median

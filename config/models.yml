@@ -1,5 +1,5 @@
 # Models to track. One file per project phase.
-# Add/remove here, then re-run `python src/main.py watch` to pick up changes.
+# Add/remove here; the next `dirtbike watch` (cron, from the prod clone after deploy) picks it up.
 
 # Priority targets right now (dad-and-sons trail bikes)
 priority:
