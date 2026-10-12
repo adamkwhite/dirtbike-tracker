@@ -1,6 +1,8 @@
-"""CLI commands, with snapshot() stubbed so no DB is touched."""
+"""CLI commands against an App of fakes (tests/unit/conftest.py): a tmp SQLite store,
+fake sources and detail fetchers, a spy notifier. Nothing is patched except the OS
+edge in the open-in-browser tests."""
 
-from datetime import datetime
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,19 +10,53 @@ import pytest
 from click.testing import CliRunner
 
 from dirtbike_tracker.application import cli as cli_module
-from dirtbike_tracker.application.cli import cli
-from dirtbike_tracker.domain.scoring import GOALS, MarketSnapshot, score_listings
+from dirtbike_tracker.application.cli import cli, skip_unconfigured
+from dirtbike_tracker.application.market import model_goal
+from dirtbike_tracker.application.ports import App
+from dirtbike_tracker.application.watch import alert_for
+from dirtbike_tracker.domain.listing import Listing
+from dirtbike_tracker.domain.scoring import GOALS
 from dirtbike_tracker.infrastructure.kijiji_scraper import KNOWN_MODEL_SLUGS
+from dirtbike_tracker.infrastructure.notifier import NotifyConfigError
+
+from .conftest import PushSpy
+
+
+def _listing(ext_id: str, price: float | None) -> Listing:
+    return Listing(
+        source="kijiji",
+        external_id=ext_id,
+        url=f"https://www.kijiji.ca/v-dirt-bikes-motocross/barrie/crf150f/{ext_id}",
+        title=f"2008 Honda CRF150F {ext_id}",
+        price=price,
+        price_state="numeric" if price else "please_contact",
+        location="Barrie, ON",
+        posted_text="",
+        description="",
+        model_slugs=["crf150f"],
+        scraped_at="",
+    )
+
+
+# median 2000: the 1400 bike is a DEAL (-30%), the rest FAIR/HIGH, one has no price
+MARKET = [_listing("a1400", 1400), _listing("b2000", 2000), _listing("c2600", 2600)]
+MARKET.append(_listing("d0", None))
+
+
+def _invoke(app: App, *args: str) -> str:
+    result = CliRunner().invoke(cli, list(args), obj=app)
+    assert result.exit_code == 0, result.output
+    return str(result.output)
 
 
 @pytest.fixture
-def stub_snapshot(snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(cli_module, "snapshot", lambda slug, goal: snap)
-    monkeypatch.setattr(cli_module, "REPORTS_DIR", tmp_path / "reports")
-    monkeypatch.setattr(cli_module, "DASHBOARD_PATH", tmp_path / "dashboard.html")
+def market_app(app: App) -> App:
+    """The App with Kijiji serving MARKET, already scraped into the store once."""
+    app = replace(app, sources={"kijiji": lambda slug, region, pages: list(MARKET)})
+    app.store.upsert_listings(MARKET)
+    return app
 
 
-@pytest.mark.usefixtures("stub_snapshot")
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
@@ -29,13 +65,11 @@ def stub_snapshot(snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch, tmp_pat
         (["report", "--model", "crf150f"], "# CRF150F market snapshot"),
         (["report", "--model", "crf150f", "--write"], "Report written to"),
         (["dashboard", "--models", "crf150f"], "Dashboard written"),
+        (["models"], "crf150f"),
     ],
 )
-def test_commands_render_snapshot(args: list[str], expected: str) -> None:
-    result = CliRunner().invoke(cli, args)
-
-    assert result.exit_code == 0, result.output
-    assert expected in result.output
+def test_commands_render_the_market(market_app: App, args: list[str], expected: str) -> None:
+    assert expected in _invoke(market_app, *args)
 
 
 def test_cli_registers_commands() -> None:
@@ -46,74 +80,74 @@ def test_cli_registers_commands() -> None:
         assert command in result.output
 
 
-@pytest.fixture
-def stub_watch(snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch) -> list[set]:
-    recorded: list[set] = []
-    monkeypatch.setattr(cli_module, "load_config", lambda: {"priority": [{"slug": "crf150f"}]})
-    monkeypatch.setattr(cli_module, "_scrape_one", lambda *a, **k: [])
-    monkeypatch.setattr(cli_module, "DETAIL_FETCHERS", {})  # no network
-    monkeypatch.setattr(cli_module, "upsert_listings", lambda _: {"new": 0, "updated": 0})
-    monkeypatch.setattr(cli_module, "snapshot", lambda slug, goal: snap)
-    monkeypatch.setattr(cli_module, "_notified_ids", set)
-    monkeypatch.setattr(cli_module, "_record_notified", recorded.append)
-    monkeypatch.setattr(cli_module, "mark_stale", lambda sources: 0)
-    monkeypatch.setattr(cli_module, "write_dashboard", lambda *a: None)
-    monkeypatch.setattr(cli_module, "_check_source_health", lambda *a: None)
-    monkeypatch.setattr(cli_module, "ping_healthcheck", lambda: True)
-    monkeypatch.setattr(cli_module, "notify_good", lambda _: True)
-    return recorded
+def test_scrape_stores_what_the_source_returns(market_app: App) -> None:
+    output = _invoke(market_app, "scrape", "--model", "crf150f")
 
-
-def _raise_config_error(_: dict) -> bool:
-    raise cli_module.NotifyConfigError("no topic")
+    assert "kijiji: 4 listings" in output
+    assert len(market_app.store.active_listings("crf150f")) == 4
 
 
 @pytest.mark.parametrize(
-    ("args", "notify_deal", "deal_recorded"),
-    [
-        ([], lambda _: True, True),
-        ([], lambda _: False, False),  # HTTP failure: retry next run
-        ([], _raise_config_error, False),  # missing NTFY_TOPIC: retry next run
-        (["--no-notify"], _raise_config_error, True),  # silenced on purpose
-    ],
+    ("ok", "args", "recorded"),
+    [(True, [], True), (False, [], False), (False, ["--no-notify"], True)],
 )
 def test_watch_records_deal_only_when_alert_sent(
-    stub_watch: list[set],
-    monkeypatch: pytest.MonkeyPatch,
-    args: list[str],
-    notify_deal: object,
-    deal_recorded: bool,
+    market_app: App, sent: PushSpy, ok: bool, args: list[str], recorded: bool
 ) -> None:
-    monkeypatch.setattr(cli_module, "notify_deal", notify_deal)
+    sent.ok = ok  # False: the send failed, so it retries next run
 
-    result = CliRunner().invoke(cli, ["watch", *args])
+    _invoke(market_app, "watch", *args)
 
-    assert result.exit_code == 0, result.output
-    assert ("kijiji:1400" in stub_watch[0]) is deal_recorded
+    notified = (market_app.state_dir / "notified_ids.txt").read_text().splitlines()
+    assert ("kijiji:a1400" in notified) is recorded
+    assert len(sent) == (0 if args else 1)
 
 
-def test_watch_does_not_alert_on_junk_price_under_target(
-    stub_watch: list[set], snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    snap.listings = score_listings(
-        [*snap.listings, {**snap.listings[0], "external_id": "plastics", "price": 50.0}],
-        snap.stats["median"],
+def test_watch_does_not_alert_on_junk_price_under_target(market_app: App, sent: PushSpy) -> None:
+    plastics = _listing("plastics", 50)
+    app = replace(
+        market_app,
+        sources={"kijiji": lambda *_: [*MARKET, plastics]},
+        config={"p": [{"slug": "crf150f", "goal": "project", "target_price": 1500}]},
     )
-    monkeypatch.setattr(
-        cli_module, "load_config", lambda: {"p": [{"slug": "crf150f", "target_price": 1500}]}
-    )
-    alerted: list[str] = []
 
-    def fake_notify_deal(listing: dict) -> bool:
-        alerted.append(listing["external_id"])
+    _invoke(app, "watch")
+
+    assert [p["title"] for p in sent] == ["URGENT DEAL: CRF150F $1400 (-30% vs median)"]  # fresh
+
+
+def test_watch_reads_the_ad_and_a_red_flag_stops_the_alert(market_app: App, sent: PushSpy) -> None:
+    fetched: list[str] = []
+
+    def fetch(url: str) -> str:
+        fetched.append(url.rsplit("/", 1)[-1])
+        return "Runs, but no ownership."
+
+    _invoke(replace(market_app, detail_fetchers={"kijiji": fetch}), "watch")
+
+    assert fetched == ["a1400"]  # only the DEAL was worth reading
+    assert sent == []
+
+
+def test_watch_pings_and_writes_the_dashboard(market_app: App) -> None:
+    pings: list[bool] = []
+
+    def ping() -> bool:
+        pings.append(True)
         return True
 
-    monkeypatch.setattr(cli_module, "notify_deal", fake_notify_deal)
+    _invoke(replace(market_app, ping=ping), "watch")
 
-    result = CliRunner().invoke(cli, ["watch"])
+    assert pings == [True]
+    assert market_app.dashboard_path.exists()
 
-    assert result.exit_code == 0, result.output
-    assert alerted == ["1400"]
+
+def test_skip_unconfigured_reports_instead_of_raising(capsys: pytest.CaptureFixture[str]) -> None:
+    def no_topic(title: str, body: str, **_: object) -> bool:
+        raise NotifyConfigError("no topic")
+
+    assert skip_unconfigured(no_topic)("t", "b") is False  # type: ignore[arg-type]
+    assert "(notify skipped: no topic)" in capsys.readouterr().out
 
 
 def test_open_in_browser_hands_file_to_windows_under_wsl(
@@ -176,120 +210,54 @@ def _rated(rating: str, price: float = 2000, drop_from: float | None = None) -> 
     ],
 )
 def test_alert_for(listing: dict, target: float | None, expected: tuple | None) -> None:
-    choice = cli_module._alert_for(listing, target)
+    choice = alert_for(listing, target)
 
     got = None if choice is None else (choice[0].__name__, choice[1], choice[2])
     assert got == expected
 
 
-def test_watch_alerts_price_drop_on_already_notified_listing_once(
-    stub_watch: list[set], snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    snap.listings = [{**snap.listings[0], "price_drop_from": 1800.0}]  # DEAL at 1400
-    monkeypatch.setattr(cli_module, "_notified_ids", lambda: {"kijiji:1400"})
-    alerted: list[str] = []
+def test_dismiss_and_undismiss(market_app: App) -> None:
+    assert "Dismissed: 2008 Honda CRF150F a1400" in _invoke(market_app, "dismiss", "a1400")
+    assert len(market_app.store.active_listings("crf150f")) == 3
 
-    def fake_notify_deal(listing: dict) -> bool:
-        alerted.append(f"{listing['external_id']} was {listing['price_drop_from']}")
-        return True
-
-    monkeypatch.setattr(cli_module, "notify_deal", fake_notify_deal)
-
-    first = CliRunner().invoke(cli, ["watch"])
-    monkeypatch.setattr(cli_module, "_notified_ids", lambda: stub_watch[0])
-    CliRunner().invoke(cli, ["watch"])
-
-    assert first.exit_code == 0, first.output
-    assert alerted == ["1400 was 1800.0"]
-    assert "drop:kijiji:1400:1400" in stub_watch[0]
+    assert "Restored: 2008 Honda CRF150F a1400" in _invoke(market_app, "undismiss", "a1400")
+    assert len(market_app.store.active_listings("crf150f")) == 4
 
 
-def test_dismiss_unknown_listing_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_module, "set_dismissed", lambda ref, dismissed: [])
-
-    result = CliRunner().invoke(cli, ["dismiss", "nope"])
+def test_dismiss_unknown_listing_exits_nonzero(app: App) -> None:
+    result = CliRunner().invoke(cli, ["dismiss", "nope"], obj=app)
 
     assert result.exit_code == 1
     assert "No listing matches 'nope'" in result.output
 
 
-def test_undismiss_reports_restored(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_module, "set_dismissed", lambda ref, dismissed: ["2008 KLX140"])
+def test_contact_logs_date_and_note_then_clears(market_app: App) -> None:
+    url = "https://www.kijiji.ca/v-dirt-bikes-motocross/barrie/crf150f/a1400?utm=x"
 
-    result = CliRunner().invoke(cli, ["undismiss", "1700000001"])
+    out = _invoke(market_app, "contact", url, "--on", "2026-10-01", "--note", "offered 750")
+    (bike,) = [
+        x for x in market_app.store.active_listings("crf150f") if x["external_id"] == "a1400"
+    ]
+    cleared = _invoke(market_app, "contact", "a1400", "--clear")
+    missing = CliRunner().invoke(cli, ["contact", "nope"], obj=market_app)
 
-    assert result.exit_code == 0
-    assert "Restored: 2008 KLX140" in result.output
-
-
-def test_watch_rescores_after_fetching_details(
-    stub_watch: list[set], snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    calls: list[str] = []
-
-    def counting_snapshot(slug: str, goal: str) -> MarketSnapshot:
-        calls.append(slug)
-        return snap
-
-    monkeypatch.setattr(cli_module, "snapshot", counting_snapshot)
-    monkeypatch.setattr(cli_module, "fetch_details", lambda *a: 1)
-
-    result = CliRunner().invoke(cli, ["watch", "--no-notify"])
-
-    assert result.exit_code == 0, result.output
-    assert calls[:2] == ["crf150f", "crf150f"]  # scored, read full ads, re-scored
-
-
-def test_contact_logs_date_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple] = []
-
-    def fake_set_contact(ref: str, at: object, note: str | None) -> list[str]:
-        calls.append((ref, at, note))
-        return ["2003 honda crf150f"] if ref == "1742579252" else []
-
-    monkeypatch.setattr(cli_module, "set_contact", fake_set_contact)
-
-    ok = CliRunner().invoke(
-        cli, ["contact", "1742579252", "--on", "2026-10-01", "--note", "offered 750"]
-    )
-    cleared = CliRunner().invoke(cli, ["contact", "1742579252", "--clear"])
-    missing = CliRunner().invoke(cli, ["contact", "nope"])
-
-    assert "Contacted: 2003 honda crf150f" in ok.output
-    assert calls[0] == ("1742579252", datetime(2026, 10, 1), "offered 750")
-    assert "Cleared contact" in cleared.output
-    assert calls[1][1] is None
+    assert "Contacted: 2008 Honda CRF150F a1400" in out
+    assert (bike["contacted_at"], bike["contact_note"]) == ("2026-10-01T00:00:00", "offered 750")
+    assert "Cleared contact" in cleared
     assert missing.exit_code == 1
 
 
-def test_snapshot_uses_the_models_goal(
-    monkeypatch: pytest.MonkeyPatch, snap: MarketSnapshot
-) -> None:
-    goals: list[str] = []
-    monkeypatch.setattr(
-        cli_module,
-        "load_config",
-        lambda: {"street": [{"slug": "rebel500", "goal": "ride"}], "x": None},
-    )
+def test_model_goal_from_config() -> None:
+    config = {"street": [{"slug": "rebel500", "goal": "ride"}], "x": None}
 
-    def fake_snapshot(slug: str, goal: str) -> MarketSnapshot:
-        goals.append(goal)
-        return snap
-
-    monkeypatch.setattr(cli_module, "snapshot", fake_snapshot)
-
-    cli_module._snapshot("rebel500")
-    cli_module._snapshot("crf150f")  # not configured: project
-
-    assert goals == ["ride", "project"]
+    assert model_goal(config, "rebel500") == "ride"
+    assert model_goal(config, "crf150f") == "project"  # not configured
 
 
-def test_unknown_goal_is_a_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        cli_module, "load_config", lambda: {"g": [{"slug": "rebel500", "goal": "tour"}]}
-    )
+def test_unknown_goal_is_a_clear_error(app: App) -> None:
+    app = replace(app, config={"g": [{"slug": "rebel500", "goal": "tour"}]})
 
-    result = CliRunner().invoke(cli, ["stats", "--model", "rebel500"])
+    result = CliRunner().invoke(cli, ["stats", "--model", "rebel500"], obj=app)
 
     assert result.exit_code == 1
     assert "unknown goal 'tour'" in result.output

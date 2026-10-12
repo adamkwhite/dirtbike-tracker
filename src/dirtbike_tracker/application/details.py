@@ -1,16 +1,13 @@
 """Read the full ad of listings that could alert (#71).
 
-AdDetailFetcher is a port: this module decides which listings and how many;
-an adapter per source only turns an ad URL into its description.
+This module decides which listings and how many; an AdDetailFetcher adapter
+per source (ports.py) only turns an ad URL into its description.
 """
 
-from collections.abc import Callable, Mapping
-from pathlib import Path
+from collections.abc import Mapping
 
 from ..domain.scoring import needs_detail
-from ..infrastructure.storage import save_full_description
-
-AdDetailFetcher = Callable[[str], str | None]  # ad url -> description, None if the fetch failed
+from .ports import AdDetailFetcher, ListingStore
 
 # Per model per run. Each fetch sleeps ~3s (scraper rate limit), so this caps a run's extra time.
 DETAIL_BUDGET = 5
@@ -20,7 +17,7 @@ def fetch_details(
     listings: list[dict],
     target_price: float | None,
     fetchers: Mapping[str, AdDetailFetcher],
-    db_path: Path | None = None,  # None = storage.DB_PATH at call time
+    store: ListingStore,
 ) -> int:
     """Fetch and store full descriptions for listings that need one. Returns how many were saved.
 
@@ -31,6 +28,6 @@ def fetch_details(
     for listing in wanted[:DETAIL_BUDGET]:
         text = fetchers[listing["source"]](listing["url"])
         if text is not None:
-            save_full_description(listing["id"], text, db_path=db_path)
+            store.save_full_description(listing["id"], text)
             saved += 1
     return saved

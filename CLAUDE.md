@@ -5,10 +5,12 @@ Personal dirt bike price tracker. Scrapes Kijiji + AutoTrader, scores vs market 
 ## Architecture
 Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 - `domain/` - pure scoring logic, no I/O. Never import from `infrastructure/`
-- `application/market.py` - `snapshot(slug)` composes storage reads + domain scoring; CLI and renderers consume `MarketSnapshot`
-- `application/details.py` - `AdDetailFetcher` port (a `Callable`, wired by source in `cli.DETAIL_FETCHERS`). Only port so far; the rest of `application/` imports infrastructure directly (#74)
+- `application/ports.py` - ports (#74): `ListingStore` (Protocol), `ListingSource`, `AdDetailFetcher`, `Notifier`, and `App`, the bundle every command gets. Only `cli.py` (the composition root, `build_app()`) imports infrastructure; the rest of `application/` talks to ports
+- `application/watch.py` - watch orchestration (scrape → store → score → read full ads → re-score → alert), source health, notified-id state
+- `application/market.py` - `snapshot(slug, store, goal)` composes store reads + domain scoring; CLI and renderers consume `MarketSnapshot`
+- `application/details.py` / `alerts.py` - full-ad fetch (#71) and DEAL/GOOD message formatting over the ports
 - `infrastructure/` - scrapers, DB, notifier, dashboard
-- `application/cli.py` - orchestration via click
+- `application/cli.py` - click commands + composition root; commands read the `App` from `ctx.obj`, so tests pass `CliRunner().invoke(cli, args, obj=app)`
 
 ## Tests
 - `tests/e2e/test_watch_e2e.py` runs `watch` end to end, faking only `requests.get`/`requests.post` (canned pages by URL) and `time.sleep`, against SQLite in `tmp_path`. Extend it when changing the watch flow
@@ -19,7 +21,7 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 - `dirtbike stats --model crf150f` - market summary
 
 ## Conventions
-- Tests must not touch `data/`: it is shared with prod. `tests/conftest.py` fails any test that opens `data/listings.db`, reads included. Never bind `DB_PATH` as a default argument (it's captured at import, so tests can't redirect it): default `db_path` to `None` and let `storage.connect` resolve it. `tests/unit/conftest.py` stubs `init_db`; stub `DETAIL_FETCHERS` in any unit test that runs `watch` (else it hits Kijiji)
+- Tests must not touch `data/`: it is shared with prod. `tests/conftest.py` fails any test that opens `data/listings.db`, reads included. Never bind `DB_PATH` as a default argument (it's captured at import, so tests can't redirect it): default `db_path` to `None` and let `storage.connect` resolve it. Unit tests use the `app` fixture (`tests/unit/conftest.py`): a tmp SQLite store, no sources or fetchers, a `PushSpy` notifier. Pass fakes in with `dataclasses.replace(app, ...)` rather than patching modules
 - Python 3.13, mypy strict, ruff + bandit via pre-commit
 - Model slugs listed in `src/dirtbike_tracker/infrastructure/kijiji_scraper.py:KNOWN_MODEL_SLUGS`
 - Cron runs every 20 min from the prod clone `~/Code/dirtbike-tracker-prod` (always `main`), installed via its `scripts/install_cron.sh`. Deploy = `git -C ~/Code/dirtbike-tracker-prod pull --ff-only`. `data/` and `dashboard.html` there are symlinks into this repo

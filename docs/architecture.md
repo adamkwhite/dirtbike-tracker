@@ -10,14 +10,18 @@ one copy to keep current. Dependency rule: `application` → {`domain`, `infrast
 
 | Layer | Module | Responsibility |
 |---|---|---|
-| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `models`, `dismiss`, `undismiss`, `contact`, `backup`); orchestrates scrape → upsert → score → read full ads → re-score → notify; source-health check, healthcheck ping. Composition root for `DETAIL_FETCHERS` |
-| application | `market.py` | `snapshot(slug)`: reads prices + active listings from storage, scores them (full ad text when fetched, else the card snippet), returns a `MarketSnapshot` |
-| application | `details.py` | `AdDetailFetcher` port (`url -> description \| None`) and `fetch_details()`: reads the full ad of up to `DETAIL_BUDGET` listings per model that could alert. The first real port, see #74 |
+| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `models`, `dismiss`, `undismiss`, `contact`, `backup`). **Composition root** (#74): `build_app()` wires the real adapters into an `App` on `ctx.obj`; the only application module that imports infrastructure |
+| application | `ports.py` | Ports: `ListingStore` (Protocol; `SqliteStore` adapts it), `ListingSource` (`(slug, region, pages) -> list[Listing]`), `AdDetailFetcher` (`url -> description \| None`), `Notifier` (one push → bool); `App` bundles them with config, paths and the healthcheck ping |
+| application | `watch.py` | `watch_model()`: scrape → upsert → score → read full ads → re-score → alert; `alert_for`, notified-id state, source health |
+| application | `market.py` | `snapshot(slug, store, goal)`: reads market + active listings from the store, scores them (full ad text when fetched, else the snippet), returns a `MarketSnapshot`; `model_goal` |
+| application | `details.py` | `fetch_details()`: reads the full ad of up to `DETAIL_BUDGET` listings per model that could alert (#71) |
+| application | `alerts.py` | DEAL / GOOD / target / price-drop push text, sent through the `Notifier` port |
+| domain | `listing.py` | `Listing`, the record every source adapter returns |
 | domain | `scoring.py` | Pure: `market_stats`, `project_stats` (project-bike median, #72), `project_fit(text, goal)` (`project` or `ride` flag sets), `rate_listing`, `score_listings` (`basis`: project / fallback), `project_fit`, `urgency`, `under_target`, `needs_detail`, `trend`, `weekly_medians`, `MarketSnapshot` |
 | infrastructure | `kijiji_scraper.py` | Kijiji search fetch, HTML card parsing, model detection; reads `vehicletype` (skips `new`), `activationDate` and the description snippet from `__NEXT_DATA__` (an uncut snippet is the full ad, #76); `fetch_ad_description` adapter reads the ad page's `__APOLLO_STATE__` |
 | infrastructure | `autotrader_scraper.py` | AutoTrader keyword search; parses `__NEXT_DATA__` listings (description included), skips `offerType=N` |
 | infrastructure | `storage.py` | SQLite schema + in-place migrations, upsert, fingerprint dedup, multi-model tagging, `market_prices` / `market_listings`, `price_drops`, likely-sold, dismiss, `set_contact`, `save_full_description` |
-| infrastructure | `notifier.py` | ntfy.sh push (DEAL/GOOD/target/price drop, source-health warnings), healthchecks.io ping |
+| infrastructure | `notifier.py` | ntfy.sh transport (the `Notifier` adapter) and the healthchecks.io ping |
 | infrastructure | `dashboard.py`, `reporter.py` | Render a `MarketSnapshot` to HTML / markdown |
 | infrastructure | `backup.py` | Nightly/weekly DB + state snapshot to Google Drive via rclone |
 | infrastructure | `extraction.py` | Regex + optional LLM fact extraction (year, hours, needs). Not yet wired into the pipeline |

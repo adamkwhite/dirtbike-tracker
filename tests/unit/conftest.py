@@ -1,6 +1,57 @@
+from pathlib import Path
+
 import pytest
 
+from dirtbike_tracker.application.ports import App
 from dirtbike_tracker.domain.scoring import MarketSnapshot, market_stats, score_listings
+from dirtbike_tracker.infrastructure.storage import SqliteStore, init_db
+
+
+class PushSpy(list[dict]):
+    """A Notifier that records each push and reports `ok` (False = the send failed)."""
+
+    ok = True
+
+    def __call__(
+        self,
+        title: str,
+        body: str,
+        priority: int = 3,
+        tags: list[str] | None = None,
+        click_url: str | None = None,
+        attach_url: str | None = None,
+    ) -> bool:
+        self.append(
+            {"title": title, "body": body, "priority": priority, "tags": tags}
+            | {"click_url": click_url, "attach_url": attach_url}
+        )
+        return self.ok
+
+
+@pytest.fixture
+def sent() -> PushSpy:
+    return PushSpy()
+
+
+@pytest.fixture
+def app(tmp_path: Path, sent: PushSpy) -> App:
+    """An App on a fresh SQLite DB in tmp_path, no sources or fetchers, pushes to `sent`.
+
+    Tests pass it to commands (CliRunner().invoke(cli, args, obj=app)) and override fields.
+    """
+    db = tmp_path / "listings.db"
+    init_db(db)
+    return App(
+        store=SqliteStore(db),
+        sources={},
+        detail_fetchers={},
+        notify=sent,
+        config={"priority": [{"slug": "crf150f", "goal": "project"}]},
+        state_dir=tmp_path / "state",
+        dashboard_path=tmp_path / "dashboard.html",
+        reports_dir=tmp_path / "reports",
+        ping=lambda: True,
+    )
 
 
 @pytest.fixture
@@ -27,11 +78,3 @@ def snap() -> MarketSnapshot:
         trend=-12.5,
         prices=prices,
     )
-
-
-@pytest.fixture(autouse=True)
-def _no_live_db_init(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`cli()` runs init_db() on every invocation; keep tests off the real (prod-shared) DB."""
-    from dirtbike_tracker.application import cli as cli_module
-
-    monkeypatch.setattr(cli_module, "init_db", lambda: None)

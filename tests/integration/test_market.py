@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 
 from dirtbike_tracker.application.market import snapshot
-from dirtbike_tracker.infrastructure.kijiji_scraper import Listing
+from dirtbike_tracker.domain.listing import Listing
 from dirtbike_tracker.infrastructure.storage import (
+    SqliteStore,
     active_listings,
     connect,
     init_db,
@@ -55,7 +56,7 @@ def test_snapshot_scores_active_primary_listings(tmp_path: Path) -> None:
     _add(db, "ancient", 9000, days_ago=200)  # outside 90d market window, still active
     _add(db, "junk", 50, days_ago=5)  # <= MIN_BIKE_PRICE: not market, not rated
 
-    snap = snapshot("crf150f", db_path=db)
+    snap = snapshot("crf150f", SqliteStore(db))
 
     assert snap.stats == {
         "low": 1400,
@@ -85,7 +86,7 @@ def test_same_price_listings_each_count(tmp_path: Path) -> None:
     _add(db, "dealer-b", 4749, days_ago=6)
     _add(db, "private", 3000, days_ago=7)
 
-    snap = snapshot("crf150f", db_path=db)
+    snap = snapshot("crf150f", SqliteStore(db))
 
     assert snap.stats == {
         "low": 3000,
@@ -132,7 +133,7 @@ def test_sold_listings_feed_snapshot_and_relisting_clears_tag(tmp_path: Path) ->
 
     sold = sold_listings("crf150f", db_path=db)
     assert [(s["external_id"], s["days_listed"]) for s in sold] == [("sold", 0)]
-    assert [s["external_id"] for s in snapshot("crf150f", db_path=db).sold] == ["sold"]
+    assert [s["external_id"] for s in snapshot("crf150f", SqliteStore(db)).sold] == ["sold"]
 
     relisted = Listing(
         source="kijiji",
@@ -191,7 +192,7 @@ def test_snapshot_weekly_starts_from_source_post_date(tmp_path: Path) -> None:
         posted = (datetime.now(UTC) - timedelta(days=20)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         conn.execute("UPDATE listings SET posted_text=?", (posted,))
 
-    weekly = snapshot("crf150f", db_path=db).weekly
+    weekly = snapshot("crf150f", SqliteStore(db)).weekly
 
     assert len(weekly) == 13
     assert [m for _, m in weekly[-3:]] == [2500, 2500, 2500]
@@ -221,7 +222,7 @@ def test_price_drops_from_history_feed_snapshot(tmp_path: Path) -> None:
     _price_change(db, "dropped", 2500)
     _price_change(db, "raised", 2700)
 
-    by_id = {s["external_id"]: s for s in snapshot("crf150f", db_path=db).listings}
+    by_id = {s["external_id"]: s for s in snapshot("crf150f", SqliteStore(db)).listings}
 
     assert by_id["dropped"]["price_drop_from"] == 3000
     assert by_id["raised"]["price_drop_from"] is None
@@ -268,12 +269,12 @@ def test_dismiss_hides_listing_but_keeps_market_and_survives_rescrape(
     assert set_dismissed(ref, True, db_path=db) == ["1743797617"]
     upsert_listings([kij, other], db_path=db)  # seen again by the next scrape
 
-    snap = snapshot("crf150f", db_path=db)
+    snap = snapshot("crf150f", SqliteStore(db))
     assert [s["external_id"] for s in snap.listings] == ["1700000001"]
     assert snap.stats["count"] == 2  # still market data
 
     assert set_dismissed(ref, False, db_path=db) == ["1743797617"]
-    assert len(snapshot("crf150f", db_path=db).listings) == 2
+    assert len(snapshot("crf150f", SqliteStore(db)).listings) == 2
 
 
 def test_dismiss_by_autotrader_url_and_unknown_ref(tmp_path: Path) -> None:
@@ -301,12 +302,12 @@ def test_contact_by_url_keeps_note_survives_rescrape_and_clears(tmp_path: Path) 
     upsert_listings([bike], db_path=db)  # rescrape doesn't touch it
     assert set_contact("1742579252", ten_days_ago, None, db_path=db) == ["1742579252"]
 
-    (listing,) = snapshot("crf150f", db_path=db).listings
+    (listing,) = snapshot("crf150f", SqliteStore(db)).listings
     assert int(listing["contacted_days"]) == 10
     assert listing["contact_note"] == "offered 750"  # no new note keeps the old one
 
     set_contact("1742579252", None, db_path=db)
-    (listing,) = snapshot("crf150f", db_path=db).listings
+    (listing,) = snapshot("crf150f", SqliteStore(db)).listings
     assert (listing["contacted_days"], listing["contact_note"]) == (None, None)
     assert set_contact("999", None, db_path=db) == []
 
@@ -316,7 +317,7 @@ def test_ride_snapshot_skips_the_project_median(tmp_path: Path) -> None:
     init_db(db)
     upsert_listings([_listing("kijiji", "1700000001", "https://x/1700000001", 4000)], db_path=db)
 
-    assert "project_median" not in snapshot("crf150f", goal="ride", db_path=db).stats
+    assert "project_median" not in snapshot("crf150f", SqliteStore(db), goal="ride").stats
 
 
 def test_year_km_and_photo_stored_and_kept_when_a_rescrape_lacks_them(tmp_path: Path) -> None:
@@ -328,6 +329,6 @@ def test_year_km_and_photo_stored_and_kept_when_a_rescrape_lacks_them(tmp_path: 
     bike.year, bike.km, bike.image_url = None, None, None  # fields didn't load
     upsert_listings([bike], db_path=db)
 
-    (listing,) = snapshot("crf150f", db_path=db).listings
+    (listing,) = snapshot("crf150f", SqliteStore(db)).listings
     assert (listing["year"], listing["km"]) == (2018, 16672)
     assert listing["image_url"] == "https://media.kijiji.ca/a.jpg"
