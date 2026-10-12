@@ -4,11 +4,17 @@ from pathlib import Path
 
 from dirtbike_tracker.domain.scoring import MarketSnapshot, score_listings
 from dirtbike_tracker.infrastructure.dashboard import (
+    _listing_row,
     _model_section,
     render_dashboard,
     write_dashboard,
 )
-from dirtbike_tracker.infrastructure.reporter import location_label, render_report, write_report
+from dirtbike_tracker.infrastructure.reporter import (
+    contact_label,
+    location_label,
+    render_report,
+    write_report,
+)
 
 
 def test_render_report_groups_by_rating(snap: MarketSnapshot) -> None:
@@ -139,3 +145,22 @@ def test_dashboard_shows_project_median_tile_and_marks_fallback() -> None:
     assert 'Project median</div><div class="val">$1200' in with_projects
     assert "Project median" not in without
     assert ">-50%*</td>" in without
+
+
+def test_contacted_badge_with_note_tooltip() -> None:
+    listing = {
+        "price": 1200, "rating": "DEAL", "delta_pct": -61.0, "fit": 9, "fit_flags": [],
+        "title": "2003 honda crf150f", "location": "Muskoka", "url": "u",
+        "contacted_days": 11.4, "contact_note": "offered 750",
+    }  # fmt: skip
+
+    html = _listing_row(listing)
+
+    assert (
+        '<span class="contacted" title="contacted 11d ago: offered 750">contacted 11d ago</span>'
+        in html
+    )
+    assert (
+        contact_label({**listing, "contacted_days": 0.2, "contact_note": None}) == "contacted today"
+    )
+    assert contact_label({"contacted_days": None}) is None

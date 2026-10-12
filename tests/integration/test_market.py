@@ -12,6 +12,7 @@ from dirtbike_tracker.infrastructure.storage import (
     connect,
     init_db,
     mark_stale,
+    set_contact,
     set_dismissed,
     sold_listings,
     upsert_listings,
@@ -284,3 +285,27 @@ def test_dismiss_by_autotrader_url_and_unknown_ref(tmp_path: Path) -> None:
 
     assert set_dismissed(at_url, True, db_path=db) == [uuid]
     assert set_dismissed("https://www.kijiji.ca/v-x/y/999", True, db_path=db) == []
+
+
+def test_contact_by_url_keeps_note_survives_rescrape_and_clears(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    bike = _listing(
+        "kijiji", "1742579252", "https://www.kijiji.ca/v-x/muskoka/crf/1742579252", 1200
+    )
+    upsert_listings([bike], db_path=db)
+    url = "https://www.kijiji.ca/v-x/muskoka/crf/1742579252?utm=x"
+    ten_days_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10, hours=1)
+
+    assert set_contact(url, ten_days_ago, "offered 750", db_path=db) == ["1742579252"]
+    upsert_listings([bike], db_path=db)  # rescrape doesn't touch it
+    assert set_contact("1742579252", ten_days_ago, None, db_path=db) == ["1742579252"]
+
+    (listing,) = snapshot("crf150f", db_path=db).listings
+    assert int(listing["contacted_days"]) == 10
+    assert listing["contact_note"] == "offered 750"  # no new note keeps the old one
+
+    set_contact("1742579252", None, db_path=db)
+    (listing,) = snapshot("crf150f", db_path=db).listings
+    assert (listing["contacted_days"], listing["contact_note"]) == (None, None)
+    assert set_contact("999", None, db_path=db) == []

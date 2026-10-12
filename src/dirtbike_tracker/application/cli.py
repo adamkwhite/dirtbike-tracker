@@ -36,8 +36,14 @@ from ..infrastructure.notifier import (
     notify_good,
     ping_healthcheck,
 )
-from ..infrastructure.reporter import render_report, write_report
-from ..infrastructure.storage import init_db, mark_stale, set_dismissed, upsert_listings
+from ..infrastructure.reporter import contact_label, render_report, write_report
+from ..infrastructure.storage import (
+    init_db,
+    mark_stale,
+    set_contact,
+    set_dismissed,
+    upsert_listings,
+)
 from .details import AdDetailFetcher, fetch_details
 from .market import snapshot
 
@@ -254,6 +260,8 @@ def list_cmd(model: str):
             f"{loc:<22}  {title}"
         )
         click.echo(f"           {listing['url']}")
+        if contacted := contact_label(listing):
+            click.echo(f"           {contacted}")
 
 
 @cli.command()
@@ -438,6 +446,24 @@ def _set_dismissed(ref: str, dismissed: bool) -> None:
     verb = "Dismissed" if dismissed else "Restored"
     for title in titles:
         click.echo(f"{verb}: {title}")
+
+
+@cli.command()
+@click.argument("ref")
+@click.option("--note", help='What was said, e.g. "offered 750, waiting"')
+@click.option(
+    "--on", "on_date", type=click.DateTime(["%Y-%m-%d"]), help="Contact date (default now)"
+)
+@click.option("--clear", is_flag=True, help="Forget the contact")
+def contact(ref: str, note: str | None, on_date: datetime | None, clear: bool):
+    """Log messaging a listing's seller (URL or external id); shown on the dashboard."""
+    at = None if clear else on_date or datetime.now(UTC).replace(tzinfo=None)
+    titles = set_contact(ref, at, note)
+    if not titles:
+        click.echo(f"No listing matches {ref!r}")
+        raise SystemExit(1)
+    for title in titles:
+        click.echo(f"{'Cleared contact' if clear else 'Contacted'}: {title}")
 
 
 @cli.command()

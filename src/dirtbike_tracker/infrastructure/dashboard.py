@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..domain.scoring import FALLBACK_NOTE, MarketSnapshot, project_line, vs_label
-from .reporter import location_label
+from .reporter import contact_label, location_label
 
 RATING_HEX = {
     "DEAL": "#10b981",  # emerald
@@ -83,6 +83,10 @@ def _listing_row(listing: dict) -> str:
         )
     loc = location_label(listing, 28)
     title = (listing["title"] or "")[:65]
+    contacted = ""
+    if label := contact_label(listing):
+        days = label.split(":")[0]
+        contacted = f' <span class="contacted" title="{_esc(label)}">{_esc(days)}</span>'
     return f"""
               <tr>
                 <td><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>
@@ -90,7 +94,7 @@ def _listing_row(listing: dict) -> str:
                 <td class="num muted" title="{_esc(vs)}">{_esc(delta_str)}</td>
                 <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
                 <td class="muted">{_esc(loc)}</td>
-                <td><a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a></td>
+                <td><a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a>{contacted}</td>
               </tr>"""
 
 
@@ -341,6 +345,15 @@ def render_dashboard(snaps: list[MarketSnapshot]) -> str:
     td.muted, .muted {{ color: var(--muted); }}
     td a {{ color: var(--text); text-decoration: none; }}
     td a:hover {{ color: var(--accent); }}
+    .contacted {{
+      margin-left: 6px;
+      padding: 1px 6px;
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--accent);
+      white-space: nowrap;
+    }}
     .badge {{
       display: inline-block;
       padding: 2px 8px;
