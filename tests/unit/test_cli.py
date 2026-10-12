@@ -256,5 +256,6 @@ def test_contact_logs_date_and_note(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert "Contacted: 2003 honda crf150f" in ok.output
     assert calls[0] == ("1742579252", datetime(2026, 10, 1), "offered 750")
-    assert "Cleared contact" in cleared.output and calls[1][1] is None
+    assert "Cleared contact" in cleared.output
+    assert calls[1][1] is None
     assert missing.exit_code == 1
