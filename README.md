@@ -117,16 +117,17 @@ Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
 ### Cron
 
 Cron runs from a separate **prod clone** that stays on `main`, so a feature branch
-checked out in the dev repo never goes live. Both share the dev repo's `data/`
-(DB + notified state) and `dashboard.html`.
+checked out in the dev repo never goes live. The prod clone owns the live data: its own
+`data/` (DB + notified state) and `dashboard.html`. The dev repo has a separate `data/`, so a
+command run in dev (which runs `init_db()` and its schema migrations) never touches prod. To
+work on fresh data in dev, copy prod's over between cron ticks:
+`cp ~/Code/dirtbike-tracker-prod/data/listings.db ~/Code/dirtbike-tracker/data/`.
 
 ```bash
 # one-time setup
 git clone https://github.com/adamkwhite/dirtbike-tracker.git ~/Code/dirtbike-tracker-prod
 cd ~/Code/dirtbike-tracker-prod
 python3.13 -m venv venv && venv/bin/pip install -e .
-ln -s ~/Code/dirtbike-tracker/data data
-ln -s ~/Code/dirtbike-tracker/dashboard.html dashboard.html
 NTFY_TOPIC=your-topic HEALTHCHECK_URL=https://hc-ping.com/<uuid> ./scripts/install_cron.sh   # every 20 min, 6am-11pm
 
 # deploy after merging to main

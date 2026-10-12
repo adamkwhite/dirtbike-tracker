@@ -81,8 +81,8 @@ See `docs/fb_marketplace_notes.md`. Short version: requires authenticated sessio
 
 Local Ubuntu/WSL under cron, running from a separate prod clone (`~/Code/dirtbike-tracker-prod`, always `main`) so a feature branch in the dev checkout never goes live. Deploy = `git pull --ff-only` in the prod clone. Setup steps: README "Cron".
 
-- `data/` (SQLite DB `listings.db`, `state/notified_ids.txt`, `state/source_health.json`) and `dashboard.html` are symlinks from the prod clone into the dev repo
-- Logs: `logs/watch.log` and `logs/report.log` in the prod clone
+- The prod clone owns `data/` (SQLite DB `listings.db`, `state/notified_ids.txt`, `state/source_health.json`) and `dashboard.html`; the dev repo has its own `data/` copy, so dev commands and their migrations never reach prod
+- Logs: `logs/{watch,report,backup,drift}.log` in the prod clone
 - `NTFY_TOPIC` and `HEALTHCHECK_URL` are set only on the crontab line, never in the repo
 
 Failure alerting:
