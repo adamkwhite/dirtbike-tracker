@@ -52,7 +52,7 @@ def stub_watch(snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch) -> list[se
     monkeypatch.setattr(cli_module, "snapshot", lambda slug: snap)
     monkeypatch.setattr(cli_module, "_notified_ids", set)
     monkeypatch.setattr(cli_module, "_record_notified", recorded.append)
-    monkeypatch.setattr(cli_module, "mark_stale", lambda: 0)
+    monkeypatch.setattr(cli_module, "mark_stale", lambda sources: 0)
     monkeypatch.setattr(cli_module, "write_dashboard", lambda *a: None)
     monkeypatch.setattr(cli_module, "_check_source_health", lambda *a: None)
     monkeypatch.setattr(cli_module, "ping_healthcheck", lambda: True)

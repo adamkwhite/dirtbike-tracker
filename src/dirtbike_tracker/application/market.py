@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from ..domain.scoring import MarketSnapshot, market_stats, score_listings, trend
-from ..infrastructure.storage import DB_PATH, active_listings, market_prices
+from ..infrastructure.storage import DB_PATH, active_listings, market_prices, sold_listings
 
 
 def snapshot(slug: str, db_path: Path = DB_PATH) -> MarketSnapshot:
@@ -20,4 +20,5 @@ def snapshot(slug: str, db_path: Path = DB_PATH) -> MarketSnapshot:
             market_prices(slug, days=90, db_path=db_path, older_than_days=30),
         ),
         prices=prices,
+        sold=sold_listings(slug, db_path=db_path),
     )

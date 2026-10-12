@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS listings (
     last_seen TEXT NOT NULL,
     is_active INTEGER DEFAULT 1,
     is_primary INTEGER DEFAULT 1,
+    sold_at TEXT,
     UNIQUE(source, external_id)
 );
 
@@ -98,6 +99,8 @@ def _migrate_old_schema(db_path: Path = DB_PATH) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN fingerprint TEXT")
         if "is_primary" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN is_primary INTEGER DEFAULT 1")
+        if "sold_at" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN sold_at TEXT")
 
 
 def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
@@ -166,7 +169,8 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
             else:
                 listing_id = existing["id"]
                 conn.execute(
-                    "UPDATE listings SET last_seen=?, is_active=1 WHERE id=?",
+                    # reappearing clears a likely-sold tag (relisted, or a false positive)
+                    "UPDATE listings SET last_seen=?, is_active=1, sold_at=NULL WHERE id=?",
                     (now, listing_id),
                 )
                 stats["updated"] += 1
@@ -191,16 +195,41 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
     return stats
 
 
-def mark_stale(cutoff_hours: int = 48, db_path: Path = DB_PATH) -> int:
-    """Mark listings not seen recently as inactive. Returns count marked."""
+def mark_stale(
+    sources: Iterable[str],
+    cutoff_hours: int = 48,
+    sold_after_hours: int = 72,
+    db_path: Path = DB_PATH,
+) -> int:
+    """Age out listings from `sources` not seen recently. Returns count marked inactive.
+
+    Unseen for `cutoff_hours` -> inactive; for `sold_after_hours` -> likely sold
+    (sold_at = last_seen, the best estimate of when it went). Pass only sources
+    that returned results this run: a broken scraper sees nothing, and would
+    otherwise tag its whole inventory as sold.
+    """
+    # ponytail: scrape_model caps at 3 pages; a model with more results than that
+    # would see its oldest listings fall off and read as sold. Fine at current volumes.
+    sources = list(sources)
+    if not sources:
+        return 0
+    marks = ",".join("?" * len(sources))
     with connect(db_path) as conn:
         cursor = conn.execute(
-            """
+            f"""
             UPDATE listings SET is_active=0
-            WHERE is_active=1
+            WHERE is_active=1 AND source IN ({marks})
               AND julianday('now') - julianday(last_seen) > ?
-            """,
-            (cutoff_hours / 24.0,),
+            """,  # only "?" placeholders are interpolated
+            (*sources, cutoff_hours / 24.0),
+        )
+        conn.execute(
+            f"""
+            UPDATE listings SET sold_at=last_seen
+            WHERE sold_at IS NULL AND source IN ({marks})
+              AND julianday('now') - julianday(last_seen) > ?
+            """,  # only "?" placeholders are interpolated
+            (*sources, sold_after_hours / 24.0),
         )
         return int(cursor.rowcount)
 
@@ -256,3 +285,24 @@ def market_prices(
             (model_slug, cutoff, newest),
         ).fetchall()
     return [r["price"] for r in rows]
+
+
+def sold_listings(
+    model_slug: str, days: int = 90, limit: int = 5, db_path: Path = DB_PATH
+) -> list[dict]:
+    """Most recent likely-sold primary listings for a model, with days on market."""
+    cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).isoformat()
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT l.*, CAST(julianday(l.last_seen) - julianday(l.first_seen) AS INTEGER)
+                   AS days_listed
+            FROM listings l
+            JOIN listing_models m ON m.listing_id = l.id
+            WHERE m.model_slug=? AND l.sold_at >= ? AND l.is_primary=1
+            ORDER BY l.sold_at DESC
+            LIMIT ?
+            """,
+            (model_slug, cutoff, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]

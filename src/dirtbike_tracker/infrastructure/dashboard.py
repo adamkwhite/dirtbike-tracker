@@ -94,6 +94,29 @@ def _model_section(snap: MarketSnapshot) -> str:
               </tr>""")
         rows_html = "".join(rows)
 
+    # Likely-sold history: what bikes actually went for, and how fast
+    sold_html = ""
+    if snap.sold:
+        sold_rows = "".join(
+            f"""
+              <tr>
+                <td class="num">{_esc(f"${int(s['price'])}" if s["price"] else "?")}</td>
+                <td class="num muted">{_esc(f"{s['days_listed']}d")}</td>
+                <td class="muted">{_esc((s["location"] or "").split(",")[0][:28])}</td>
+                <td class="muted">{_esc(s["sold_at"][:10])}</td>
+                <td><a href="{_esc(s["url"])}" target="_blank" rel="noopener">{_esc((s["title"] or "")[:65])}</a></td>
+              </tr>"""
+            for s in snap.sold
+        )
+        sold_html = f"""
+      <h3>Recently sold (likely)</h3>
+      <table>
+        <thead>
+          <tr><th>Price</th><th>Listed</th><th>Location</th><th>Gone</th><th>Title</th></tr>
+        </thead>
+        <tbody>{sold_rows}</tbody>
+      </table>"""
+
     # Histogram data for Chart.js
     centers, counts = _histogram(prices, bins=10)
     chart_id = f"chart-{slug}"
@@ -114,7 +137,7 @@ def _model_section(snap: MarketSnapshot) -> str:
           <tr><th>Rating</th><th>Price</th><th>vs Med</th><th>Location</th><th>Title</th></tr>
         </thead>
         <tbody>{rows_html}</tbody>
-      </table>
+      </table>{sold_html}
       <script>
         (function() {{
           const data = {chart_data};

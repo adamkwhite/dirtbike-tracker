@@ -6,7 +6,7 @@ price of comparable listings. Pure: no I/O. Prices and listings are
 fetched by infrastructure/storage.py and composed in application/market.py.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from statistics import median
 
 RATING_DEAL = -0.30
@@ -23,6 +23,7 @@ class MarketSnapshot:
     listings: list[dict]
     trend: float | None
     prices: list[float]
+    sold: list[dict] = field(default_factory=list)  # likely-sold, most recent first
 
 
 def market_stats(prices: list[float]) -> dict:

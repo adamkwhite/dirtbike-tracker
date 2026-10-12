@@ -39,3 +39,23 @@ def test_dashboard_renders_section_and_nav(snap: MarketSnapshot, tmp_path: Path)
     assert 'href="#crf150f"' in page
     assert "CRF150F at 1400" in page
     assert "Contact" in page
+
+
+def test_dashboard_shows_recently_sold(snap: MarketSnapshot) -> None:
+    snap.sold = [
+        {
+            "price": 3600.0,
+            "days_listed": 12,
+            "location": "Oakville, ON",
+            "sold_at": "2026-10-09T14:00:00",
+            "url": "https://example.com/sold",
+            "title": "2017 Honda CRF150F",
+        }
+    ]
+
+    page = render_dashboard([snap])
+
+    assert "Recently sold (likely)" in page
+    assert "$3600" in page
+    assert "12d" in page
+    assert "2026-10-09" in page

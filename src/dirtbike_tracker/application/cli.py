@@ -155,15 +155,18 @@ def cli():
 def scrape(model: str, region: str, source: str, pages: int):
     """Scrape a source for a model, save to DB."""
     all_listings = []
+    scraped_ok = []
     sources = [source] if source != "all" else ["kijiji", "autotrader"]
     for src in sources:
         click.echo(f"Scraping {src} for {model} in {region}...")
         listings = _scrape_one(model, region, src, pages)
         all_listings.extend(listings)
+        if listings:
+            scraped_ok.append(src)
         click.echo(f"  {src}: {len(listings)} listings")
 
     stats = upsert_listings(all_listings)
-    stale = mark_stale()
+    stale = mark_stale(scraped_ok)
     click.echo(
         f"\nTotal {len(all_listings)}. "
         f"New: {stats['new']}, Updated: {stats['updated']}, "
@@ -297,7 +300,7 @@ def watch(region: str, notify: bool, group: str):
                     newly_notified.add(lid)
                 totals["goods"] += 1
 
-    mark_stale()
+    mark_stale([s for s, n in source_counts.items() if n])
     _record_notified(already_notified | newly_notified)
     if not group:  # a subset of models coming back empty doesn't mean a scraper broke
         _check_source_health(source_counts, notify)
