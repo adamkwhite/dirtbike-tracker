@@ -1,6 +1,7 @@
 """CLI commands, with snapshot() stubbed so no DB is touched."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
@@ -110,3 +111,38 @@ def test_watch_does_not_alert_on_junk_price_under_target(
 
     assert result.exit_code == 0, result.output
     assert alerted == ["1400"]
+
+
+def test_open_in_browser_hands_file_to_windows_under_wsl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], **_: object) -> SimpleNamespace:
+        calls.append(argv)
+        return SimpleNamespace(stdout="\\\\wsl.localhost\\Ubuntu\\d.html\n")
+
+    monkeypatch.setattr(
+        cli_module.platform, "uname", lambda: SimpleNamespace(release="6.6-microsoft-standard-WSL2")
+    )
+    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(cli_module.webbrowser, "open", lambda _: pytest.fail("webbrowser used"))
+
+    cli_module._open_in_browser(Path("/home/u/d.html"))
+
+    assert calls == [
+        ["wslpath", "-w", "/home/u/d.html"],
+        ["explorer.exe", "\\\\wsl.localhost\\Ubuntu\\d.html"],
+    ]
+
+
+def test_open_in_browser_uses_webbrowser_elsewhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(
+        cli_module.platform, "uname", lambda: SimpleNamespace(release="6.8.0-generic")
+    )
+    monkeypatch.setattr(cli_module.webbrowser, "open", opened.append)
+
+    cli_module._open_in_browser(Path("/home/u/d.html"))
+
+    assert opened == ["file:///home/u/d.html"]
