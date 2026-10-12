@@ -47,12 +47,27 @@ Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
 
 ### Cron
 
+Cron runs from a separate **prod clone** that stays on `main`, so a feature branch
+checked out in the dev repo never goes live. Both share the dev repo's `data/`
+(DB + notified state) and `dashboard.html`.
+
 ```bash
+# one-time setup
+git clone https://github.com/adamkwhite/dirtbike-tracker.git ~/Code/dirtbike-tracker-prod
+cd ~/Code/dirtbike-tracker-prod
+python3.13 -m venv venv && venv/bin/pip install -e .
+ln -s ~/Code/dirtbike-tracker/data data
+ln -s ~/Code/dirtbike-tracker/dashboard.html dashboard.html
 NTFY_TOPIC=your-topic ./scripts/install_cron.sh   # every 20 min, 6am-11pm
-./scripts/install_cron.sh --remove
+
+# deploy after merging to main
+git -C ~/Code/dirtbike-tracker-prod pull --ff-only
+
+# uninstall
+~/Code/dirtbike-tracker-prod/scripts/install_cron.sh --remove
 ```
 
-Logs go to `logs/watch.log` (timestamped if `moreutils` is installed).
+Logs go to `~/Code/dirtbike-tracker-prod/logs/watch.log` (timestamped if `moreutils` is installed).
 
 ## Requirements
 

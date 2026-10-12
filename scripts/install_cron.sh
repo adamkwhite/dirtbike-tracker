@@ -3,6 +3,10 @@
 # Install the dirtbike-tracker watch job on cron.
 # Runs every 20 minutes during Ontario waking hours (6am - 11pm ET).
 # Log lines get prefixed with timestamp via `ts` from moreutils.
+#
+# Run this from the prod clone (~/Code/dirtbike-tracker-prod), not the dev
+# checkout: cron executes whatever is checked out where this script lives.
+# See README "Cron".
 
 set -euo pipefail
 
@@ -23,7 +27,8 @@ if ! command -v ts >/dev/null 2>&1; then
   echo "  sudo apt install moreutils"
   TS_PREFIX=""
 else
-  TS_PREFIX="| ts '[%Y-%m-%d %H:%M:%S]'"
+  # crontab treats a bare % as a newline, which truncated the whole command
+  TS_PREFIX="| ts '[\%Y-\%m-\%d \%H:\%M:\%S]'"
 fi
 
 if [[ "${1:-}" == "--remove" ]]; then
