@@ -170,8 +170,9 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dic
                 listing_id = existing["id"]
                 conn.execute(
                     # reappearing clears a likely-sold tag (relisted, or a false positive)
-                    "UPDATE listings SET last_seen=?, is_active=1, sold_at=NULL WHERE id=?",
-                    (now, listing_id),
+                    "UPDATE listings SET last_seen=?, is_active=1, sold_at=NULL,"
+                    " posted_text=COALESCE(NULLIF(?, ''), posted_text) WHERE id=?",
+                    (now, listing.posted_text, listing_id),
                 )
                 stats["updated"] += 1
                 if existing["price"] != listing.price:
@@ -243,17 +244,20 @@ def active_listings(
     Return active listings, optionally filtered by model and primary-only.
 
     primary_only=True hides cross-posted duplicates (keeps the first-seen copy).
+    age_days counts from the source's post time when known (Kijiji's
+    activationDate in posted_text), else from when we first saw it.
     """
+    age = "julianday('now') - julianday(COALESCE(NULLIF(posted_text, ''), first_seen)) AS age_days"
     with connect(db_path) as conn:
         if model_slug:
-            sql = """
-                SELECT l.* FROM listings l
+            sql = f"""
+                SELECT l.*, {age} FROM listings l
                 JOIN listing_models m ON m.listing_id = l.id
                 WHERE l.is_active=1 AND m.model_slug=?
             """
             params = [model_slug]
         else:
-            sql = "SELECT * FROM listings WHERE is_active=1"
+            sql = f"SELECT *, {age} FROM listings WHERE is_active=1"
             params = []
         if primary_only:
             sql += " AND is_primary=1"

@@ -2,7 +2,13 @@
 
 import pytest
 
-from dirtbike_tracker.domain.scoring import market_stats, rate_listing, score_listings, trend
+from dirtbike_tracker.domain.scoring import (
+    market_stats,
+    rate_listing,
+    score_listings,
+    trend,
+    urgency,
+)
 
 
 @pytest.mark.parametrize(
@@ -82,3 +88,31 @@ def test_score_listings_without_market_rates_everything_unknown() -> None:
     scored = score_listings([{"price": 100}], median_price=None)
 
     assert scored[0]["rating"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize(
+    ("rating", "age_days", "expected"),
+    [
+        ("DEAL", 0.5, "URGENT"),
+        ("DEAL", 2.0, None),  # 2 days is no longer fresh
+        ("GOOD", 1.0, None),
+        ("GOOD", 14.0, None),
+        ("GOOD", 14.5, "NEGOTIABLE"),
+        ("DEAL", 30.0, None),  # stale DEALs keep plain DEAL handling
+        ("FAIR", 30.0, None),
+        ("DEAL", None, None),
+    ],
+)
+def test_urgency(rating: str, age_days: float | None, expected: str | None) -> None:
+    assert urgency(rating, age_days) == expected
+
+
+def test_score_listings_attaches_urgency_from_age() -> None:
+    scored = score_listings(
+        [{"price": 60, "age_days": 0.2}, {"price": 85, "age_days": 20}], median_price=100
+    )
+
+    assert [(s["rating"], s["urgency"]) for s in scored] == [
+        ("DEAL", "URGENT"),
+        ("GOOD", "NEGOTIABLE"),
+    ]

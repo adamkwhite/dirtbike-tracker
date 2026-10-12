@@ -9,6 +9,7 @@ import json
 import random
 import re
 import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from urllib.parse import quote, urljoin
@@ -192,39 +193,56 @@ def fetch_page(url: str, timeout: int = 20) -> str:
     return str(response.text)
 
 
-def _new_vehicle_ids(soup: BeautifulSoup) -> set[str]:
-    """Ad IDs marked vehicletype=new (dealer MSRP stock) in the page's __NEXT_DATA__.
-
-    New bikes aren't used-market prices and drag the median up to MSRP.
-    Returns an empty set if the data is missing or changes shape, so a
-    Kijiji markup change keeps every listing rather than dropping them.
-    """
-    script = soup.find("script", id="__NEXT_DATA__")
-    try:
-        data = json.loads(script.get_text()) if script else None
-    except ValueError:
-        return set()
-
-    new_ids: set[str] = set()
+def _iter_ads(data: object) -> Iterator[dict]:
+    """Every dict with an id anywhere in the __NEXT_DATA__ tree."""
     stack = [data]
     while stack:
         node = stack.pop()
         if isinstance(node, list):
             stack.extend(node)
         elif isinstance(node, dict):
-            attrs = node.get("attributes")
-            if isinstance(attrs, dict):
-                attrs = attrs.get("all")
-            if node.get("id") and isinstance(attrs, list):
-                for a in attrs:
-                    if (
-                        isinstance(a, dict)
-                        and a.get("canonicalName") == "vehicletype"
-                        and "new" in (a.get("canonicalValues") or [])
-                    ):
-                        new_ids.add(str(node["id"]))
+            if node.get("id"):
+                yield node
             stack.extend(node.values())
-    return new_ids
+
+
+def _is_new_vehicle(ad: dict) -> bool:
+    attrs = ad.get("attributes")
+    if isinstance(attrs, dict):
+        attrs = attrs.get("all")
+    if not isinstance(attrs, list):
+        return False
+    return any(
+        isinstance(a, dict)
+        and a.get("canonicalName") == "vehicletype"
+        and "new" in (a.get("canonicalValues") or [])
+        for a in attrs
+    )
+
+
+def _ad_meta(soup: BeautifulSoup) -> tuple[set[str], dict[str, str]]:
+    """Per-ad facts from the page's __NEXT_DATA__ the HTML cards don't show.
+
+    Returns (ids marked vehicletype=new, {id: activationDate}). New bikes are
+    dealer MSRP stock and drag the median up; activationDate is the original
+    post time (sortingDate moves when an ad is bumped). Missing or reshaped
+    data returns empties, so a Kijiji markup change drops nothing.
+    """
+    script = soup.find("script", id="__NEXT_DATA__")
+    try:
+        data = json.loads(script.get_text()) if script else None
+    except ValueError:
+        return set(), {}
+
+    new_ids: set[str] = set()
+    posted: dict[str, str] = {}
+    for ad in _iter_ads(data):
+        ad_id = str(ad["id"])
+        if _is_new_vehicle(ad):
+            new_ids.add(ad_id)
+        if isinstance(ad.get("activationDate"), str):
+            posted[ad_id] = ad["activationDate"]
+    return new_ids, posted
 
 
 def parse_listings(html: str, model_slug: str) -> list[Listing]:
@@ -232,7 +250,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
     soup = BeautifulSoup(html, "html.parser")
     listings = []
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
-    new_ids = _new_vehicle_ids(soup)
+    new_ids, posted_at = _ad_meta(soup)
 
     # Kijiji's current markup uses [data-testid='listing-card'] but
     # fall back to older selectors for resilience.
@@ -276,8 +294,10 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         if not any(path in url for path in ALLOWED_CATEGORY_PATHS):
             continue
 
-        if _extract_external_id(url) in new_ids:
+        ad_id = _extract_external_id(url)
+        if ad_id in new_ids:
             continue
+        posted = posted_at.get(ad_id, posted)
 
         # Secondary filter: title must plausibly match the queried model slug.
         # Detect all models in the title (packages can have multiple).
@@ -291,7 +311,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         listings.append(
             Listing(
                 source="kijiji",
-                external_id=_extract_external_id(url),
+                external_id=ad_id,
                 url=url,
                 title=title,
                 price=price,

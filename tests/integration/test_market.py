@@ -6,6 +6,7 @@ from pathlib import Path
 from dirtbike_tracker.application.market import snapshot
 from dirtbike_tracker.infrastructure.kijiji_scraper import Listing
 from dirtbike_tracker.infrastructure.storage import (
+    active_listings,
     connect,
     init_db,
     mark_stale,
@@ -130,3 +131,30 @@ def test_sold_listings_feed_snapshot_and_relisting_clears_tag(tmp_path: Path) ->
 
     assert _row(db, "sold") == (1, None)
     assert sold_listings("crf150f", db_path=db) == []
+
+
+def test_age_prefers_source_post_date_and_backfills_existing_rows(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "old-post", 2000, days_ago=0)  # first seen today
+    _add(db, "no-post-date", 2100, days_ago=3)
+    posted = (datetime.now(UTC) - timedelta(days=20)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    seen_again = Listing(
+        source="kijiji",
+        external_id="old-post",
+        url="https://x/old-post",
+        title="old-post",
+        price=2000,
+        price_state="numeric",
+        location="",
+        posted_text=posted,
+        description="",
+        model_slugs=["crf150f"],
+        scraped_at="",
+    )
+
+    upsert_listings([seen_again], db_path=db)
+
+    ages = {r["external_id"]: r["age_days"] for r in active_listings("crf150f", db_path=db)}
+    assert round(ages["old-post"]) == 20
+    assert round(ages["no-post-date"]) == 3

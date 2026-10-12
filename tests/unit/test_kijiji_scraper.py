@@ -44,3 +44,17 @@ def test_parse_listings_keeps_everything_without_page_data() -> None:
     )
 
     assert len(parse_listings(html, "klx140")) == 1
+
+
+def test_parse_listings_uses_activation_date_as_posted_text() -> None:
+    page_data = json.dumps(
+        {"props": {"ads": [{"id": "1700000001", "activationDate": "2026-09-01T10:00:00.000Z"}]}}
+    )
+    html = (
+        _card("1700000001", "2008 Kawasaki KLX140")
+        + f'<script id="__NEXT_DATA__" type="application/json">{page_data}</script>'
+    )
+
+    (listing,) = parse_listings(html, "klx140")
+
+    assert listing.posted_text == "2026-09-01T10:00:00.000Z"
