@@ -102,6 +102,22 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 
 Logs go to `~/Code/dirtbike-tracker-prod/logs/watch.log` (timestamped if `moreutils` is installed).
 
+### Docker
+
+An alternative to the WSL cron, e.g. for a VPS. `tracker` runs the same four jobs as
+`install_cron.sh` via [supercronic](https://github.com/aptible/supercronic) (Ontario time, logs
+to `docker compose logs`); `dashboard` serves the dashboard on `127.0.0.1:8080`.
+
+```bash
+mkdir -p data/state reports      # create first: docker makes missing bind dirs root-owned
+printf 'NTFY_TOPIC=your-topic\nHEALTHCHECK_URL=https://hc-ping.com/<uuid>\n' > .env
+docker compose up -d --build
+```
+
+Mounts `data/`, `reports/`, `config/` (read-only) and `~/.config/rclone` (override with
+`RCLONE_CONFIG_DIR`). The image runs as uid 1000; build with `docker compose build --build-arg UID=$(id -u)` if
+yours differs. Don't run it alongside the cron on the same `data/`: both would scrape.
+
 ### Backups
 
 Cron runs `dirtbike backup` nightly at 23:55 (and `--slot weekly` on Sundays): a consistent
