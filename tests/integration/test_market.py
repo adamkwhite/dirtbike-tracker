@@ -1,6 +1,6 @@
 """snapshot() against a real SQLite DB in tmp_path."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from dirtbike_tracker.application.market import snapshot
@@ -8,7 +8,7 @@ from dirtbike_tracker.infrastructure.storage import connect, init_db
 
 
 def _add(db: Path, ext_id: str, price: float | None, days_ago: int, **cols: int) -> None:
-    seen = (datetime.utcnow() - timedelta(days=days_ago)).isoformat()
+    seen = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days_ago)).isoformat()
     with connect(db) as conn:
         cur = conn.execute(
             "INSERT INTO listings (source, external_id, url, title, price, first_seen, last_seen,"
@@ -52,3 +52,15 @@ def test_snapshot_scores_active_primary_listings(tmp_path: Path) -> None:
         "ancient",
         "junk",
     }
+
+
+def test_same_price_listings_each_count(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "dealer-a", 4749, days_ago=5)
+    _add(db, "dealer-b", 4749, days_ago=6)
+    _add(db, "private", 3000, days_ago=7)
+
+    snap = snapshot("crf150f", db_path=db)
+
+    assert snap.stats == {"low": 3000, "median": 4749, "high": 4749, "count": 3}

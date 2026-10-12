@@ -55,9 +55,8 @@ def rate_listing(price: float | None, median_price: float | None) -> dict:
     return {"rating": rating, "delta_pct": round(delta * 100, 1)}
 
 
-def trend(recent: list[float], window: list[float]) -> float | None:
-    """Percent change of the 30-day median (`recent`) vs the rest of the 90-day `window`."""
-    older = [p for p in window if p not in recent]
+def trend(recent: list[float], older: list[float]) -> float | None:
+    """Percent change of the last-30-day median vs the 30-90-day median."""
     if not recent or not older:
         return None
     return round((median(recent) - median(older)) / median(older) * 100, 1)
