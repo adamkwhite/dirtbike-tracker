@@ -51,7 +51,8 @@ FIT_IGNORE = ("not a project", "no project")
 # goal: ride (models.yml): a bike to ride as-is, e.g. a street bike for spring.
 # Needing work is now a red flag, and an Ontario safety certificate is a green one.
 RIDE_RED_FLAGS = FIT_RED_FLAGS + PROJECT_FLAGS + (
-    "no safety", "without safety", "not safetied", "not certified", "sold as is",
+    # "as is" in an Ontario ad means no safety certificate: not ready to ride
+    "no safety", "without safety", "not safetied", "not certified", "as is", "as-is",
 )  # fmt: skip
 RIDE_GREEN_FLAGS = (
     "runs great", "runs well", "runs good", "runs perfect", "runs and rides",
