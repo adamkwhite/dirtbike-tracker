@@ -23,7 +23,7 @@ one copy to keep current. Dependency rule: `application` → {`domain`, `infrast
 | infrastructure | `storage.py` | SQLite schema + in-place migrations, upsert, fingerprint dedup, multi-model tagging, `market_prices` / `market_listings`, `price_drops`, likely-sold, dismiss, `set_contact`, `save_full_description` |
 | infrastructure | `notifier.py` | ntfy.sh transport (the `Notifier` adapter) and the healthchecks.io ping |
 | infrastructure | `dashboard.py`, `reporter.py` | Render a `MarketSnapshot` to HTML / markdown |
-| infrastructure | `drift.py` | Site-drift check (#28): records live search/ad pages into a gitignored dir and lists what our parsers no longer read (fields, photos, year/km, new-stock skip, ad description). `dirtbike drift`, weekly cron |
+| infrastructure | `drift.py` | Site-drift check (#28): records live search/ad pages into a gitignored dir and lists what our parsers no longer read (fields, photos, year/km, new-stock skip, ad description). `dirtbike drift`, daily cron |
 | infrastructure | `backup.py` | Nightly/weekly DB + state snapshot to Google Drive via rclone |
 | infrastructure | `extraction.py` | Regex + optional LLM fact extraction (year, hours, needs). Not yet wired into the pipeline |
 

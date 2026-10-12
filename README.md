@@ -47,7 +47,7 @@ flowchart TB
     notifier --> ntfy{{"ntfy.sh → phone"}}
     notifier --> hc{{healthchecks.io}}
     cli -->|nightly| backup
-    cli -->|weekly: site-drift check| drift
+    cli -->|daily: site-drift check| drift
     backup --> drive{{"Google Drive (rclone)"}}
 ```
 
@@ -144,7 +144,7 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 | every 20 min, 6:00–23:40 | `dirtbike watch` | `logs/watch.log` |
 | 23:30 daily | `dirtbike report --model crf150f --write` | `logs/report.log` |
 | 23:55 daily, 23:58 Sundays | `dirtbike backup` (nightly / `--slot weekly`) | `logs/backup.log` |
-| 05:00 Sundays | `dirtbike drift` (see Site drift) | `logs/drift.log` |
+| 05:00 daily | `dirtbike drift` (see Site drift) | `logs/drift.log` |
 
 Logs are in `~/Code/dirtbike-tracker-prod/logs/` (timestamped if `moreutils` is installed). After
 changing the schedule in `install_cron.sh`, re-run it from the prod clone with the same
@@ -198,8 +198,10 @@ km, the new-stock filter) would go unnoticed. `dirtbike drift` catches that:
 3. On any problem it prints them, pushes an ntfy alert ("Site drift: N parser problem(s)") and
    exits 1.
 
-Cron runs it Sundays at 05:00; the Docker crontab does too, recording into `data/drift/`
-because `/app` isn't writable in the container.
+Cron runs it daily at 05:00, before the first watch, so a field that stops parsing is caught
+within a day (the same window as the source-health alert); it's ~5 page fetches. An unfixed
+problem alerts again each morning. The Docker crontab runs it too, recording into
+`data/drift/` because `/app` isn't writable in the container.
 
 **When it alerts:** read `logs/drift.log` for the list, open the recorded page next to the
 parser named in the problem, fix the parser, then check the fix offline against the same pages
