@@ -31,7 +31,8 @@ def _html(name: str) -> str:
 def _assert_required_fields(listings: list[Listing], url_prefix: str) -> None:
     assert listings, "parsed no listings"
     for x in listings:
-        assert x.external_id and x.title, x
+        assert x.external_id, x
+        assert x.title, x
         assert x.url.startswith(url_prefix), x.url
         assert x.price_state in PRICE_STATES, x
         assert x.price is not None or x.price_state != "numeric", x
