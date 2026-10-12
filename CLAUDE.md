@@ -9,8 +9,9 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 - `application/cli.py` - orchestration via click
 
 ## Known tech debt
-- `domain/scoring.py` imports from `infrastructure/storage.py` (hexagonal violation). See issue #X
-- 0% test coverage. See issues tagged `area:testing`
+- `domain/scoring.py` imports from `infrastructure/storage.py` (hexagonal violation). See issue #34
+- Near-zero test coverage (one CLI smoke test). See issues tagged `area:testing`
+- `docs/architecture.md` module table predates the hexagonal port (old flat filenames)
 
 ## Common commands
 - `dirtbike watch` - scrape all models, score, notify
