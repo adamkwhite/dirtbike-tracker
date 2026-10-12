@@ -3,7 +3,11 @@
 from pathlib import Path
 
 from dirtbike_tracker.domain.scoring import MarketSnapshot
-from dirtbike_tracker.infrastructure.dashboard import render_dashboard, write_dashboard
+from dirtbike_tracker.infrastructure.dashboard import (
+    _model_section,
+    render_dashboard,
+    write_dashboard,
+)
 from dirtbike_tracker.infrastructure.reporter import location_label, render_report, write_report
 
 
@@ -21,6 +25,15 @@ def test_render_report_without_market_data(snap: MarketSnapshot) -> None:
     empty = MarketSnapshot(slug="ttr110", stats={"count": 0}, listings=[], trend=None, prices=[])
 
     assert "No data. Scrape first." in render_report(empty)
+
+
+def test_dashboard_without_market_data() -> None:
+    empty = MarketSnapshot(slug="ttr110", stats={"count": 0}, listings=[], trend=None, prices=[])
+
+    html = _model_section(empty)
+
+    assert "No listings yet" in html
+    assert "No active listings" in html
 
 
 def test_write_report(snap: MarketSnapshot, tmp_path: Path) -> None:

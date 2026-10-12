@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from urllib.parse import quote, urljoin
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -56,7 +56,7 @@ class Listing:
 
 def _headers() -> dict:
     return {
-        "User-Agent": random.choice(USER_AGENTS),
+        "User-Agent": random.choice(USER_AGENTS),  # NOSONAR - UA rotation, not security
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-CA,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
@@ -143,11 +143,14 @@ KNOWN_MODEL_SLUGS = [
 ]
 
 
+_SEPARATORS = re.compile(r"[\s\-_]+")
+
+
 def detect_models_in_title(title: str) -> list[str]:
     """Find every known model slug mentioned in a listing title."""
     if not title:
         return []
-    normalized = re.sub(r"[\s\-_]+", "", title.lower())
+    normalized = _SEPARATORS.sub("", title.lower())
     found = []
     for slug in KNOWN_MODEL_SLUGS:
         if slug in normalized:
@@ -245,6 +248,14 @@ def _ad_meta(soup: BeautifulSoup) -> tuple[set[str], dict[str, str]]:
     return new_ids, posted
 
 
+def _field_text(card: Tag, testid: str, class_pattern: str | None = None, sep: str = "") -> str:
+    """Text of the card element whose data-testid (else class) matches, or ''."""
+    el = card.find(attrs={"data-testid": re.compile(testid, re.I)}) or card.find(  # type: ignore[call-overload]
+        class_=re.compile(class_pattern or testid, re.I)
+    )
+    return el.get_text(sep, strip=True) if isinstance(el, Tag) else ""
+
+
 def parse_listings(html: str, model_slug: str) -> list[Listing]:
     """Extract listing data from a Kijiji search results page."""
     soup = BeautifulSoup(html, "html.parser")
@@ -265,48 +276,20 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         if not link_el:
             continue
         url = urljoin(BASE_URL, str(link_el["href"]))
+        ad_id = _extract_external_id(url)
+        # Drop unrelated Kijiji categories and new dealer stock
+        if not any(path in url for path in ALLOWED_CATEGORY_PATHS) or ad_id in new_ids:
+            continue
 
         title_el = card.find(["h3", "h2", "a"], string=True)
-        title = (title_el.get_text(strip=True) if title_el else link_el.get_text(strip=True)) or ""
-
-        price_el = card.find(attrs={"data-testid": re.compile(r"price", re.I)}) or card.find(  # type: ignore[call-overload]  # type: ignore[call-overload]
-            class_=re.compile(r"price", re.I)
-        )
-        price_text = price_el.get_text(strip=True) if price_el else ""
-        price, price_state = _parse_price(price_text)
-
-        loc_el = card.find(attrs={"data-testid": re.compile(r"location", re.I)}) or card.find(  # type: ignore[call-overload]  # type: ignore[call-overload]
-            class_=re.compile(r"location", re.I)
-        )
-        location = loc_el.get_text(strip=True) if loc_el else ""
-
-        posted_el = card.find(attrs={"data-testid": re.compile(r"date", re.I)}) or card.find(  # type: ignore[call-overload]
-            class_=re.compile(r"date|posted", re.I)
-        )
-        posted = posted_el.get_text(strip=True) if posted_el else ""
-
-        desc_el = card.find(attrs={"data-testid": re.compile(r"description", re.I)}) or card.find(  # type: ignore[call-overload]
-            class_=re.compile(r"description", re.I)
-        )
-        description = desc_el.get_text(" ", strip=True) if desc_el else ""
-
-        # Filter: drop results from unrelated Kijiji categories
-        if not any(path in url for path in ALLOWED_CATEGORY_PATHS):
+        title = (title_el or link_el).get_text(strip=True) or ""
+        model_slugs = _model_slugs(title, model_slug)
+        if not model_slugs:
             continue
-
-        ad_id = _extract_external_id(url)
-        if ad_id in new_ids:
-            continue
-        posted = posted_at.get(ad_id, posted)
-
-        # Secondary filter: title must plausibly match the queried model slug.
-        # Detect all models in the title (packages can have multiple).
-        detected = detect_models_in_title(title)
-        if model_slug not in detected and not _title_matches_model(title, model_slug):
-            continue
-        # If the queried slug isn't in the detected set but title still matches
-        # the loose check (older slug variants), include it with the queried slug only.
-        model_slugs = detected if detected else [model_slug]
+        price, price_state = _parse_price(_field_text(card, "price"))
+        location = _field_text(card, "location")
+        posted = posted_at.get(ad_id) or _field_text(card, "date", r"date|posted")
+        description = _field_text(card, "description", sep=" ")
 
         listings.append(
             Listing(
@@ -327,12 +310,26 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
     return listings
 
 
+def _model_slugs(title: str, model_slug: str) -> list[str]:
+    """Models a title belongs to, or [] if it doesn't plausibly match the queried slug.
+
+    Packages can name several models. A title that only passes the loose check
+    (older slug variants) gets the queried slug alone.
+    """
+    detected = detect_models_in_title(title)
+    if model_slug in detected:
+        return detected
+    if _title_matches_model(title, model_slug):
+        return detected or [model_slug]
+    return []
+
+
 def _title_matches_model(title: str, model_slug: str) -> bool:
     """Loose check that a listing title mentions the model."""
     if not title:
         return False
-    normalized_title = re.sub(r"[\s\-_]+", "", title.lower())
-    normalized_slug = re.sub(r"[\s\-_]+", "", model_slug.lower())
+    normalized_title = _SEPARATORS.sub("", title.lower())
+    normalized_slug = _SEPARATORS.sub("", model_slug.lower())
     return normalized_slug in normalized_title
 
 

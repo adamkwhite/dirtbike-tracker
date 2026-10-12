@@ -46,20 +46,15 @@ def _histogram(prices: list[float], bins: int = 10) -> tuple[list[float], list[i
     return centers, counts
 
 
-def _model_section(snap: MarketSnapshot) -> str:
-    """Render one model's panel."""
-    slug, stats, listings, t, prices = snap.slug, snap.stats, snap.listings, snap.trend, snap.prices
-
-    # Market summary tiles
+def _tiles(stats: dict, t: float | None) -> str:
     if stats["count"] == 0:
-        tiles = '<div class="tile tile-empty">No listings yet</div>'
-    else:
-        trend_html = ""
-        if t is not None:
-            arrow = "▼" if t < 0 else "▲"
-            trend_class = "trend-down" if t < 0 else "trend-up"
-            trend_html = f'<div class="tile"><div class="label">Trend 30d</div><div class="val {trend_class}">{arrow} {abs(t):.0f}%</div></div>'
-        tiles = f"""
+        return '<div class="tile tile-empty">No listings yet</div>'
+    trend_html = ""
+    if t is not None:
+        arrow = "▼" if t < 0 else "▲"
+        trend_class = "trend-down" if t < 0 else "trend-up"
+        trend_html = f'<div class="tile"><div class="label">Trend 30d</div><div class="val {trend_class}">{arrow} {abs(t):.0f}%</div></div>'
+    return f"""
           <div class="tile"><div class="label">Count</div><div class="val">{stats["count"]}</div></div>
           <div class="tile"><div class="label">Low</div><div class="val">${int(stats["low"])}</div></div>
           <div class="tile tile-median"><div class="label">Median</div><div class="val">${int(stats["median"])}</div></div>
@@ -67,39 +62,35 @@ def _model_section(snap: MarketSnapshot) -> str:
           {trend_html}
         """
 
-    # Listings table
-    if not listings:
-        rows_html = '<tr><td colspan="5" class="muted">No active listings</td></tr>'
+
+def _listing_row(listing: dict) -> str:
+    rating = listing["rating"]
+    delta = listing["delta_pct"]
+    delta_str = f"{delta:+.0f}%" if delta is not None else "—"
+    if listing["price"]:
+        price_str = f"${int(listing['price'])}"
     else:
-        rows = []
-        for listing in listings[:20]:
-            rating = listing["rating"]
-            delta = listing["delta_pct"]
-            delta_str = f"{delta:+.0f}%" if delta is not None else "—"
-            if listing["price"]:
-                price_str = f"${int(listing['price'])}"
-            else:
-                label = {"please_contact": "Contact", "swap_trade": "Trade only"}.get(
-                    listing.get("price_state", ""), "?"
-                )
-                price_str = label
-            loc = location_label(listing, 28)
-            title = (listing["title"] or "")[:65]
-            rows.append(f"""
+        price_str = {"please_contact": "Contact", "swap_trade": "Trade only"}.get(
+            listing.get("price_state", ""), "?"
+        )
+    loc = location_label(listing, 28)
+    title = (listing["title"] or "")[:65]
+    return f"""
               <tr>
                 <td><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>
                 <td class="num">{_esc(price_str)}</td>
                 <td class="num muted">{_esc(delta_str)}</td>
                 <td class="muted">{_esc(loc)}</td>
                 <td><a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a></td>
-              </tr>""")
-        rows_html = "".join(rows)
+              </tr>"""
 
-    # Likely-sold history: what bikes actually went for, and how fast
-    sold_html = ""
-    if snap.sold:
-        sold_rows = "".join(
-            f"""
+
+def _sold_table(sold: list[dict]) -> str:
+    """Likely-sold history: what bikes actually went for, and how fast."""
+    if not sold:
+        return ""
+    sold_rows = "".join(
+        f"""
               <tr>
                 <td class="num">{_esc(f"${int(s['price'])}" if s["price"] else "?")}</td>
                 <td class="num muted">{_esc(f"{s['days_listed']}d")}</td>
@@ -107,9 +98,9 @@ def _model_section(snap: MarketSnapshot) -> str:
                 <td class="muted">{_esc(s["sold_at"][:10])}</td>
                 <td><a href="{_esc(s["url"])}" target="_blank" rel="noopener">{_esc((s["title"] or "")[:65])}</a></td>
               </tr>"""
-            for s in snap.sold
-        )
-        sold_html = f"""
+        for s in sold
+    )
+    return f"""
       <h3>Recently sold (likely)</h3>
       <table>
         <thead>
@@ -117,6 +108,17 @@ def _model_section(snap: MarketSnapshot) -> str:
         </thead>
         <tbody>{sold_rows}</tbody>
       </table>"""
+
+
+def _model_section(snap: MarketSnapshot) -> str:
+    """Render one model's panel."""
+    slug, listings, prices = snap.slug, snap.listings, snap.prices
+    tiles = _tiles(snap.stats, snap.trend)
+    rows_html = (
+        "".join(map(_listing_row, listings[:20]))
+        or '<tr><td colspan="5" class="muted">No active listings</td></tr>'
+    )
+    sold_html = _sold_table(snap.sold)
 
     # Weekly market median (line). Needs 2+ weeks with data to say anything.
     trend_id = f"trend-{slug}"
