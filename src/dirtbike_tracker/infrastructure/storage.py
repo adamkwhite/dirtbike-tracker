@@ -112,7 +112,7 @@ def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
 def upsert_listings(listings: Iterable[Listing], db_path: Path = DB_PATH) -> dict:
     """Insert new listings, log price changes, dedup cross-posts, tag with all models."""
     stats = {"new": 0, "updated": 0, "price_changed": 0, "cross_posts": 0}
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).replace(tzinfo=None).isoformat()
 
     with connect(db_path) as conn:
         for listing in listings:

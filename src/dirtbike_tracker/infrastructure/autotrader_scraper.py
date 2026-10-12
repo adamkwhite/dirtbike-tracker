@@ -15,7 +15,7 @@ a reason to filter precisely.
 import json
 import random
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from urllib.parse import quote
 
 import requests
@@ -66,7 +66,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
     except (ValueError, KeyError, TypeError):
         return []
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).replace(tzinfo=None).isoformat()
     results = []
     for ad in ads:
         vehicle = ad.get("vehicle") or {}

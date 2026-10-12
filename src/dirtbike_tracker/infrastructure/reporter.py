@@ -4,7 +4,7 @@ Generate a markdown market snapshot for a given model.
 Output is suitable for pasting into a note, email, or chat message.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..domain.scoring import MarketSnapshot
@@ -13,7 +13,7 @@ from ..domain.scoring import MarketSnapshot
 def render_report(snap: MarketSnapshot) -> str:
     """Build a markdown snapshot of the current market for a model."""
     model_slug, stats, listings, t = snap.slug, snap.stats, snap.listings, snap.trend
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = []
     lines.append(f"# {model_slug.upper()} market snapshot")
@@ -67,7 +67,7 @@ def render_report(snap: MarketSnapshot) -> str:
 def write_report(snap: MarketSnapshot, out_dir: Path = Path("reports")) -> Path:
     """Write the markdown report to disk and return the path."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    date = datetime.utcnow().strftime("%Y-%m-%d")
+    date = datetime.now(UTC).strftime("%Y-%m-%d")
     path = out_dir / f"{snap.slug}_{date}.md"
     path.write_text(render_report(snap))
     return path
