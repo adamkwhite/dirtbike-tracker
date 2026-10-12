@@ -11,7 +11,6 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 
 ## Known tech debt
 - Untested: scraper HTTP/pagination (`scrape_model`), storage writes (`upsert_listings`, `mark_stale`), ntfy message formatting. See issues tagged `area:testing`
-- `docs/architecture.md` module table predates the hexagonal port (old flat filenames)
 
 ## Common commands
 - `dirtbike watch` - scrape all models, score, notify
