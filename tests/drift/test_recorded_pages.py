@@ -2,7 +2,7 @@
 
 The pages live in tests/recorded/ (gitignored: third-party ads with personal
 info, and this repo is public), so CI skips this file. `dirtbike drift` (or
-`make drift`) re-records them; the weekly cron runs the same check and alerts.
+`make drift`) re-records them; the daily cron runs the same check and alerts.
 """
 
 from pathlib import Path

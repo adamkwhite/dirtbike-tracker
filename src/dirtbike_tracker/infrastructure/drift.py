@@ -1,6 +1,6 @@
 """Site-drift check (#28): record live pages, run our parsers over them, list what broke.
 
-Used by `dirtbike drift` (weekly cron, alerts on problems) and tests/drift (local).
+Used by `dirtbike drift` (daily cron, alerts on problems) and tests/drift (local).
 Recordings are third-party ads with private sellers' details: they go in a
 gitignored directory and must never be committed (the repo is public).
 """

@@ -64,7 +64,7 @@ clean:
 	rm -rf dist/ build/
 
 # Site-drift check (#28): record live pages into tests/recorded/ (gitignored: third-party ads
-# with personal info, public repo), then check our parsers still read them. Cron runs it weekly.
+# with personal info, public repo), then check our parsers still read them. Cron runs it daily.
 drift:
 	dirtbike drift --no-notify
 
