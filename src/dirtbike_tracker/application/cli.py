@@ -23,10 +23,11 @@ from pathlib import Path
 import click
 import yaml
 
-from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL
+from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, under_target
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
+from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_description
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.notifier import (
     NotifyConfigError,
@@ -37,6 +38,7 @@ from ..infrastructure.notifier import (
 )
 from ..infrastructure.reporter import render_report, write_report
 from ..infrastructure.storage import init_db, mark_stale, set_dismissed, upsert_listings
+from .details import AdDetailFetcher, fetch_details
 from .market import snapshot
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -44,6 +46,9 @@ CONFIG_PATH = ROOT / "config" / "models.yml"
 REPORTS_DIR = ROOT / "reports"
 STATE_DIR = ROOT / "data" / "state"
 DASHBOARD_PATH = ROOT / "dashboard.html"
+# Adapters for the full-ad port, by source. AutoTrader's search page already
+# carries the description, so it has none.
+DETAIL_FETCHERS: dict[str, AdDetailFetcher] = {"kijiji": kijiji_ad_description}
 
 RATING_COLORS = {
     "DEAL": "green",
@@ -129,8 +134,7 @@ def _alert_for(
         return alert, f"drop:{lid}:{listing['price']:.0f}", "drops"
     if rating == "DEAL":
         return notify_deal, lid, "deals"
-    # an unrated price (parts ad, placeholder) can't be a target hit either
-    if target_price is not None and rating != "UNKNOWN" and listing["price"] <= target_price:
+    if under_target(listing, target_price):
         return notify_deal, lid, "target_hits"
     if rating == "GOOD":
         return notify_good, lid, "goods"
@@ -300,9 +304,13 @@ def _watch_model(
         totals["updated"] += stats["updated"]
         source_counts[source] += len(listings)
 
-    # Re-score after upsert
+    # Re-score after upsert. Read the full ad of anything that could alert first,
+    # so a red flag in the body stops the alert before its dedupe key is spent.
+    scored = snapshot(slug).listings
+    if fetch_details(scored, target.get("target_price"), DETAIL_FETCHERS):
+        scored = snapshot(slug).listings
     newly_notified = set()
-    for listing in snapshot(slug).listings:
+    for listing in scored:
         choice = _alert_for(listing, target.get("target_price"))
         if choice is None or choice[1] in already_notified:
             continue

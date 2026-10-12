@@ -124,6 +124,22 @@ def urgency(rating: str, age_days: float | None) -> str | None:
     return None
 
 
+def under_target(listing: dict, target_price: float | None) -> bool:
+    """Priced at or below the model's target. An unrated price (parts ad, placeholder) never is."""
+    return (
+        target_price is not None
+        and listing["rating"] != "UNKNOWN"
+        and listing["price"] <= target_price
+    )
+
+
+def needs_detail(listing: dict, target_price: float | None) -> bool:
+    """Worth fetching the full ad: it could alert, and we haven't read its body yet."""
+    if listing.get("detail_fetched_at"):
+        return False
+    return listing["rating"] in ("DEAL", "GOOD") or under_target(listing, target_price)
+
+
 def score_listings(listings: list[dict], median_price: float | None) -> list[dict]:
     """Attach rating, urgency and project fit to each listing, best deals first, unpriced last."""
     scored = []

@@ -20,7 +20,11 @@ def snapshot(slug: str, db_path: Path = DB_PATH) -> MarketSnapshot:
     stats = market_stats(prices)
     drops = price_drops(slug, db_path=db_path)
     listings = [
-        {**listing, "price_drop_from": drops.get(listing["id"])}
+        {
+            **listing,
+            "description": listing.get("full_description") or listing["description"],
+            "price_drop_from": drops.get(listing["id"]),
+        }
         for listing in active_listings(slug, primary_only=True, db_path=db_path)
     ]
     return MarketSnapshot(

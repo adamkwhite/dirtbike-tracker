@@ -60,9 +60,10 @@ phrases in the title/description: +2 per green flag (`doesn't run`, `needs work`
 Needing work is the point; "runs great" is neutral. Lists live in `domain/scoring.py`. A listing
 with fit below 5 never alerts, however cheap.
 
-Known limits: the scrapers read search-result cards, which rarely include the ad body, so fit is
-mostly neutral until full ad pages are fetched (#71). Non-runners are rated against the
-all-bikes median, so they skew DEAL (#72).
+Search-result cards rarely include the ad body, so before alerting, `watch` reads the full ad
+of up to 5 listings per model that could alert (DEAL/GOOD or under target), once each, and
+re-scores fit on it. A red flag in the body stops the alert. Known limit: non-runners are rated
+against the all-bikes median, so they skew DEAL (#72).
 
 Layout is hexagonal (`src/dirtbike_tracker/{domain,infrastructure,application}`). See
 [docs/architecture.md](docs/architecture.md) for modules, data model, dedup and scoring.

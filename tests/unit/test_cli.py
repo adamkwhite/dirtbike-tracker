@@ -49,6 +49,7 @@ def stub_watch(snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch) -> list[se
     recorded: list[set] = []
     monkeypatch.setattr(cli_module, "load_config", lambda: {"priority": [{"slug": "crf150f"}]})
     monkeypatch.setattr(cli_module, "_scrape_one", lambda *a, **k: [])
+    monkeypatch.setattr(cli_module, "DETAIL_FETCHERS", {})  # no network
     monkeypatch.setattr(cli_module, "upsert_listings", lambda _: {"new": 0, "updated": 0})
     monkeypatch.setattr(cli_module, "snapshot", lambda slug: snap)
     monkeypatch.setattr(cli_module, "_notified_ids", set)
@@ -217,3 +218,21 @@ def test_undismiss_reports_restored(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert result.exit_code == 0
     assert "Restored: 2008 KLX140" in result.output
+
+
+def test_watch_rescores_after_fetching_details(
+    stub_watch: list[set], snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+
+    def counting_snapshot(slug: str) -> MarketSnapshot:
+        calls.append(slug)
+        return snap
+
+    monkeypatch.setattr(cli_module, "snapshot", counting_snapshot)
+    monkeypatch.setattr(cli_module, "fetch_details", lambda *a: 1)
+
+    result = CliRunner().invoke(cli, ["watch", "--no-notify"])
+
+    assert result.exit_code == 0, result.output
+    assert calls[:2] == ["crf150f", "crf150f"]  # scored, read full ads, re-scored

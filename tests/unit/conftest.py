@@ -27,3 +27,11 @@ def snap() -> MarketSnapshot:
         trend=-12.5,
         prices=prices,
     )
+
+
+@pytest.fixture(autouse=True)
+def _no_live_db_init(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`cli()` runs init_db() on every invocation; keep tests off the real (prod-shared) DB."""
+    from dirtbike_tracker.application import cli as cli_module
+
+    monkeypatch.setattr(cli_module, "init_db", lambda: None)
