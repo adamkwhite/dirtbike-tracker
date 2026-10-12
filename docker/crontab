@@ -1,0 +1,6 @@
+# Same schedule as scripts/install_cron.sh, in TZ=America/Toronto.
+# NTFY_TOPIC / HEALTHCHECK_URL come from the container env.
+*/20 6-23 * * * dirtbike watch
+30 23 * * * dirtbike report --model crf150f --write
+55 23 * * * dirtbike backup
+58 23 * * 0 dirtbike backup --slot weekly

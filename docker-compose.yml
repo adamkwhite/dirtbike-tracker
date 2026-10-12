@@ -1,0 +1,30 @@
+# docker compose up -d --build
+# Secrets: put NTFY_TOPIC / HEALTHCHECK_URL in .env (gitignored) next to this file.
+services:
+  tracker:
+    build: .
+    image: dirtbike-tracker
+    restart: unless-stopped
+    environment:
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
+      HEALTHCHECK_URL: ${HEALTHCHECK_URL:-}
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+      - ./reports:/app/reports
+      - ./config:/app/config:ro
+      - site:/app/site
+      # rclone refreshes its OAuth token in place, so this one is read-write
+      - ${RCLONE_CONFIG_DIR:-~/.config/rclone}:/home/app/.config/rclone
+
+  dashboard:
+    image: dirtbike-tracker
+    restart: unless-stopped
+    depends_on: [tracker]
+    command: ["python", "-m", "http.server", "8080", "--directory", "/app/site"]
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - site:/app/site:ro
+
+volumes:
+  site:
