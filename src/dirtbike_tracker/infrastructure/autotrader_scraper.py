@@ -35,7 +35,7 @@ RATE_LIMIT_SECONDS = 2.5
 
 def _headers() -> dict:
     return {
-        "User-Agent": random.choice(USER_AGENTS),
+        "User-Agent": random.choice(USER_AGENTS),  # NOSONAR - UA rotation, not security
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-CA,en;q=0.9",
     }
@@ -67,40 +67,40 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         return []
 
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
-    results = []
-    for ad in ads:
-        vehicle = ad.get("vehicle") or {}
-        if vehicle.get("offerType") == "N":
-            continue
-
-        parts = [vehicle.get("modelYear"), vehicle.get("make"), vehicle.get("model")]
-        parts.append(vehicle.get("modelVersionInput"))
-        title = " ".join(str(p) for p in parts if p)
-        detected = detect_models_in_title(title)
-        if model_slug not in detected and model_slug.lower() not in title.lower():
-            continue
-
-        price = (ad.get("price") or {}).get("priceRaw")
-        results.append(
-            Listing(
-                source="autotrader",
-                external_id=str(ad["id"]),
-                url=ad["url"],
-                title=title,
-                price=float(price) if price else None,
-                price_state=PRICE_STATE_NUMERIC if price else PRICE_STATE_UNKNOWN,
-                location=(ad.get("location") or {}).get("city") or "",
-                posted_text="",
-                description=ad.get("description") or "",
-                model_slugs=detected if detected else [model_slug],
-                scraped_at=now,
-            )
-        )
-
-    return results
+    parsed = (_ad_to_listing(ad, model_slug, now) for ad in ads)
+    return [listing for listing in parsed if listing is not None]
 
 
-def scrape_model(model_slug: str, region: str = "on", max_pages: int = 1) -> list[Listing]:  # noqa: ARG001
+def _ad_to_listing(ad: dict, model_slug: str, now: str) -> Listing | None:
+    """One __NEXT_DATA__ ad -> Listing, or None for new stock / other models."""
+    vehicle = ad.get("vehicle") or {}
+    if vehicle.get("offerType") == "N":
+        return None
+
+    parts = [vehicle.get("modelYear"), vehicle.get("make"), vehicle.get("model")]
+    parts.append(vehicle.get("modelVersionInput"))
+    title = " ".join(str(p) for p in parts if p)
+    detected = detect_models_in_title(title)
+    if model_slug not in detected and model_slug.lower() not in title.lower():
+        return None
+
+    price = (ad.get("price") or {}).get("priceRaw")
+    return Listing(
+        source="autotrader",
+        external_id=str(ad["id"]),
+        url=ad["url"],
+        title=title,
+        price=float(price) if price else None,
+        price_state=PRICE_STATE_NUMERIC if price else PRICE_STATE_UNKNOWN,
+        location=(ad.get("location") or {}).get("city") or "",
+        posted_text="",
+        description=ad.get("description") or "",
+        model_slugs=detected if detected else [model_slug],
+        scraped_at=now,
+    )
+
+
+def scrape_model(model_slug: str, region: str = "on") -> list[Listing]:
     """Scrape AutoTrader keyword search for a model."""
     url = build_search_url(model_slug, region)
     try:

@@ -34,7 +34,9 @@ class ExtractedFacts:
 YEAR_RE = re.compile(r"\b(19[89]\d|20[0-3]\d)\b")
 HOURS_RE = re.compile(r"(\d{1,4})\s*(?:hours?|hrs?)\b", re.I)
 KM_RE = re.compile(r"(\d{1,6})\s*(?:km|kms|kilometers?)\b", re.I)
-NEEDS_RE = re.compile(r"needs?\s+([a-z, &/]+?)(?:\.|,|$)", re.I)
+# Up to the end of the sentence; items split on "and" / & / , / slash
+NEEDS_RE = re.compile(r"\bneeds?\s([a-z ,&/]+)", re.I)
+NEEDS_SPLIT_RE = re.compile(r"\band\b|[&,/]", re.I)
 RUNS_POSITIVE = re.compile(
     r"\b(runs great|starts first kick|fires right up|runs well|runs good|bike starts)\b", re.I
 )
@@ -65,14 +67,14 @@ def extract_regex(title: str, description: str) -> ExtractedFacts:
     elif RUNS_NEGATIVE.search(text):
         facts.runs = False
 
-    for needs_match in NEEDS_RE.finditer(text):
-        parts = re.split(r"\s*(?:and|&|,|/)\s*", needs_match.group(1))
-        for p in parts:
-            p = p.strip()
-            if p and len(p) < 40:
-                facts.needs.append(p)
+    facts.needs = _needs(text)
 
     return facts
+
+
+def _needs(text: str) -> list[str]:
+    parts = (p.strip() for m in NEEDS_RE.finditer(text) for p in NEEDS_SPLIT_RE.split(m.group(1)))
+    return [p for p in parts if p and len(p) < 40]
 
 
 def extract_llm(

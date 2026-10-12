@@ -278,6 +278,38 @@ def report(model: str, write: bool):
         click.echo(render_report(snapshot(model)))
 
 
+def _watch_model(
+    target: dict,
+    region: str,
+    notify: bool,
+    already_notified: set,
+    source_counts: Counter,
+    totals: dict,
+) -> set:
+    """Scrape, upsert and alert for one configured model. Returns the newly notified keys."""
+    slug = target["slug"]
+    for source in target.get("sources", ["kijiji"]):
+        listings = _scrape_one(slug, region, source, pages=3)
+        stats = upsert_listings(listings)
+        totals["new"] += stats["new"]
+        totals["updated"] += stats["updated"]
+        source_counts[source] += len(listings)
+
+    # Re-score after upsert
+    newly_notified = set()
+    for listing in snapshot(slug).listings:
+        choice = _alert_for(listing, target.get("target_price"))
+        if choice is None or choice[1] in already_notified:
+            continue
+        alert, key, bucket = choice
+        # --no-notify still records, so re-enabling doesn't replay old alerts;
+        # a send that fails stays unrecorded and retries next run
+        if not notify or _send(alert, {**listing, "model_slug": slug}):
+            newly_notified.add(key)
+        totals[bucket] += 1
+    return newly_notified
+
+
 @cli.command()
 @click.option("--region", default="ontario")
 @click.option("--notify/--no-notify", default=True)
@@ -293,10 +325,7 @@ def watch(region: str, notify: bool, group: str):
         return
 
     groups = [group] if group else list(config.keys())
-    all_targets = []
-    for g in groups:
-        for entry in config.get(g, []) or []:
-            all_targets.append({**entry, "group": g})
+    all_targets = [{**entry, "group": g} for g in groups for entry in config.get(g) or []]
 
     click.echo(f"Watching {len(all_targets)} models from groups: {', '.join(groups)}")
     already_notified = _notified_ids()
@@ -305,28 +334,9 @@ def watch(region: str, notify: bool, group: str):
     totals = {"new": 0, "updated": 0, "deals": 0, "goods": 0, "target_hits": 0, "drops": 0}
 
     for target in all_targets:
-        slug = target["slug"]
-        for source in target.get("sources", ["kijiji"]):
-            listings = _scrape_one(slug, region, source, pages=3)
-            stats = upsert_listings(listings)
-            totals["new"] += stats["new"]
-            totals["updated"] += stats["updated"]
-            source_counts[source] += len(listings)
-
-        # Re-score after upsert
-        scored = snapshot(slug).listings
-        target_price = target.get("target_price")
-
-        for listing in scored:
-            choice = _alert_for(listing, target_price)
-            if choice is None or choice[1] in already_notified:
-                continue
-            alert, key, bucket = choice
-            # --no-notify still records, so re-enabling doesn't replay old alerts;
-            # a send that fails stays unrecorded and retries next run
-            if not notify or _send(alert, {**listing, "model_slug": slug}):
-                newly_notified.add(key)
-            totals[bucket] += 1
+        newly_notified |= _watch_model(
+            target, region, notify, already_notified, source_counts, totals
+        )
 
     mark_stale([s for s, n in source_counts.items() if n])
     _record_notified(already_notified | newly_notified)

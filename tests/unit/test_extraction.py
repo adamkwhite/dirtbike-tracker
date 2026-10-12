@@ -37,3 +37,9 @@ def test_extract_llm_normalizes_null_lists(monkeypatch: pytest.MonkeyPatch) -> N
     assert facts.year == 2012
     assert facts.needs == []
     assert facts.includes == []
+
+
+def test_needs_splits_on_whole_word_and_only() -> None:
+    facts = extract_regex("", "Needs handlebars, tires and sand paper. Kneads dough")
+
+    assert facts.needs == ["handlebars", "tires", "sand paper"]
