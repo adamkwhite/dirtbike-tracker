@@ -9,7 +9,8 @@ from click.testing import CliRunner
 
 from dirtbike_tracker.application import cli as cli_module
 from dirtbike_tracker.application.cli import cli
-from dirtbike_tracker.domain.scoring import MarketSnapshot, score_listings
+from dirtbike_tracker.domain.scoring import GOALS, MarketSnapshot, score_listings
+from dirtbike_tracker.infrastructure.kijiji_scraper import KNOWN_MODEL_SLUGS
 
 
 @pytest.fixture
@@ -292,3 +293,14 @@ def test_unknown_goal_is_a_clear_error(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert result.exit_code == 1
     assert "unknown goal 'tour'" in result.output
+
+
+def test_models_yml_entries_are_valid() -> None:
+    entries = [e for group in cli_module.load_config().values() for e in group or []]
+    slugs = [e["slug"] for e in entries]
+
+    assert len(slugs) == len(set(slugs))
+    for e in entries:
+        assert e["slug"] in KNOWN_MODEL_SLUGS, e
+        assert e.get("goal", "project") in GOALS, e
+        assert set(e.get("sources", ["kijiji"])) <= {"kijiji", "autotrader"}, e
