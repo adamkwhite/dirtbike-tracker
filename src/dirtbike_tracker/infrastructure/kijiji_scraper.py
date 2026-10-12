@@ -9,6 +9,7 @@ import json
 import random
 import re
 import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from urllib.parse import quote, urljoin
@@ -192,6 +193,33 @@ def fetch_page(url: str, timeout: int = 20) -> str:
     return str(response.text)
 
 
+def _iter_ads(data: object) -> Iterator[dict]:
+    """Every dict with an id anywhere in the __NEXT_DATA__ tree."""
+    stack = [data]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, dict):
+            if node.get("id"):
+                yield node
+            stack.extend(node.values())
+
+
+def _is_new_vehicle(ad: dict) -> bool:
+    attrs = ad.get("attributes")
+    if isinstance(attrs, dict):
+        attrs = attrs.get("all")
+    if not isinstance(attrs, list):
+        return False
+    return any(
+        isinstance(a, dict)
+        and a.get("canonicalName") == "vehicletype"
+        and "new" in (a.get("canonicalValues") or [])
+        for a in attrs
+    )
+
+
 def _ad_meta(soup: BeautifulSoup) -> tuple[set[str], dict[str, str]]:
     """Per-ad facts from the page's __NEXT_DATA__ the HTML cards don't show.
 
@@ -208,26 +236,12 @@ def _ad_meta(soup: BeautifulSoup) -> tuple[set[str], dict[str, str]]:
 
     new_ids: set[str] = set()
     posted: dict[str, str] = {}
-    stack = [data]
-    while stack:
-        node = stack.pop()
-        if isinstance(node, list):
-            stack.extend(node)
-        elif isinstance(node, dict):
-            attrs = node.get("attributes")
-            if isinstance(attrs, dict):
-                attrs = attrs.get("all")
-            if node.get("id") and isinstance(node.get("activationDate"), str):
-                posted[str(node["id"])] = node["activationDate"]
-            if node.get("id") and isinstance(attrs, list):
-                for a in attrs:
-                    if (
-                        isinstance(a, dict)
-                        and a.get("canonicalName") == "vehicletype"
-                        and "new" in (a.get("canonicalValues") or [])
-                    ):
-                        new_ids.add(str(node["id"]))
-            stack.extend(node.values())
+    for ad in _iter_ads(data):
+        ad_id = str(ad["id"])
+        if _is_new_vehicle(ad):
+            new_ids.add(ad_id)
+        if isinstance(ad.get("activationDate"), str):
+            posted[ad_id] = ad["activationDate"]
     return new_ids, posted
 
 
