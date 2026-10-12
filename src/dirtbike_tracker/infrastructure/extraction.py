@@ -14,7 +14,7 @@ The regex path is a limited best-effort for the common cases:
 import json
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass
@@ -24,14 +24,8 @@ class ExtractedFacts:
     kilometers: int | None = None
     condition: str | None = None  # excellent | good | fair | poor | project
     runs: bool | None = None
-    needs: list[str] | None = None
-    includes: list[str] | None = None
-
-    def __post_init__(self):
-        if self.needs is None:
-            self.needs = []
-        if self.includes is None:
-            self.includes = []
+    needs: list[str] = field(default_factory=list)
+    includes: list[str] = field(default_factory=list)
 
     def to_dict(self):
         return asdict(self)
@@ -53,8 +47,6 @@ def extract_regex(title: str, description: str) -> ExtractedFacts:
     """Best-effort structured extraction without an LLM."""
     text = f"{title or ''} {description or ''}"
     facts = ExtractedFacts()
-    assert facts.needs is not None  # __post_init__ guarantees
-    assert facts.includes is not None  # __post_init__ guarantees
 
     year_match = YEAR_RE.search(title or "") or YEAR_RE.search(text)
     if year_match:
@@ -129,6 +121,9 @@ Return this JSON schema (use null for unknown):
         if not json_match:
             return None
         data = json.loads(json_match.group())
+        # LLM may return null for lists; default_factory only covers omitted keys
+        data["needs"] = data.get("needs") or []
+        data["includes"] = data.get("includes") or []
         return ExtractedFacts(**data)
     except Exception as exc:  # noqa: BLE001
         print(f"LLM extraction failed: {exc}")  # noqa: T201
