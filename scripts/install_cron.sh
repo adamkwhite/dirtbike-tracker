@@ -45,11 +45,13 @@ REPORT_LINE="30 23 * * * cd ${PROJECT_ROOT} && ${DIRTBIKE} report --model crf150
 # Off-box backup after the day's last scrape; weekly slot on Sundays (#26)
 BACKUP_LINE="55 23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"
 WEEKLY_BACKUP_LINE="58 23 * * 0 cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup --slot weekly 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"
+# Site-drift check (#28), Sundays before the first watch: alerts if a parser stopped reading a site
+DRIFT_LINE="0 5 * * 0 cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} drift 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/drift.log ${MARKER}"
 
-(crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}"; echo "${BACKUP_LINE}"; echo "${WEEKLY_BACKUP_LINE}") | crontab -
+(crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}"; echo "${BACKUP_LINE}"; echo "${WEEKLY_BACKUP_LINE}"; echo "${DRIFT_LINE}") | crontab -
 
 echo "Installed cron entries:"
 crontab -l | grep "${MARKER}"
 echo ""
-echo "Logs: ${LOG_DIR}/watch.log  and  ${LOG_DIR}/report.log"
+echo "Logs: ${LOG_DIR}/{watch,report,backup,drift}.log"
 echo "Remove with: ./scripts/install_cron.sh --remove"

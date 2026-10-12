@@ -4,3 +4,5 @@
 30 23 * * * dirtbike report --model crf150f --write
 55 23 * * * dirtbike backup
 58 23 * * 0 dirtbike backup --slot weekly
+# Site-drift check (#28). /app isn't writable by the app user, so record into the data/ mount
+0 5 * * 0 dirtbike drift --dir data/drift

@@ -10,7 +10,7 @@ one copy to keep current. Dependency rule: `application` → {`domain`, `infrast
 
 | Layer | Module | Responsibility |
 |---|---|---|
-| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `models`, `dismiss`, `undismiss`, `contact`, `backup`). **Composition root** (#74): `build_app()` wires the real adapters into an `App` on `ctx.obj`; the only application module that imports infrastructure |
+| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `models`, `dismiss`, `undismiss`, `contact`, `backup`, `drift`). **Composition root** (#74): `build_app()` wires the real adapters into an `App` on `ctx.obj`; the only application module that imports infrastructure |
 | application | `ports.py` | Ports: `ListingStore` (Protocol; `SqliteStore` adapts it), `ListingSource` (`(slug, region, pages) -> list[Listing]`), `AdDetailFetcher` (`url -> description \| None`), `Notifier` (one push → bool); `App` bundles them with config, paths and the healthcheck ping |
 | application | `watch.py` | `watch_model()`: scrape → upsert → score → read full ads → re-score → alert; `alert_for`, notified-id state, source health |
 | application | `market.py` | `snapshot(slug, store, goal)`: reads market + active listings from the store, scores them (full ad text when fetched, else the snippet), returns a `MarketSnapshot`; `model_goal` |
@@ -23,6 +23,7 @@ one copy to keep current. Dependency rule: `application` → {`domain`, `infrast
 | infrastructure | `storage.py` | SQLite schema + in-place migrations, upsert, fingerprint dedup, multi-model tagging, `market_prices` / `market_listings`, `price_drops`, likely-sold, dismiss, `set_contact`, `save_full_description` |
 | infrastructure | `notifier.py` | ntfy.sh transport (the `Notifier` adapter) and the healthchecks.io ping |
 | infrastructure | `dashboard.py`, `reporter.py` | Render a `MarketSnapshot` to HTML / markdown |
+| infrastructure | `drift.py` | Site-drift check (#28): records live search/ad pages into a gitignored dir and lists what our parsers no longer read (fields, photos, year/km, new-stock skip, ad description). `dirtbike drift`, weekly cron |
 | infrastructure | `backup.py` | Nightly/weekly DB + state snapshot to Google Drive via rclone |
 | infrastructure | `extraction.py` | Regex + optional LLM fact extraction (year, hours, needs). Not yet wired into the pipeline |
 

@@ -22,6 +22,7 @@ import yaml
 
 from ..domain.listing import Listing
 from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
+from ..infrastructure import drift as drift_check
 from ..infrastructure import notifier
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
@@ -38,6 +39,8 @@ CONFIG_PATH = ROOT / "config" / "models.yml"
 REPORTS_DIR = ROOT / "reports"
 STATE_DIR = ROOT / "data" / "state"
 DASHBOARD_PATH = ROOT / "dashboard.html"
+# Drift-check recordings (#28): third-party ads, gitignored, never committed
+RECORDED_DIR = ROOT / "tests" / "recorded"
 
 RATING_COLORS = {
     "DEAL": "green",
@@ -309,6 +312,37 @@ def backup(app: App, slot: str):
         )
         raise SystemExit(1) from exc
     click.echo(f"Backup OK ({slot}): {rows} listings, {size} bytes")
+
+
+@cli.command()
+@click.option(
+    "--dir",
+    "out_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Where recordings go (default tests/recorded/, gitignored)",
+)
+@click.option("--replay", is_flag=True, help="Re-check the existing recordings, don't re-record")
+@click.option("--notify/--no-notify", default=True, help="Push an ntfy alert on problems")
+@click.pass_obj
+def drift(app: App, out_dir: Path | None, replay: bool, notify: bool):
+    """Site-drift check: record live Kijiji/AutoTrader pages, verify our parsers still read them."""
+    out = out_dir or RECORDED_DIR
+    found = drift_check.run(out, replay=replay)
+    if not found:
+        click.echo(f"Drift check OK ({out})")
+        return
+    click.echo(f"Drift check FAILED: {len(found)} problem(s)")
+    for problem in found:
+        click.echo(f"  - {problem}")
+    if notify:
+        app.notify(
+            title=f"Site drift: {len(found)} parser problem(s)",
+            body="\n".join(found[:10])
+            + '\nRe-check: dirtbike drift --replay. See README "Site drift".',
+            priority=4,
+            tags=["warning"],
+        )
+    raise SystemExit(1)
 
 
 @cli.command()
