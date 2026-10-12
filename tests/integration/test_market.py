@@ -4,16 +4,26 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from dirtbike_tracker.application.market import snapshot
-from dirtbike_tracker.infrastructure.storage import connect, init_db
+from dirtbike_tracker.infrastructure.kijiji_scraper import Listing
+from dirtbike_tracker.infrastructure.storage import (
+    connect,
+    init_db,
+    mark_stale,
+    sold_listings,
+    upsert_listings,
+)
 
 
-def _add(db: Path, ext_id: str, price: float | None, days_ago: int, **cols: int) -> None:
+def _add(
+    db: Path, ext_id: str, price: float | None, days_ago: int, source: str = "kijiji", **cols: int
+) -> None:
     seen = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days_ago)).isoformat()
     with connect(db) as conn:
         cur = conn.execute(
             "INSERT INTO listings (source, external_id, url, title, price, first_seen, last_seen,"
-            " is_active, is_primary) VALUES ('kijiji', ?, ?, ?, ?, ?, ?, ?, ?)",
+            " is_active, is_primary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
+                source,
                 ext_id,
                 f"https://x/{ext_id}",
                 ext_id,
@@ -64,3 +74,57 @@ def test_same_price_listings_each_count(tmp_path: Path) -> None:
     snap = snapshot("crf150f", db_path=db)
 
     assert snap.stats == {"low": 3000, "median": 4749, "high": 4749, "count": 3}
+
+
+def _row(db: Path, ext_id: str) -> tuple:
+    with connect(db) as conn:
+        r = conn.execute(
+            "SELECT is_active, sold_at FROM listings WHERE external_id=?", (ext_id,)
+        ).fetchone()
+    return (r["is_active"], r["sold_at"])
+
+
+def test_mark_stale_tags_likely_sold_only_for_sources_that_scraped(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "gone-4d", 2500, days_ago=4)
+    _add(db, "gone-2d", 2600, days_ago=2)
+    _add(db, "fresh", 2700, days_ago=0)
+    _add(db, "at-gone-4d", 2800, days_ago=4, source="autotrader")  # source broken this run
+
+    assert mark_stale(["kijiji"], db_path=db) == 2
+
+    assert _row(db, "gone-4d")[0] == 0 and _row(db, "gone-4d")[1] is not None
+    assert _row(db, "gone-2d") == (0, None)  # inactive, not yet "sold"
+    assert _row(db, "fresh") == (1, None)
+    assert _row(db, "at-gone-4d") == (1, None)
+    assert mark_stale([], db_path=db) == 0
+
+
+def test_sold_listings_feed_snapshot_and_relisting_clears_tag(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "sold", 2500, days_ago=5)
+    mark_stale(["kijiji"], db_path=db)
+
+    sold = sold_listings("crf150f", db_path=db)
+    assert [(s["external_id"], s["days_listed"]) for s in sold] == [("sold", 0)]
+    assert [s["external_id"] for s in snapshot("crf150f", db_path=db).sold] == ["sold"]
+
+    relisted = Listing(
+        source="kijiji",
+        external_id="sold",
+        url="https://x/sold",
+        title="sold",
+        price=2400,
+        price_state="numeric",
+        location="",
+        posted_text="",
+        description="",
+        model_slugs=["crf150f"],
+        scraped_at="",
+    )
+    upsert_listings([relisted], db_path=db)
+
+    assert _row(db, "sold") == (1, None)
+    assert sold_listings("crf150f", db_path=db) == []
