@@ -110,6 +110,29 @@ def _open_in_browser(path: Path) -> None:
         webbrowser.open(f"file://{path}")
 
 
+def _alert_for(
+    listing: dict, target_price: float | None
+) -> tuple[Callable[[dict], bool], str, str] | None:
+    """(alert fn, dedupe key, totals bucket) for a listing this run, or None.
+
+    Price drops are keyed by the new price, so a listing already alerted on
+    alerts again each time it drops into GOOD/DEAL territory.
+    """
+    lid = f"{listing['source']}:{listing['external_id']}"
+    rating = listing["rating"]
+    if listing.get("price_drop_from") is not None and rating in ("DEAL", "GOOD"):
+        alert = notify_deal if rating == "DEAL" else notify_good
+        return alert, f"drop:{lid}:{listing['price']:.0f}", "drops"
+    if rating == "DEAL":
+        return notify_deal, lid, "deals"
+    # an unrated price (parts ad, placeholder) can't be a target hit either
+    if target_price is not None and rating != "UNKNOWN" and listing["price"] <= target_price:
+        return notify_deal, lid, "target_hits"
+    if rating == "GOOD":
+        return notify_good, lid, "goods"
+    return None
+
+
 STALE_SOURCE_AFTER = timedelta(hours=24)
 
 
@@ -279,7 +302,7 @@ def watch(region: str, notify: bool, group: str):
     already_notified = _notified_ids()
     source_counts: Counter = Counter()
     newly_notified = set()
-    totals = {"new": 0, "updated": 0, "deals": 0, "goods": 0, "target_hits": 0}
+    totals = {"new": 0, "updated": 0, "deals": 0, "goods": 0, "target_hits": 0, "drops": 0}
 
     for target in all_targets:
         slug = target["slug"]
@@ -295,30 +318,15 @@ def watch(region: str, notify: bool, group: str):
         target_price = target.get("target_price")
 
         for listing in scored:
-            lid = f"{listing['source']}:{listing['external_id']}"
-            if lid in already_notified:
+            choice = _alert_for(listing, target_price)
+            if choice is None or choice[1] in already_notified:
                 continue
-
-            is_deal = listing["rating"] == "DEAL"
-            is_good = listing["rating"] == "GOOD"
-            # an unrated price (parts ad, placeholder) can't be a target hit either
-            is_target_hit = (
-                target_price is not None
-                and listing["rating"] != "UNKNOWN"
-                and listing["price"] <= target_price
-            )
-
+            alert, key, bucket = choice
             # --no-notify still records, so re-enabling doesn't replay old alerts;
             # a send that fails stays unrecorded and retries next run
-            if is_deal or is_target_hit:
-                if not notify or _send(notify_deal, {**listing, "model_slug": slug}):
-                    newly_notified.add(lid)
-                totals["deals"] += int(is_deal)
-                totals["target_hits"] += int(is_target_hit)
-            elif is_good:
-                if not notify or _send(notify_good, {**listing, "model_slug": slug}):
-                    newly_notified.add(lid)
-                totals["goods"] += 1
+            if not notify or _send(alert, {**listing, "model_slug": slug}):
+                newly_notified.add(key)
+            totals[bucket] += 1
 
     mark_stale([s for s, n in source_counts.items() if n])
     _record_notified(already_notified | newly_notified)
@@ -335,7 +343,7 @@ def watch(region: str, notify: bool, group: str):
     click.echo(
         f"\nWatch complete. New: {totals['new']}, Updated: {totals['updated']}, "
         f"DEAL alerts: {totals['deals']}, GOOD alerts: {totals['goods']}, "
-        f"Target hits: {totals['target_hits']}"
+        f"Target hits: {totals['target_hits']}, Price drops: {totals['drops']}"
     )
     click.echo(f"Dashboard: file://{DASHBOARD_PATH}")
     ping_healthcheck()

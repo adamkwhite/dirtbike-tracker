@@ -178,3 +178,33 @@ def test_snapshot_weekly_starts_from_source_post_date(tmp_path: Path) -> None:
     assert len(weekly) == 13
     assert [m for _, m in weekly[-3:]] == [2500, 2500, 2500]
     assert weekly[0][1] is None
+
+
+def _price_change(db: Path, ext_id: str, price: float) -> None:
+    with connect(db) as conn:
+        conn.execute(
+            "INSERT INTO price_history (listing_id, price, observed_at)"
+            " SELECT id, ?, datetime('now', '+1 second') FROM listings WHERE external_id=?",
+            (price, ext_id),
+        )
+        conn.execute("UPDATE listings SET price=? WHERE external_id=?", (price, ext_id))
+
+
+def test_price_drops_from_history_feed_snapshot(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    for ext_id, price in (("dropped", 3000), ("raised", 2500), ("steady", 2800)):
+        _add(db, ext_id, price, days_ago=3)
+    with connect(db) as conn:
+        conn.execute(
+            "INSERT INTO price_history (listing_id, price, observed_at)"
+            " SELECT id, price, first_seen FROM listings"
+        )
+    _price_change(db, "dropped", 2500)
+    _price_change(db, "raised", 2700)
+
+    by_id = {s["external_id"]: s for s in snapshot("crf150f", db_path=db).listings}
+
+    assert by_id["dropped"]["price_drop_from"] == 3000
+    assert by_id["raised"]["price_drop_from"] is None
+    assert by_id["steady"]["price_drop_from"] is None

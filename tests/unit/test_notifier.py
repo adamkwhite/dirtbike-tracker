@@ -44,3 +44,10 @@ def test_notify_good_plain_is_low_priority(sent: list[dict]) -> None:
 
     assert sent[0]["priority"] == 2
     assert sent[0]["title"] == "Good: CRF150F $2000 (-20%)"
+
+
+def test_price_drop_prefix_and_was(sent: list[dict]) -> None:
+    notifier.notify_good({**LISTING, "urgency": None, "price_drop_from": 2400})
+
+    assert sent[0]["title"] == "PRICE DROP: Good: CRF150F $2000 (-20%)"
+    assert sent[0]["body"].startswith("Was $2400. ")
