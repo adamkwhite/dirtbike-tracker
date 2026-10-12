@@ -80,6 +80,7 @@ def _listing_row(listing: dict) -> str:
                 <td><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>
                 <td class="num">{_esc(price_str)}</td>
                 <td class="num muted">{_esc(delta_str)}</td>
+                <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
                 <td class="muted">{_esc(loc)}</td>
                 <td><a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a></td>
               </tr>"""
@@ -116,7 +117,7 @@ def _model_section(snap: MarketSnapshot) -> str:
     tiles = _tiles(snap.stats, snap.trend)
     rows_html = (
         "".join(map(_listing_row, listings[:20]))
-        or '<tr><td colspan="5" class="muted">No active listings</td></tr>'
+        or '<tr><td colspan="6" class="muted">No active listings</td></tr>'
     )
     sold_html = _sold_table(snap.sold)
 
@@ -151,7 +152,7 @@ def _model_section(snap: MarketSnapshot) -> str:
       <div class="chart-wrap"><canvas id="{chart_id}" height="80"></canvas></div>
       <table>
         <thead>
-          <tr><th>Rating</th><th>Price</th><th>vs Med</th><th>Location</th><th>Title</th></tr>
+          <tr><th>Rating</th><th>Price</th><th>vs Med</th><th title="Project fit 0-10: red/green phrases in the ad">Fit</th><th>Location</th><th>Title</th></tr>
         </thead>
         <tbody>{rows_html}</tbody>
       </table>{sold_html}

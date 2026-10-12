@@ -23,6 +23,7 @@ from pathlib import Path
 import click
 import yaml
 
+from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
@@ -118,6 +119,9 @@ def _alert_for(
     Price drops are keyed by the new price, so a listing already alerted on
     alerts again each time it drops into GOOD/DEAL territory.
     """
+    # red flags (no ownership, parts bike...) make a cheap price irrelevant
+    if listing.get("fit", FIT_NEUTRAL) < FIT_ALERT_MIN:
+        return None
     lid = f"{listing['source']}:{listing['external_id']}"
     rating = listing["rating"]
     if listing.get("price_drop_from") is not None and rating in ("DEAL", "GOOD"):
@@ -242,7 +246,8 @@ def list_cmd(model: str):
         click.echo(
             f"  [{source}] "
             f"{click.style(rating.ljust(7), fg=RATING_COLORS.get(rating, 'white'))} "
-            f"{delta_str.rjust(5)} vs median  {price_str}  {loc:<22}  {title}"
+            f"{delta_str.rjust(5)} vs median  {price_str}  fit {listing['fit']:>2}  "
+            f"{loc:<22}  {title}"
         )
         click.echo(f"           {listing['url']}")
 

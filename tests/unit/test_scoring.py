@@ -6,6 +6,7 @@ import pytest
 
 from dirtbike_tracker.domain.scoring import (
     market_stats,
+    project_fit,
     rate_listing,
     score_listings,
     trend,
@@ -169,3 +170,26 @@ def test_weekly_medians_gaps_and_junk_prices() -> None:
     weeks = weekly_medians([_timeline(3, 0, (3, 50)), _timeline(3, 0, (3, None))], NOW, weeks=2)
 
     assert [m for _, m in weeks] == [None, None]
+
+
+@pytest.mark.parametrize(
+    ("text", "fit", "flags"),
+    [
+        ("2007 ttr-125", 5, []),
+        ("CRF150F | Plated + Ownership | Runs Like New", 9, ["+ownership", "+runs like new"]),
+        ("No ownership, runs great", 4, ["-no ownership", "+runs great"]),
+        ("Seized engine, parts bike", 0, ["-parts bike", "-seized"]),
+        ("Doesn\u2019t run", 2, ["-doesn't run"]),  # curly apostrophe
+        ("Never raced, trail riding with my son this season", 9, ["+my son", "+trail"]),
+    ],
+)
+def test_project_fit(text: str, fit: int, flags: list[str]) -> None:
+    assert project_fit(text) == (fit, flags)
+
+
+def test_score_listings_reads_fit_from_title_and_description() -> None:
+    (listing,) = score_listings(
+        [{"price": 2000, "title": "CRF150F", "description": "no title, runs great"}], 2000
+    )
+
+    assert listing["fit"] == 4

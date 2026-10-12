@@ -50,6 +50,11 @@ listings, never queries.
 Ratings are price vs market median: **DEAL** ≤ -30%, **GOOD** ≤ -10%, **FAIR** ≤ +15%,
 **HIGH** above that. A listing under a model's `target_price` alerts regardless of market.
 
+**Fit** (0-10, neutral 5) is a separate score of whether the bike suits kids on trails, from
+phrases in the title/description: +2 per green flag (`ownership`, `runs great`, `trail`, ...),
+-3 per red flag (`no ownership`, `parts bike`, `seized`, `race bike`, ...). Lists live in
+`domain/scoring.py`. A listing with fit below 5 never alerts, however cheap.
+
 Layout is hexagonal (`src/dirtbike_tracker/{domain,infrastructure,application}`). See
 [docs/architecture.md](docs/architecture.md) for modules, data model, dedup and scoring.
 
