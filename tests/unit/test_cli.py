@@ -197,3 +197,21 @@ def test_watch_alerts_price_drop_on_already_notified_listing_once(
     assert first.exit_code == 0, first.output
     assert alerted == ["1400 was 1800.0"]
     assert "drop:kijiji:1400:1400" in stub_watch[0]
+
+
+def test_dismiss_unknown_listing_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_module, "set_dismissed", lambda ref, dismissed: [])
+
+    result = CliRunner().invoke(cli, ["dismiss", "nope"])
+
+    assert result.exit_code == 1
+    assert "No listing matches 'nope'" in result.output
+
+
+def test_undismiss_reports_restored(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_module, "set_dismissed", lambda ref, dismissed: ["2008 KLX140"])
+
+    result = CliRunner().invoke(cli, ["undismiss", "1700000001"])
+
+    assert result.exit_code == 0
+    assert "Restored: 2008 KLX140" in result.output

@@ -35,7 +35,7 @@ from ..infrastructure.notifier import (
     ping_healthcheck,
 )
 from ..infrastructure.reporter import render_report, write_report
-from ..infrastructure.storage import init_db, mark_stale, upsert_listings
+from ..infrastructure.storage import init_db, mark_stale, set_dismissed, upsert_listings
 from .market import snapshot
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -389,6 +389,30 @@ def backup(slot: str):
             )
         raise SystemExit(1) from exc
     click.echo(f"Backup OK ({slot}): {rows} listings, {size} bytes")
+
+
+@cli.command()
+@click.argument("ref")
+def dismiss(ref: str):
+    """Hide a listing (Kijiji/AutoTrader URL or external id) from alerts and the dashboard."""
+    _set_dismissed(ref, dismissed=True)
+
+
+@cli.command()
+@click.argument("ref")
+def undismiss(ref: str):
+    """Reverse `dismiss`."""
+    _set_dismissed(ref, dismissed=False)
+
+
+def _set_dismissed(ref: str, dismissed: bool) -> None:
+    titles = set_dismissed(ref, dismissed)
+    if not titles:
+        click.echo(f"No listing matches {ref!r}")
+        raise SystemExit(1)
+    verb = "Dismissed" if dismissed else "Restored"
+    for title in titles:
+        click.echo(f"{verb}: {title}")
 
 
 @cli.command()

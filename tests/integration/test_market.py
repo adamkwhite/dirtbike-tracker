@@ -3,6 +3,8 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from dirtbike_tracker.application.market import snapshot
 from dirtbike_tracker.infrastructure.kijiji_scraper import Listing
 from dirtbike_tracker.infrastructure.storage import (
@@ -10,6 +12,7 @@ from dirtbike_tracker.infrastructure.storage import (
     connect,
     init_db,
     mark_stale,
+    set_dismissed,
     sold_listings,
     upsert_listings,
 )
@@ -208,3 +211,62 @@ def test_price_drops_from_history_feed_snapshot(tmp_path: Path) -> None:
     assert by_id["dropped"]["price_drop_from"] == 3000
     assert by_id["raised"]["price_drop_from"] is None
     assert by_id["steady"]["price_drop_from"] is None
+
+
+def _listing(source: str, ext_id: str, url: str, price: float) -> Listing:
+    return Listing(
+        source=source,
+        external_id=ext_id,
+        url=url,
+        title=ext_id,
+        price=price,
+        price_state="numeric",
+        location="",
+        posted_text="",
+        description="",
+        model_slugs=["crf150f"],
+        scraped_at="",
+    )
+
+
+@pytest.mark.parametrize(
+    "ref",
+    [
+        "1743797617",
+        "https://www.kijiji.ca/v-sport-other/oakville/yamaha-plastics/1743797617?utm=x",
+    ],
+)
+def test_dismiss_hides_listing_but_keeps_market_and_survives_rescrape(
+    tmp_path: Path, ref: str
+) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    kij = _listing(
+        "kijiji",
+        "1743797617",
+        "https://www.kijiji.ca/v-sport-other/oakville/yamaha-plastics/1743797617",
+        2000,
+    )
+    other = _listing("kijiji", "1700000001", "https://x/1700000001", 3000)
+    upsert_listings([kij, other], db_path=db)
+
+    assert set_dismissed(ref, True, db_path=db) == ["1743797617"]
+    upsert_listings([kij, other], db_path=db)  # seen again by the next scrape
+
+    snap = snapshot("crf150f", db_path=db)
+    assert [s["external_id"] for s in snap.listings] == ["1700000001"]
+    assert snap.stats["count"] == 2  # still market data
+
+    assert set_dismissed(ref, False, db_path=db) == ["1743797617"]
+    assert len(snapshot("crf150f", db_path=db).listings) == 2
+
+
+def test_dismiss_by_autotrader_url_and_unknown_ref(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    uuid = "a5332962-fd58-4cd1-b003-3ca4229eba2d"
+    at_url = f"https://www.autotrader.ca/motorcycles-atvs/offers/kawasaki-klx-140-oem-{uuid}"
+    upsert_listings([_listing("autotrader", uuid, at_url, 2000)], db_path=db)
+
+    assert set_dismissed(at_url, True, db_path=db) == [uuid]
+    assert set_dismissed("https://www.kijiji.ca/v-x/y/999", True, db_path=db) == []
