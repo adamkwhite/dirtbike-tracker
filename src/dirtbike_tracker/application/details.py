@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from ..domain.scoring import needs_detail
-from ..infrastructure.storage import DB_PATH, save_full_description
+from ..infrastructure.storage import save_full_description
 
 AdDetailFetcher = Callable[[str], str | None]  # ad url -> description, None if the fetch failed
 
@@ -20,7 +20,7 @@ def fetch_details(
     listings: list[dict],
     target_price: float | None,
     fetchers: Mapping[str, AdDetailFetcher],
-    db_path: Path = DB_PATH,
+    db_path: Path | None = None,  # None = storage.DB_PATH at call time
 ) -> int:
     """Fetch and store full descriptions for listings that need one. Returns how many were saved.
 

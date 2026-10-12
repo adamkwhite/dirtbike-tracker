@@ -10,8 +10,8 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 - `infrastructure/` - scrapers, DB, notifier, dashboard
 - `application/cli.py` - orchestration via click
 
-## Known tech debt
-- Untested: scraper HTTP/pagination (`scrape_model`), storage writes (`upsert_listings`, `mark_stale`), ntfy message formatting. See issues tagged `area:testing`
+## Tests
+- `tests/e2e/test_watch_e2e.py` runs `watch` end to end, faking only `requests.get`/`requests.post` (canned pages by URL) and `time.sleep`, against SQLite in `tmp_path`. Extend it when changing the watch flow
 
 ## Common commands
 - `dirtbike watch` - scrape all models, score, notify
@@ -19,7 +19,7 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 - `dirtbike stats --model crf150f` - market summary
 
 ## Conventions
-- Tests must not touch `data/`: it is shared with prod. `cli()` runs `init_db()`, so `tests/unit/conftest.py` stubs it; stub `DETAIL_FETCHERS` in any test that runs `watch` (else it hits Kijiji)
+- Tests must not touch `data/`: it is shared with prod. `tests/conftest.py` fails any test that opens `data/listings.db`, reads included. Never bind `DB_PATH` as a default argument (it's captured at import, so tests can't redirect it): default `db_path` to `None` and let `storage.connect` resolve it. `tests/unit/conftest.py` stubs `init_db`; stub `DETAIL_FETCHERS` in any unit test that runs `watch` (else it hits Kijiji)
 - Python 3.13, mypy strict, ruff + bandit via pre-commit
 - Model slugs listed in `src/dirtbike_tracker/infrastructure/kijiji_scraper.py:KNOWN_MODEL_SLUGS`
 - Cron runs every 20 min from the prod clone `~/Code/dirtbike-tracker-prod` (always `main`), installed via its `scripts/install_cron.sh`. Deploy = `git -C ~/Code/dirtbike-tracker-prod pull --ff-only`. `data/` and `dashboard.html` there are symlinks into this repo
