@@ -102,6 +102,24 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 
 Logs go to `~/Code/dirtbike-tracker-prod/logs/watch.log` (timestamped if `moreutils` is installed).
 
+### Backups
+
+Cron runs `dirtbike backup` nightly at 23:55 (and `--slot weekly` on Sundays): a consistent
+SQLite snapshot plus `data/state/`, uploaded to Google Drive via job-agent's `jobbackup` rclone
+remote as `dirtbike-tracker-backups/{nightly,weekly}.tar.gz`. It refuses to upload a 0-row
+snapshot, verifies the remote size, and pushes an ntfy alert on failure. Log: `logs/backup.log`.
+
+```bash
+# restore (run between cron ticks)
+mkdir -p ~/dirtbike-restore
+rclone cat jobbackup:dirtbike-tracker-backups/nightly.tar.gz | tar -xzf - -C ~/dirtbike-restore
+python -c "import sqlite3, os; print(sqlite3.connect(os.path.expanduser('~/dirtbike-restore/listings.db')).execute('SELECT COUNT(*) FROM listings').fetchone())"
+cp ~/dirtbike-restore/listings.db ~/Code/dirtbike-tracker/data/listings.db
+cp ~/dirtbike-restore/state/* ~/Code/dirtbike-tracker/data/state/
+```
+
+Check the row count, not `PRAGMA quick_check`: quick_check passes on an empty file.
+
 ## Requirements
 
 - Python 3.13+
