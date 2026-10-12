@@ -59,3 +59,13 @@ def test_dashboard_shows_recently_sold(snap: MarketSnapshot) -> None:
     assert "$3600" in page
     assert "12d" in page
     assert "2026-10-09" in page
+
+
+def test_dashboard_weekly_chart_needs_two_weeks(snap: MarketSnapshot) -> None:
+    snap.weekly = [("2026-09-28", None), ("2026-10-05", 3100.0)]
+    assert "Weekly median chart appears once" in render_dashboard([snap])
+
+    snap.weekly = [("2026-09-28", 3000.0), ("2026-10-05", 3100.0)]
+    page = render_dashboard([snap])
+    assert 'id="trend-crf150f"' in page
+    assert '"data": [3000.0, 3100.0]' in page

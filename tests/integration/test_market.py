@@ -158,3 +158,21 @@ def test_age_prefers_source_post_date_and_backfills_existing_rows(tmp_path: Path
     ages = {r["external_id"]: r["age_days"] for r in active_listings("crf150f", db_path=db)}
     assert round(ages["old-post"]) == 20
     assert round(ages["no-post-date"]) == 3
+
+
+def test_snapshot_weekly_starts_from_source_post_date(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "posted-long-ago", 2500, days_ago=0)
+    with connect(db) as conn:
+        conn.execute(
+            "INSERT INTO price_history (listing_id, price, observed_at) SELECT id, price, first_seen FROM listings"
+        )
+        posted = (datetime.now(UTC) - timedelta(days=20)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        conn.execute("UPDATE listings SET posted_text=?", (posted,))
+
+    weekly = snapshot("crf150f", db_path=db).weekly
+
+    assert len(weekly) == 13
+    assert [m for _, m in weekly[-3:]] == [2500, 2500, 2500]
+    assert weekly[0][1] is None

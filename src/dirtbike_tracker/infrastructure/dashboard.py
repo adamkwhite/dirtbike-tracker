@@ -117,6 +117,17 @@ def _model_section(snap: MarketSnapshot) -> str:
         <tbody>{sold_rows}</tbody>
       </table>"""
 
+    # Weekly market median (line). Needs 2+ weeks with data to say anything.
+    trend_id = f"trend-{slug}"
+    weekly = [(week, val) for week, val in snap.weekly]
+    if sum(val is not None for _, val in weekly) >= 2:
+        weekly_html = f'<div class="chart-wrap"><canvas id="{trend_id}" height="50"></canvas></div>'
+    else:
+        weekly_html = '<p class="muted">Weekly median chart appears once 2+ weeks have prices.</p>'
+    weekly_data = json.dumps(
+        {"labels": [week[5:] for week, _ in weekly], "data": [val for _, val in weekly]}
+    )
+
     # Histogram data for Chart.js
     centers, counts = _histogram(prices, bins=10)
     chart_id = f"chart-{slug}"
@@ -131,6 +142,9 @@ def _model_section(snap: MarketSnapshot) -> str:
     <section class="model" id="{slug}">
       <h2>{slug.upper()}</h2>
       <div class="tiles">{tiles}</div>
+      <h3>Median by week</h3>
+      {weekly_html}
+      <h3>Price distribution (90d)</h3>
       <div class="chart-wrap"><canvas id="{chart_id}" height="80"></canvas></div>
       <table>
         <thead>
@@ -139,6 +153,31 @@ def _model_section(snap: MarketSnapshot) -> str:
         <tbody>{rows_html}</tbody>
       </table>{sold_html}
       <script>
+        (function() {{
+          const el = document.getElementById('{trend_id}');
+          if (!el) return;
+          const weekly = {weekly_data};
+          new Chart(el, {{
+            type: 'line',
+            data: {{
+              labels: weekly.labels,
+              datasets: [{{
+                data: weekly.data,
+                borderColor: '#06b6d4',
+                pointRadius: 2,
+                spanGaps: true,
+                tension: 0.2,
+              }}],
+            }},
+            options: {{
+              plugins: {{ legend: {{ display: false }} }},
+              scales: {{
+                x: {{ grid: {{ display: false }}, ticks: {{ color: '#9ca3af', font: {{ size: 10 }} }} }},
+                y: {{ grid: {{ color: '#1f2937' }}, ticks: {{ color: '#9ca3af', callback: (v) => '$' + v }} }},
+              }},
+            }},
+          }});
+        }})();
         (function() {{
           const data = {chart_data};
           if (data.data.length === 0) return;

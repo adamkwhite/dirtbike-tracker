@@ -310,3 +310,40 @@ def sold_listings(
             (model_slug, cutoff, limit),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def price_timelines(model_slug: str, days: int = 91, db_path: Path = DB_PATH) -> list[dict]:
+    """On-market span and price observations per primary listing seen in the last N days.
+
+    start = source post date (Kijiji activationDate) when known, else first_seen.
+    SQLite datetime() normalizes both formats to naive UTC.
+    """
+    cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).isoformat()
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT l.id,
+                   datetime(COALESCE(NULLIF(l.posted_text, ''), l.first_seen)) AS start,
+                   datetime(l.last_seen) AS end,
+                   datetime(h.observed_at) AS at,
+                   h.price
+            FROM listings l
+            JOIN listing_models m ON m.listing_id = l.id
+            JOIN price_history h ON h.listing_id = l.id
+            WHERE m.model_slug=? AND l.is_primary=1 AND l.last_seen >= ?
+            ORDER BY l.id, h.observed_at
+            """,
+            (model_slug, cutoff),
+        ).fetchall()
+    timelines: dict[int, dict] = {}
+    for r in rows:
+        t = timelines.setdefault(
+            r["id"],
+            {
+                "start": datetime.fromisoformat(r["start"]),
+                "end": datetime.fromisoformat(r["end"]),
+                "history": [],
+            },
+        )
+        t["history"].append((datetime.fromisoformat(r["at"]), r["price"]))
+    return list(timelines.values())

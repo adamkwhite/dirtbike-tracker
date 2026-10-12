@@ -7,6 +7,7 @@ fetched by infrastructure/storage.py and composed in application/market.py.
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from statistics import median
 
 RATING_DEAL = -0.30
@@ -27,6 +28,7 @@ class MarketSnapshot:
     trend: float | None
     prices: list[float]
     sold: list[dict] = field(default_factory=list)  # likely-sold, most recent first
+    weekly: list[tuple[str, float | None]] = field(default_factory=list)  # (week start, median)
 
 
 def market_stats(prices: list[float]) -> dict:
@@ -86,3 +88,32 @@ def score_listings(listings: list[dict], median_price: float | None) -> list[dic
         scored.append(rated)
     scored.sort(key=lambda x: (x["delta_pct"] is None, x["delta_pct"] or 0))
     return scored
+
+
+def weekly_medians(
+    timelines: list[dict], now: datetime, weeks: int = 13
+) -> list[tuple[str, float | None]]:
+    """Market median for each of the last `weeks` 7-day windows, oldest first.
+
+    timelines: {"start", "end": datetime, "history": [(datetime, price), ...] ascending}.
+    A listing counts in a window if it was on the market at any point in it, at its
+    latest price by the window's end. Windows with no priced listings are None.
+    """
+    out: list[tuple[str, float | None]] = []
+    for i in range(weeks - 1, -1, -1):
+        w_end = now - timedelta(days=7 * i)
+        w_start = w_end - timedelta(days=7)
+        prices = [p for t in timelines if (p := _price_in_window(t, w_start, w_end))]
+        out.append((w_start.date().isoformat(), median(prices) if prices else None))
+    return out
+
+
+def _price_in_window(t: dict, w_start: datetime, w_end: datetime) -> float | None:
+    """A listing's price as of w_end if it was on the market in the window, else None."""
+    if t["start"] > w_end or t["end"] < w_start or not t["history"]:
+        return None
+    known = [p for at, p in t["history"] if at <= w_end]
+    # ponytail: before our first observation, assume the first price we saw.
+    # Kijiji post dates reach back months; without this the chart starts empty.
+    price = known[-1] if known else t["history"][0][1]
+    return price if price and price > 100 else None
