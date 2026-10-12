@@ -2,58 +2,23 @@
 
 ## System overview
 
-```
-                           ┌─────────────┐
-                           │  cron       │ every 20 min
-                           │  (watch)    │
-                           └──────┬──────┘
-                                  │
-                                  ▼
-┌─────────────┐   ┌─────────────────────────────┐   ┌──────────────┐
-│ models.yml  │──▶│         main.py             │──▶│  ntfy.sh     │
-│ (config)    │   │   watch / scrape / report   │   │  (push)      │
-└─────────────┘   └─────────────────────────────┘   └──────┬───────┘
-                        │          │                       │
-                        ▼          ▼                       ▼
-         ┌──────────────────┐  ┌──────────────────┐  ┌────────────┐
-         │ scraper.py       │  │ storage.py       │  │ Your phone │
-         │ (kijiji)         │  │ (SQLite +        │  └────────────┘
-         │                  │  │  dedup + multi-  │
-         │ autotrader_      │  │  model tags)     │
-         │ scraper.py       │  │                  │
-         └──────────────────┘  └────────┬─────────┘
-                                        │
-                                        ▼
-                               ┌──────────────────┐
-                               │ scorer.py        │
-                               │ (median + rating)│
-                               └────────┬─────────┘
-                                        │
-                                        ▼
-                               ┌──────────────────┐
-                               │ reporter.py      │
-                               │ (markdown out)   │
-                               └──────────────────┘
+The layer diagram lives in the [README](../README.md#how-it-works) (Mermaid) so there is
+one copy to keep current. Dependency rule: `application` → {`domain`, `infrastructure`},
+`infrastructure` → `domain`, and `domain` imports nothing from either.
 
-                       ┌──────────────────┐
-                       │ extractor.py     │  (optional)
-                       │ regex or LLM     │
-                       │ year/hours/etc   │
-                       └──────────────────┘
-```
+## Modules
 
-## Module responsibilities
-
-| Module | Lines | Responsibility |
+| Layer | Module | Responsibility |
 |---|---|---|
-| `scraper.py` | ~250 | Kijiji HTML fetch + parse + model detection |
-| `autotrader_scraper.py` | ~130 | AutoTrader keyword search (secondary source) |
-| `storage.py` | ~220 | SQLite schema, upsert, dedup via fingerprint, multi-model tagging |
-| `scorer.py` | ~90 | Market median + deal rating (DEAL/GOOD/FAIR/HIGH) |
-| `reporter.py` | ~70 | Markdown snapshot per model |
-| `notifier.py` | ~90 | ntfy.sh HTTP push |
-| `extractor.py` | ~130 | Regex + optional LLM extraction of structured facts |
-| `main.py` | ~240 | CLI (click) with scrape/list/stats/report/watch commands |
+| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `models`); orchestrates scrape → upsert → score → notify; source-health check, healthcheck ping |
+| application | `market.py` | `snapshot(slug)`: reads prices + active listings from storage, scores them, returns a `MarketSnapshot` |
+| domain | `scoring.py` | Pure: `market_stats`, `rate_listing`, `score_listings`, `trend`, `MarketSnapshot` |
+| infrastructure | `kijiji_scraper.py` | Kijiji search fetch, HTML card parsing, model detection; skips `vehicletype=new` ads via `__NEXT_DATA__` |
+| infrastructure | `autotrader_scraper.py` | AutoTrader keyword search; parses `__NEXT_DATA__` listings, skips `offerType=N` |
+| infrastructure | `storage.py` | SQLite schema, upsert, fingerprint dedup, multi-model tagging, `market_prices` |
+| infrastructure | `notifier.py` | ntfy.sh push (DEAL/GOOD/target, source-health warnings), healthchecks.io ping |
+| infrastructure | `dashboard.py`, `reporter.py` | Render a `MarketSnapshot` to HTML / markdown |
+| infrastructure | `extraction.py` | Regex + optional LLM fact extraction (year, hours, needs). Not yet wired into the pipeline |
 
 ## Data model
 
@@ -81,10 +46,12 @@ Fingerprint is MD5 of a normalized key, truncated to 16 chars. Price is bucketed
 
 ## Scoring
 
-- Market median computed from distinct prices in last 90 days, primary listings only
+- Market = one price per **primary** listing, price > $100, first seen in the last 90 days (active or not, so sold listings still count as market data)
+- New-vehicle dealer stock never reaches the DB (filtered at scrape time), so the median is a used-market price, not MSRP
 - Delta vs median: `(price - median) / median`
 - Thresholds: DEAL ≤ -30%, GOOD ≤ -10%, FAIR ≤ +15%, HIGH > +15%
-- Trend: median of last 30d vs median of 30-90d ago
+- A listing at or below the model's `target_price` alerts regardless of rating
+- Trend: median of listings first seen in the last 30 days vs those first seen 30-90 days ago (split by date)
 
 ## Scaling notes
 
@@ -101,6 +68,12 @@ See `docs/fb_marketplace_notes.md`. Short version: requires authenticated sessio
 
 ## Deployment
 
-Local Ubuntu/WSL under cron. Logs go to `logs/`. State (notified IDs) lives in `data/state/`. DB in `data/listings.db`. All paths relative to project root for portability.
+Local Ubuntu/WSL under cron, running from a separate prod clone (`~/Code/dirtbike-tracker-prod`, always `main`) so a feature branch in the dev checkout never goes live. Deploy = `git pull --ff-only` in the prod clone. Setup steps: README "Cron".
 
-To migrate to another machine: copy the whole directory, re-run `install_cron.sh`.
+- `data/` (SQLite DB `listings.db`, `state/notified_ids.txt`, `state/source_health.json`) and `dashboard.html` are symlinks from the prod clone into the dev repo
+- Logs: `logs/watch.log` and `logs/report.log` in the prod clone
+- `NTFY_TOPIC` and `HEALTHCHECK_URL` are set only on the crontab line, never in the repo
+
+Failure alerting:
+- **A scraper silently breaks:** `watch` pushes an ntfy warning when a source returns 0 listings across every model for 24h
+- **`watch` stops running:** healthchecks.io alerts when the per-run ping stops (schedule `*/20 6-23 * * *`, America/Toronto)

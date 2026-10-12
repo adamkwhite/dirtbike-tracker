@@ -6,20 +6,52 @@ market median, and pushes DEAL/GOOD/target-price alerts to your phone via [ntfy]
 
 ## How it works
 
+```mermaid
+flowchart TB
+    cron(["cron, every 20 min (prod clone)"]) --> cli
+    config[/"config/models.yml"/] --> cli
+
+    subgraph application
+        cli["cli.py<br/>watch · list · stats · report · dashboard"]
+        market["market.py<br/>snapshot(slug)"]
+        cli --> market
+    end
+
+    subgraph domain
+        scoring["scoring.py<br/>median · rating · trend · MarketSnapshot<br/><i>pure, no I/O</i>"]
+    end
+
+    subgraph infrastructure
+        kij["kijiji_scraper.py"]
+        at["autotrader_scraper.py"]
+        storage[("storage.py<br/>SQLite")]
+        render["dashboard.py<br/>reporter.py"]
+        notifier["notifier.py"]
+    end
+
+    market -->|score| scoring
+    market -->|read prices + listings| storage
+    cli -->|scrape| kij & at
+    cli -->|upsert| storage
+    cli -->|render snapshot| render
+    cli -->|DEAL / GOOD / target| notifier
+
+    kijiji{{Kijiji}} --> kij
+    autotrader{{AutoTrader}} --> at
+    notifier --> ntfy{{"ntfy.sh → phone"}}
+    notifier --> hc{{healthchecks.io}}
 ```
-cron (every 20 min) → dirtbike watch
-  ├─ scrape    Kijiji + AutoTrader     infrastructure/*_scraper.py
-  ├─ store     SQLite, dedup, tagging  infrastructure/storage.py → data/listings.db
-  ├─ score     median + rating         domain/scoring.py
-  ├─ notify    ntfy push               infrastructure/notifier.py
-  └─ render    HTML dashboard          infrastructure/dashboard.py → dashboard.html
-```
+
+Every 20 minutes `watch` scrapes each model in `config/models.yml`, upserts listings into
+SQLite, scores them against the market via `snapshot()`, alerts on new DEAL/GOOD/target
+listings, and rebuilds `dashboard.html`. The domain layer is pure: it receives prices and
+listings, never queries.
 
 Ratings are price vs market median: **DEAL** ≤ -30%, **GOOD** ≤ -10%, **FAIR** ≤ +15%,
 **HIGH** above that. A listing under a model's `target_price` alerts regardless of market.
 
 Layout is hexagonal (`src/dirtbike_tracker/{domain,infrastructure,application}`). See
-[docs/architecture.md](docs/architecture.md) for the data model.
+[docs/architecture.md](docs/architecture.md) for modules, data model, dedup and scoring.
 
 ## Usage
 
