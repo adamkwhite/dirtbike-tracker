@@ -146,3 +146,54 @@ def test_open_in_browser_uses_webbrowser_elsewhere(monkeypatch: pytest.MonkeyPat
     cli_module._open_in_browser(Path("/home/u/d.html"))
 
     assert opened == ["file:///home/u/d.html"]
+
+
+def _rated(rating: str, price: float = 2000, drop_from: float | None = None) -> dict:
+    return {
+        "source": "kijiji",
+        "external_id": "9",
+        "rating": rating,
+        "price": price,
+        "price_drop_from": drop_from,
+    }
+
+
+@pytest.mark.parametrize(
+    ("listing", "target", "expected"),
+    [
+        (_rated("GOOD", drop_from=2400), None, ("notify_good", "drop:kijiji:9:2000", "drops")),
+        (_rated("DEAL", drop_from=2400), None, ("notify_deal", "drop:kijiji:9:2000", "drops")),
+        (_rated("DEAL"), None, ("notify_deal", "kijiji:9", "deals")),
+        (_rated("FAIR"), 2500, ("notify_deal", "kijiji:9", "target_hits")),
+        (_rated("GOOD"), None, ("notify_good", "kijiji:9", "goods")),
+        (_rated("FAIR", drop_from=2400), None, None),  # dropped, still not a deal
+        (_rated("UNKNOWN", price=50), 1500, None),
+    ],
+)
+def test_alert_for(listing: dict, target: float | None, expected: tuple | None) -> None:
+    choice = cli_module._alert_for(listing, target)
+
+    got = None if choice is None else (choice[0].__name__, choice[1], choice[2])
+    assert got == expected
+
+
+def test_watch_alerts_price_drop_on_already_notified_listing_once(
+    stub_watch: list[set], snap: MarketSnapshot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snap.listings = [{**snap.listings[0], "price_drop_from": 1800.0}]  # DEAL at 1400
+    monkeypatch.setattr(cli_module, "_notified_ids", lambda: {"kijiji:1400"})
+    alerted: list[str] = []
+
+    def fake_notify_deal(listing: dict) -> bool:
+        alerted.append(f"{listing['external_id']} was {listing['price_drop_from']}")
+        return True
+
+    monkeypatch.setattr(cli_module, "notify_deal", fake_notify_deal)
+
+    first = CliRunner().invoke(cli, ["watch"])
+    monkeypatch.setattr(cli_module, "_notified_ids", lambda: stub_watch[0])
+    CliRunner().invoke(cli, ["watch"])
+
+    assert first.exit_code == 0, first.output
+    assert alerted == ["1400 was 1800.0"]
+    assert "drop:kijiji:1400:1400" in stub_watch[0]

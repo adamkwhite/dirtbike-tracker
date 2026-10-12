@@ -62,6 +62,14 @@ def notify(
         return True
 
 
+def _drop_prefix(listing: dict) -> tuple[str, str]:
+    """("PRICE DROP: ", "Was $X. ") for a listing that just dropped, else empty strings."""
+    was = listing.get("price_drop_from")
+    if was is None:
+        return "", ""
+    return "PRICE DROP: ", f"Was ${int(was)}. "
+
+
 def notify_deal(listing: dict) -> bool:
     """Send a push notification for a new DEAL-rated listing."""
     price = f"${int(listing['price'])}" if listing.get("price") else "?"
@@ -71,8 +79,9 @@ def notify_deal(listing: dict) -> bool:
     location = listing.get("location") or "unknown"
 
     urgent = listing.get("urgency") == "URGENT"
-    title = f"{'URGENT DEAL' if urgent else 'DEAL'}: {model.upper()} {price}{delta_str}"
-    body = f"{listing.get('title', '')}\n{location}\n{listing.get('url', '')}"
+    prefix, was = _drop_prefix(listing)
+    title = f"{prefix}{'URGENT DEAL' if urgent else 'DEAL'}: {model.upper()} {price}{delta_str}"
+    body = f"{was}{listing.get('title', '')}\n{location}\n{listing.get('url', '')}"
 
     return notify(
         title=title,
@@ -91,16 +100,17 @@ def notify_good(listing: dict) -> bool:
     model = listing.get("model_slug") or "bike"
     location = listing.get("location") or "unknown"
 
-    body = f"{listing.get('title', '')}\n{location}\n{listing.get('url', '')}"
+    prefix, was = _drop_prefix(listing)
+    body = f"{was}{listing.get('title', '')}\n{location}\n{listing.get('url', '')}"
     negotiable = listing.get("urgency") == "NEGOTIABLE" and listing.get("price")
     if negotiable:
         # ponytail: flat 10% under asking, rounded to $50; tune once #22 sold data shows real discounts
         offer = round(listing["price"] * 0.9 / 50) * 50
         age = int(listing.get("age_days") or 0)
-        title = f"Negotiable: {model.upper()} {price}{delta_str}, listed {age}d"
+        title = f"{prefix}Negotiable: {model.upper()} {price}{delta_str}, listed {age}d"
         body = f"Listed {age} days. Try ~${offer}.\n{body}"
     else:
-        title = f"Good: {model.upper()} {price}{delta_str}"
+        title = f"{prefix}Good: {model.upper()} {price}{delta_str}"
 
     return notify(
         title=title,

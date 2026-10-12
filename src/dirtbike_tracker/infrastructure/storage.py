@@ -348,3 +348,26 @@ def price_timelines(model_slug: str, days: int = 91, db_path: Path = DB_PATH) ->
         )
         t["history"].append((datetime.fromisoformat(r["at"]), r["price"]))
     return list(timelines.values())
+
+
+def price_drops(model_slug: str, db_path: Path = DB_PATH) -> dict[int, float]:
+    """{listing id: previous price} for listings whose latest price is below the one before.
+
+    Read from price_history rather than flagged at upsert time, so a drop whose
+    alert failed to send is still visible (and retried) on the next run.
+    """
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT h.listing_id, h.prev FROM (
+                SELECT listing_id, price,
+                       LAG(price) OVER (PARTITION BY listing_id ORDER BY observed_at) AS prev,
+                       ROW_NUMBER() OVER (PARTITION BY listing_id ORDER BY observed_at DESC) AS rn
+                FROM price_history
+            ) h
+            JOIN listing_models m ON m.listing_id = h.listing_id
+            WHERE m.model_slug=? AND h.rn=1 AND h.prev IS NOT NULL AND h.price < h.prev
+            """,
+            (model_slug,),
+        ).fetchall()
+    return {r["listing_id"]: r["prev"] for r in rows}

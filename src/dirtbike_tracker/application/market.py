@@ -8,6 +8,7 @@ from ..infrastructure.storage import (
     DB_PATH,
     active_listings,
     market_prices,
+    price_drops,
     price_timelines,
     sold_listings,
 )
@@ -17,7 +18,11 @@ def snapshot(slug: str, db_path: Path = DB_PATH) -> MarketSnapshot:
     """Fetch a model's market from the DB and score it."""
     prices = market_prices(slug, days=90, db_path=db_path)
     stats = market_stats(prices)
-    listings = active_listings(slug, primary_only=True, db_path=db_path)
+    drops = price_drops(slug, db_path=db_path)
+    listings = [
+        {**listing, "price_drop_from": drops.get(listing["id"])}
+        for listing in active_listings(slug, primary_only=True, db_path=db_path)
+    ]
     return MarketSnapshot(
         slug=slug,
         stats=stats,
