@@ -11,6 +11,9 @@ Usage:
 """
 
 import contextlib
+import json
+from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import click
@@ -19,7 +22,7 @@ import yaml
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.dashboard import write_dashboard
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
-from ..infrastructure.notifier import NotifyConfigError, notify_deal, notify_good
+from ..infrastructure.notifier import NotifyConfigError, notify, notify_deal, notify_good
 from ..infrastructure.reporter import render_report, write_report
 from ..infrastructure.storage import init_db, mark_stale, upsert_listings
 from .market import snapshot
@@ -70,6 +73,56 @@ def _record_notified(ids: set) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     path = STATE_DIR / "notified_ids.txt"
     path.write_text("\n".join(sorted(ids)))
+
+
+STALE_SOURCE_AFTER = timedelta(hours=24)
+
+
+def _stale_sources(health: dict, counts: Counter, now: datetime) -> list[str]:
+    """Update per-source health in place; return sources due a 'no results' alert.
+
+    A source is stale when it has returned 0 listings across every model for
+    STALE_SOURCE_AFTER. Alerts repeat at most once per STALE_SOURCE_AFTER.
+    """
+    due = []
+    for source, n in counts.items():
+        h = health.setdefault(source, {"last_ok": now.isoformat(), "last_alert": None})
+        if n:
+            h["last_ok"], h["last_alert"] = now.isoformat(), None
+            continue
+        quiet_for = now - datetime.fromisoformat(h["last_ok"])
+        last_alert = h["last_alert"] and datetime.fromisoformat(h["last_alert"])
+        if quiet_for >= STALE_SOURCE_AFTER and (
+            not last_alert or now - last_alert >= STALE_SOURCE_AFTER
+        ):
+            h["last_alert"] = now.isoformat()
+            due.append(source)
+    return due
+
+
+def _check_source_health(counts: Counter, notify_enabled: bool) -> None:
+    """Persist source health and alert on scrapers that have gone quiet."""
+    path = STATE_DIR / "source_health.json"
+    health = json.loads(path.read_text()) if path.exists() else {}
+    stale = _stale_sources(health, counts, datetime.now(UTC))
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(health, indent=1))
+
+    for source in stale:
+        since = health[source]["last_ok"][:16].replace("T", " ")
+        click.echo(f"  WARNING: {source} returned 0 listings for every model since {since} UTC")
+        if notify_enabled:
+            with contextlib.suppress(NotifyConfigError):
+                notify(
+                    title=f"{source} scraper returned nothing for 24h",
+                    body=(
+                        f"0 listings across all models since {since} UTC. "
+                        f"Likely the site's markup or search URL changed: "
+                        f"check infrastructure/{source}_scraper.py."
+                    ),
+                    priority=4,
+                    tags=["warning"],
+                )
 
 
 @click.group()
@@ -186,6 +239,7 @@ def watch(region: str, notify: bool, group: str):
 
     click.echo(f"Watching {len(all_targets)} models from groups: {', '.join(groups)}")
     already_notified = _notified_ids()
+    source_counts: Counter = Counter()
     newly_notified = set()
     totals = {"new": 0, "updated": 0, "deals": 0, "goods": 0, "target_hits": 0}
 
@@ -196,6 +250,7 @@ def watch(region: str, notify: bool, group: str):
             stats = upsert_listings(listings)
             totals["new"] += stats["new"]
             totals["updated"] += stats["updated"]
+            source_counts[source] += len(listings)
 
         # Re-score after upsert
         scored = snapshot(slug).listings
@@ -234,6 +289,8 @@ def watch(region: str, notify: bool, group: str):
 
     mark_stale()
     _record_notified(already_notified | newly_notified)
+    if not group:  # a subset of models coming back empty doesn't mean a scraper broke
+        _check_source_health(source_counts, notify)
 
     # Refresh the dashboard with every watch run
     all_slugs = [t["slug"] for t in all_targets]
