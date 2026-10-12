@@ -267,7 +267,9 @@ def first_image(images: object) -> str | None:
 
     It lands in an <img src> and an ntfy Attach header, so third-party junk is dropped.
     """
-    url = images[0] if isinstance(images, list) and images else None
+    if not isinstance(images, list) or not images:
+        return None
+    url = images[0]
     if isinstance(url, str) and url.startswith("https://") and not any(c.isspace() for c in url):
         return url
     return None
@@ -275,6 +277,18 @@ def first_image(images: object) -> str | None:
 
 def _first(values: list) -> object:
     return values[0] if values else None
+
+
+def _form_facts(attrs: dict[str, list], this_year: int) -> dict:
+    """new / year / km from an ad's form fields, each only when known."""
+    facts: dict = {}
+    if "new" in attrs.get("vehicletype", []):
+        facts["new"] = True
+    if year := parse_year(_first(attrs.get("caryear", [])), this_year):
+        facts["year"] = year
+    if km := parse_km(_first(attrs.get("carmileageinkms", []))):
+        facts["km"] = km
+    return facts
 
 
 # Search-page descriptions are cut at ~200 chars and end like this; shorter ones are the whole ad.
@@ -302,17 +316,11 @@ def _ad_meta(soup: BeautifulSoup) -> dict[str, dict]:
     meta: dict[str, dict] = {}
     for ad in _iter_ads(data):
         facts = meta.setdefault(str(ad["id"]), {})
-        attrs = _attrs(ad)
-        if "new" in attrs.get("vehicletype", []):
-            facts["new"] = True
+        facts |= _form_facts(_attrs(ad), this_year)
         if isinstance(ad.get("activationDate"), str):
             facts["posted"] = ad["activationDate"]
         if isinstance(ad.get("description"), str) and ad["description"].strip():
             facts["description"] = ad["description"].strip()
-        if year := parse_year(_first(attrs.get("caryear", [])), this_year):
-            facts["year"] = year
-        if km := parse_km(_first(attrs.get("carmileageinkms", []))):
-            facts["km"] = km
         if image := first_image(ad.get("imageUrls")):
             facts["image"] = image
     return meta
