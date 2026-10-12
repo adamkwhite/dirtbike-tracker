@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test lint format typecheck clean security pre-commit all
+.PHONY: help install install-dev test lint format typecheck clean security pre-commit all record drift
 
 # Default target - show help
 help:
@@ -13,6 +13,8 @@ help:
 	@echo "  make pre-commit    - Run pre-commit hooks on all files"
 	@echo "  make clean         - Remove cache and build artifacts"
 	@echo "  make all           - Run lint, typecheck, and test"
+	@echo "  make record        - Record live Kijiji/AutoTrader pages into tests/recorded/ (gitignored)"
+	@echo "  make drift         - Re-record, then check the parsers still read them (#28)"
 
 # Install production dependencies
 install:
@@ -61,6 +63,14 @@ clean:
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf htmlcov/ .coverage coverage.xml test-report.html
 	rm -rf dist/ build/
+
+# Record real pages for the drift tests. Gitignored: third-party ads with personal info, public repo
+record:
+	python scripts/record_pages.py
+
+# Site-drift check: our parsers against freshly recorded live pages
+drift: record
+	pytest tests/drift -v --no-cov
 
 # Run all checks (lint, typecheck, test)
 all: lint typecheck test

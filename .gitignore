@@ -263,3 +263,6 @@ data/state/
 
 # Generated markdown reports (nightly cron)
 reports/
+
+# Real recorded pages for tests/drift (#28): third-party ads with personal info, never commit
+tests/recorded/
