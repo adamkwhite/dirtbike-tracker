@@ -43,6 +43,10 @@ RENDER_WAIT_MS = 6000
 _PRICE_RE = re.compile(r"^(?:CA)?\$\s?([\d,]+)$")
 _KM_RE = re.compile(r"^([\d.,]+)(K?) ?km$", re.I)  # "12K km", "12,000 km"
 _YEAR_RE = re.compile(r"\b(19[7-9]\d|20[0-3]\d)\b")
+_WANTED_RE = re.compile(r"\b(wanted|wtb|iso|looking for)\b", re.I)
+_BADGES = {"just listed", "sold", "pending"}  # card status lines, not the title
+# FB requires a price, so "no price" ads use one of these (1 and 123 are under MIN_BIKE_PRICE)
+_PLACEHOLDER_PRICES = {1234, 12345, 123456}
 
 Fetch = Callable[[str], str]  # search url -> rendered html
 
@@ -64,15 +68,27 @@ def _card_to_listing(
 ) -> Listing | None:
     """A card's text lines are: price, [previous price], title, location, [mileage]."""
     prices = [int(m.group(1).replace(",", "")) for line in lines if (m := _PRICE_RE.match(line))]
-    rest = [line for line in lines if not _PRICE_RE.match(line) and line.lower() != "free"]
+    prices = [p for p in prices if p not in _PLACEHOLDER_PRICES]
+    rest = [
+        line
+        for line in lines
+        if not _PRICE_RE.match(line) and line.lower() not in {"free", *_BADGES}
+    ]
     if not rest:
         return None
     title, location = rest[0], (rest[1] if len(rest) > 1 else "")
-    # FB's search already matched the model, so keep vague titles ("2003 Honda crf");
-    # drop only those naming a different model we know.
-    slugs = model_slugs_for(title, model_slug) or (
-        [] if detect_models_in_title(title) else [model_slug]
+    # Kijiji and AutoTrader are Ontario-only; FB's radius reaches into New York
+    if _WANTED_RE.search(title) or (location and not location.endswith(", ON")):
+        return None
+    # FB's search already matched the model, so keep vague titles ("2003 Honda crf")
+    # that still name its family; drop those naming a different model we know.
+    family = re.match(r"[a-z]+", model_slug)
+    vague_ok = (
+        not detect_models_in_title(title)
+        and family is not None
+        and re.search(rf"\b{family.group()}", title.lower().replace("-", "")) is not None
     )
+    slugs = model_slugs_for(title, model_slug) or ([model_slug] if vague_ok else [])
     if not slugs:
         return None
     year_match = _YEAR_RE.search(title)

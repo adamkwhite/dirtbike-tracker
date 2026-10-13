@@ -49,6 +49,22 @@ def test_parses_cards_keeping_vague_titles_and_dropping_other_models() -> None:
     assert (listings["444"].price, listings["444"].price_state) == (None, "unknown")
 
 
+def test_drops_junk_that_kijiji_filters_would_catch() -> None:
+    page = (
+        _card("1", "CA$700", "2008 Loncin 125cc", "Mississauga, ON")  # not the model's family
+        + _card("2", "CA$1,900", "2006 Honda crf70f", "Toronto, ON")  # a different model
+        + _card("3", "CA$1,234", "WANTED Honda CRF100F Parts Bike", "Vaughan, ON")
+        + _card("4", "CA$2,100", "2019 crf 100f", "Oakfield, NY")  # out of province
+        + _card("5", "CA$1,234", "2023 Honda crf", "West Lincoln, ON")  # placeholder price
+        + _card("6", "CA$3,500", "Just listed", "2008 crf100f", "Essa, ON")  # status badge
+    )
+    listings = {x.external_id: x for x in parse_listings(page, "crf100f")}
+
+    assert sorted(listings) == ["5", "6"]
+    assert (listings["5"].price, listings["5"].price_state) == (None, "unknown")
+    assert (listings["6"].title, listings["6"].location) == ("2008 crf100f", "Essa, ON")
+
+
 def test_search_url() -> None:
     assert build_search_url("rebel 500", city="toronto") == (
         "https://www.facebook.com/marketplace/toronto/search/?query=rebel%20500"
