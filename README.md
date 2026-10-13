@@ -28,6 +28,7 @@ flowchart TB
     subgraph infrastructure
         kij["kijiji_scraper.py"]
         at["autotrader_scraper.py"]
+        fb["fb_scraper.py<br/>Playwright, opt-in"]
         storage[("storage.py<br/>SQLite")]
         render["dashboard.py<br/>reporter.py"]
         notifier["notifier.py"]
@@ -37,13 +38,14 @@ flowchart TB
 
     market -->|score| scoring
     market -->|read via ListingStore| storage
-    watch -->|ListingSource| kij & at
+    watch -->|ListingSource| kij & at & fb
     watch -->|upsert via ListingStore| storage
     cli -->|render snapshot| render
     watch -->|DEAL / GOOD / target / price drop via Notifier| notifier
 
     kijiji{{Kijiji}} --> kij
     autotrader{{AutoTrader}} --> at
+    facebook{{"Facebook Marketplace"}} --> fb
     notifier --> ntfy{{"ntfy.sh → phone"}}
     notifier --> hc{{healthchecks.io}}
     cli -->|nightly| backup
@@ -107,6 +109,7 @@ dirtbike undismiss <url-or-id>
 dirtbike contact <url-or-id> --note "offered 750" [--on 2026-10-01]  # log messaging a seller (--clear to undo)
 dirtbike backup [--slot weekly]      # DB + state to Google Drive (see Backups)
 dirtbike drift [--replay] [--no-notify]   # site-drift check (see Site drift)
+dirtbike fb-login                    # save a Facebook session, only if FB starts requiring one
 ```
 
 Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
@@ -118,6 +121,8 @@ Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
 |---|---|
 | `NTFY_TOPIC` | ntfy topic to push alerts to. Required unless `--no-notify`. |
 | `NTFY_SERVER` | Defaults to `https://ntfy.sh`. |
+| `FB_CITY` | Facebook Marketplace city slug to search around. Defaults to `toronto`. |
+| `FB_PROFILE_DIR` | Browser profile for the Facebook source. Defaults to `~/.config/dirtbike-tracker/fb-profile` (outside the repo). |
 | `HEALTHCHECK_URL` | Optional. [healthchecks.io](https://healthchecks.io) ping URL hit after every completed `watch`; it alerts when pings stop. |
 
 ### Cron
@@ -217,6 +222,44 @@ with `dirtbike drift --replay --no-notify`. Locally, `make drift` re-records and
 **Never commit `tests/recorded/`** (it's gitignored): the pages are third-party ads with private
 sellers' names and phone numbers, and this repo is public. That's also why CI skips
 `tests/drift`: there are no recordings there.
+
+### Facebook Marketplace
+
+An optional third source (#9). Marketplace is a React app, so a real browser (Playwright +
+Chromium) loads the search page and `infrastructure/fb_scraper.py` parses the rendered cards:
+price, title, location, year (from the title), km when shown, photo. **Logged-out search works**
+(FB draws a login overlay over real results), so no account is needed to start.
+
+It adds real inventory: the first CRF150F search (2026-10-12) found 14 listings, about 10 of
+them not on Kijiji or AutoTrader.
+
+**Setup** (in the checkout that runs it; the prod clone for cron):
+
+```bash
+venv/bin/pip install -e '.[fb]'                  # playwright
+venv/bin/python -m playwright install chromium   # ~115 MB, into ~/.cache/ms-playwright
+```
+
+**Turn it on per model** by adding `facebook` to its `sources` in `config/models.yml`, then run
+`dirtbike watch --group <group> --no-notify` once after deploying, or every bike already on FB
+alerts as new. `dirtbike scrape --model crf150f --source facebook` tries one model by hand.
+
+**Login, only if FB starts requiring it:** `dirtbike fb-login` opens a visible browser (WSLg on
+Windows 11) on the FB login page; log in, close the window, and the session stays in
+`FB_PROFILE_DIR`. Use a dedicated account if you can: automated access is against FB's terms
+and the account doing it can be rate-limited or locked. The profile is a logged-in session:
+never copy it into the repo.
+
+**Limits:**
+- Each model is searched at most once every 6 hours (`fb_scraper.MIN_INTERVAL`; times in
+  `data/state/fb_searches.json`), so FB sees ~4 searches a day per model, not one every 20 min.
+- A failed or blocked search returns nothing and retries next run; if FB returns nothing for
+  24h, the source-health alert fires.
+- FB titles are often vague ("2003 Honda crf"). They're kept, since FB's search matched them on
+  the model; titles naming a different known model (e.g. CRF150R) are dropped.
+- No full ad text yet (fit scores on the title only), and FB cross-posts of Kijiji ads aren't
+  merged (titles and locations differ).
+- Not in the Docker image (no browser there).
 
 ## Requirements
 
