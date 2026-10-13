@@ -36,6 +36,10 @@ dev = [
     "mypy>=1.7.0",
     "pre-commit>=4.5.1",
 ]
+# Facebook Marketplace source (#9): a real browser. Then: python -m playwright install chromium
+fb = [
+    "playwright>=1.63",
+]
 
 [project.scripts]
 dirtbike = "dirtbike_tracker.application.cli:cli"

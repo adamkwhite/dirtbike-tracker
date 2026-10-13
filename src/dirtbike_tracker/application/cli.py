@@ -23,7 +23,7 @@ import yaml
 from ..domain.listing import Listing
 from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
 from ..infrastructure import drift as drift_check
-from ..infrastructure import notifier
+from ..infrastructure import fb_scraper, notifier
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
@@ -82,7 +82,12 @@ def build_app() -> App:
     init_db()
     return App(
         store=SqliteStore(),
-        sources={"kijiji": scrape_kijiji, "autotrader": _autotrader_source},
+        sources={
+            "kijiji": scrape_kijiji,
+            "autotrader": _autotrader_source,
+            # opt-in per model (models.yml sources); throttled to a few searches a day
+            "facebook": fb_scraper.FacebookSource(STATE_DIR / "fb_searches.json"),
+        },
         # AutoTrader's search page already carries the description, so it has no fetcher
         detail_fetchers={"kijiji": kijiji_ad_description},
         notify=skip_unconfigured(notifier.notify),
@@ -127,7 +132,12 @@ def cli(ctx: click.Context):
 @cli.command()
 @click.option("--model", required=True, help="Model slug, e.g. crf150f")
 @click.option("--region", default="ontario", help="Region slug")
-@click.option("--source", type=click.Choice(["kijiji", "autotrader", "all"]), default="kijiji")
+@click.option(
+    "--source",
+    type=click.Choice(["kijiji", "autotrader", "facebook", "all"]),
+    default="kijiji",
+    help="all = kijiji + autotrader",
+)
 @click.option("--pages", default=3, help="Max pages to scrape (Kijiji only)")
 @click.pass_obj
 def scrape(app: App, model: str, region: str, source: str, pages: int):
@@ -346,6 +356,19 @@ def drift(app: App, out_dir: Path | None, replay: bool, notify: bool):
             tags=["warning"],
         )
     raise SystemExit(1)
+
+
+@cli.command("fb-login")
+def fb_login():
+    """Log in to Facebook once in a visible browser; the session is kept for the facebook source."""
+    click.echo(
+        f"Opening a browser (profile: {fb_scraper.PROFILE_DIR}). Log in, then close the window."
+    )
+    try:
+        fb_scraper.login()
+    except ImportError as exc:
+        raise click.ClickException("Playwright not installed: pip install -e '.[fb]'") from exc
+    click.echo("Saved. watch will search Facebook with this session.")
 
 
 @cli.command()

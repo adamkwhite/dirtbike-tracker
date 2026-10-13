@@ -70,6 +70,11 @@ def scrape_fb(model_slug: str, region: str = "toronto"):
 
 ## Recommendation for this project
 
+**Update 2026-10-12: built (#9), Path 2.** Two findings overturned the advice below:
+logged-out Marketplace search *does* return listings (the login wall is an overlay),
+and FB had ~10 CRF150Fs that Kijiji + AutoTrader didn't. See README "Facebook
+Marketplace". The original advice follows for context.
+
 **Do not build FB Marketplace integration unless Kijiji + AutoTrader
 coverage is clearly insufficient.** For southern Ontario, they are not.
 

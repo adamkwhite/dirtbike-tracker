@@ -85,6 +85,7 @@ KNOWN_MODEL_SLUGS = [
     "crf150f",
     "crf230f",
     "crf250f",
+    "crf150r",
     "crf250r",
     "crf250l",
     "crf300l",
@@ -123,6 +124,7 @@ KNOWN_MODEL_SLUGS = [
     "dr125",
     "dr200",
     "dr350",
+    "rebel300",
     "rebel500",
     "cb500f",
     "cb500x",
@@ -353,7 +355,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
 
         title_el = card.find(["h3", "h2", "a"], string=True)
         title = (title_el or link_el).get_text(strip=True) or ""
-        model_slugs = _model_slugs(title, model_slug)
+        model_slugs = model_slugs_for(title, model_slug)
         if not model_slugs:
             continue
         price, price_state = _parse_price(_field_text(card, "price"))
@@ -387,7 +389,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
     return listings
 
 
-def _model_slugs(title: str, model_slug: str) -> list[str]:
+def model_slugs_for(title: str, model_slug: str) -> list[str]:
     """Models a title belongs to, or [] if it doesn't plausibly match the queried slug.
 
     Packages can name several models. A title that only passes the loose check
