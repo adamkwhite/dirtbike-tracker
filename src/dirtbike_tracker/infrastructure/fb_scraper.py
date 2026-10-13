@@ -103,8 +103,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         m = re.search(r"/marketplace/item/(\d+)", str(link["href"]))
         if not m or m.group(1) in listings:
             continue
-        img = link.select_one("img")
-        image = first_image([img.get("src")]) if img is not None else None
+        image = first_image([str(img["src"]) for img in link.select("img[src]")])
         listing = _card_to_listing(m.group(1), list(link.stripped_strings), image, model_slug, now)
         if listing:
             listings[m.group(1)] = listing
