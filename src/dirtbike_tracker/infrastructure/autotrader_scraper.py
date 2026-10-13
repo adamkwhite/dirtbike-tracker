@@ -22,7 +22,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ..domain.listing import Listing
-from ..domain.scoring import parse_km, parse_year
+from ..domain.scoring import is_dealer_new, parse_km, parse_year
 from .kijiji_scraper import (
     PRICE_STATE_NUMERIC,
     PRICE_STATE_UNKNOWN,
@@ -45,6 +45,10 @@ def _headers() -> dict:
 
 # Slugs AutoTrader's keyword search only finds spelled another way ("rebel500" returns 0)
 KEYWORDS = {"rebel500": "rebel 500"}
+
+
+# listing.seller.type (#81)
+SELLER_TYPES = {"PrivateSeller": "private", "Dealer": "dealer"}
 
 
 def build_search_url(model_slug: str, region: str = "on") -> str:
@@ -81,7 +85,10 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
 def _ad_to_listing(ad: dict, model_slug: str, now: str) -> Listing | None:
     """One __NEXT_DATA__ ad -> Listing, or None for new stock / other models."""
     vehicle = ad.get("vehicle") or {}
-    if vehicle.get("offerType") == "N":
+    year = parse_year(vehicle.get("modelYear"), datetime.now(UTC).year)
+    seller_type = SELLER_TYPES.get(str((ad.get("seller") or {}).get("type")))
+    # new stock: marked offerType N, or a dealer's current-model-year bike (demo, #81)
+    if vehicle.get("offerType") == "N" or is_dealer_new(seller_type, year, datetime.now(UTC).year):
         return None
 
     parts = [vehicle.get("modelYear"), vehicle.get("make"), vehicle.get("model")]
@@ -104,9 +111,10 @@ def _ad_to_listing(ad: dict, model_slug: str, now: str) -> Listing | None:
         description=ad.get("description") or "",
         model_slugs=detected if detected else [model_slug],
         scraped_at=now,
-        year=parse_year(vehicle.get("modelYear"), datetime.now(UTC).year),
+        year=year,
         km=parse_km(vehicle.get("mileageInKm")),
         image_url=first_image(ad.get("images")),
+        seller_type=seller_type,
     )
 
 

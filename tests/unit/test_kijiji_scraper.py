@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 import pytest
 import requests
@@ -220,3 +221,22 @@ def test_parse_listings_reads_first_photo() -> None:
     (listing,) = parse_listings(html, "klx140")
 
     assert listing.image_url == "https://media.kijiji.ca/a.jpg"
+
+
+@pytest.mark.parametrize(
+    ("forsaleby", "year_offset", "seller", "kept"),
+    [
+        ("ownr", -3, "private", True),
+        ("delr", -3, "dealer", True),
+        ("delr", 0, "dealer", False),  # dealer, current model year: demo / new stock
+        ("ownr", 0, "private", True),  # a private current-year bike is a real used sale
+    ],
+)
+def test_parse_listings_reads_seller_and_skips_dealer_new(
+    forsaleby: str, year_offset: int, seller: str, kept: bool
+) -> None:
+    year = str(datetime.now(UTC).year + year_offset)
+
+    listings = parse_listings(_attrs_page(caryear=year, forsaleby=forsaleby), "cb500x")
+
+    assert [x.seller_type for x in listings] == ([seller] if kept else [])

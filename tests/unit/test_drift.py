@@ -42,14 +42,15 @@ def _record(out: Path, html: str) -> Path:
 
 YEAR = {"canonicalName": "caryear", "canonicalValues": ["2019"]}
 KM = {"canonicalName": "carmileageinkms", "canonicalValues": ["12000"]}
+OWNER = {"canonicalName": "forsaleby", "canonicalValues": ["ownr"]}
 
 
 def test_clean_recording_has_no_problems(tmp_path: Path) -> None:
-    assert problems(_record(tmp_path / "rec", _kijiji_search([YEAR, KM]))) == []
+    assert problems(_record(tmp_path / "rec", _kijiji_search([YEAR, KM, OWNER]))) == []
 
 
 def test_reports_a_field_that_stopped_parsing(tmp_path: Path) -> None:
-    out = _record(tmp_path / "rec", _kijiji_search([YEAR]))  # km field renamed / gone
+    out = _record(tmp_path / "rec", _kijiji_search([YEAR, OWNER]))  # km field renamed / gone
 
     assert problems(out) == ["kijiji_search_rebel500.html: carmileageinkms stopped parsing"]
 
@@ -73,7 +74,7 @@ def test_drift_command_alerts_and_fails_on_problems(
 
 
 def test_drift_command_ok_is_quiet(app: App, sent: PushSpy, tmp_path: Path) -> None:
-    out = _record(tmp_path / "rec", _kijiji_search([YEAR, KM]))
+    out = _record(tmp_path / "rec", _kijiji_search([YEAR, KM, OWNER]))
 
     result = CliRunner().invoke(cli, ["drift", "--replay", "--dir", str(out)], obj=app)
 
@@ -97,6 +98,7 @@ def _autotrader_page(offer_types: list[str]) -> str:
             "price": {"priceRaw": 5500},
             "location": {"city": "Oakville"},
             "images": ["https://prod.pictures.autoscout24.net/x.jpg/250x188.webp"],
+            "seller": {"type": "PrivateSeller"},
             "vehicle": {
                 "make": "Honda", "model": "Rebel 500", "modelYear": 2021,
                 "offerType": offer, "mileageInKm": "12,000 km",
@@ -119,7 +121,7 @@ class FakeSites:
             text = _autotrader_page(["U", "N"])
         elif "kijiji.ca/b-" in url:
             title = "2008 Honda CRF150F" if "crf150f" in url else "2019 Honda Rebel 500"
-            text = _kijiji_search([YEAR, KM], title)
+            text = _kijiji_search([YEAR, KM, OWNER], title)
         else:
             text = _ad_page(url.rsplit("/", 1)[-1], self.ad_body)
         return type("R", (), {"text": text, "raise_for_status": lambda self: None})()

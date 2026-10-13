@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS listings (
     year INTEGER,
     km INTEGER,
     image_url TEXT,
+    seller_type TEXT,
     UNIQUE(source, external_id)
 );
 
@@ -125,6 +126,8 @@ def _migrate_old_schema(db_path: Path | None = None) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN km INTEGER")
         if "image_url" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN image_url TEXT")
+        if "seller_type" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN seller_type TEXT")
 
 
 def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
@@ -166,8 +169,8 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
                     INSERT INTO listings
                     (source, external_id, url, title, price, price_state, location,
                      posted_text, description, fingerprint, first_seen, last_seen, is_primary,
-                     year, km, image_url)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     year, km, image_url, seller_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         listing.source,
@@ -186,6 +189,7 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
                         listing.year,
                         listing.km,
                         listing.image_url,
+                        listing.seller_type,
                     ),
                 )
                 listing_id = cursor.lastrowid
@@ -202,7 +206,8 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
                     " posted_text=COALESCE(NULLIF(?, ''), posted_text),"
                     " description=COALESCE(NULLIF(?, ''), description),"
                     " year=COALESCE(?, year), km=COALESCE(?, km),"
-                    " image_url=COALESCE(?, image_url) WHERE id=?",
+                    " image_url=COALESCE(?, image_url),"
+                    " seller_type=COALESCE(?, seller_type) WHERE id=?",
                     (
                         now,
                         listing.posted_text,
@@ -210,6 +215,7 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
                         listing.year,
                         listing.km,
                         listing.image_url,
+                        listing.seller_type,
                         listing_id,
                     ),
                 )
@@ -336,7 +342,8 @@ def market_listings(
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT l.price, l.title, COALESCE(l.full_description, l.description) AS description
+            SELECT l.price, l.title, COALESCE(l.full_description, l.description) AS description,
+                   l.seller_type
             FROM listings l
             JOIN listing_models m ON m.listing_id = l.id
             WHERE m.model_slug=?
@@ -382,7 +389,7 @@ def price_timelines(model_slug: str, days: int = 91, db_path: Path | None = None
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT l.id,
+            SELECT l.id, l.seller_type,
                    datetime(COALESCE(NULLIF(l.posted_text, ''), l.first_seen)) AS start,
                    datetime(l.last_seen) AS end,
                    datetime(h.observed_at) AS at,
@@ -402,6 +409,7 @@ def price_timelines(model_slug: str, days: int = 91, db_path: Path | None = None
             {
                 "start": datetime.fromisoformat(r["start"]),
                 "end": datetime.fromisoformat(r["end"]),
+                "seller_type": r["seller_type"],
                 "history": [],
             },
         )

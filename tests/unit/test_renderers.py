@@ -193,3 +193,18 @@ def test_row_shows_lazy_thumbnail_only_when_there_is_a_photo() -> None:
         ' alt="" loading="lazy">'
     ) in _listing_row(listing)
     assert "<img" not in _listing_row({**listing, "image_url": None})
+
+
+def test_dealer_tag_and_private_median_label() -> None:
+    listing = {
+        "price": 7900, "rating": "HIGH", "delta_pct": 140.0, "fit": 5, "fit_flags": [],
+        "title": "2024 Honda Rebel 500", "location": "Concord", "url": "u", "seller_type": "dealer",
+    }  # fmt: skip
+    stats = {"count": 5, "low": 3000, "median": 3200, "high": 3400, "sellers": "private"}
+
+    html = _model_section(
+        MarketSnapshot(slug="rebel500", stats=stats, listings=[listing], trend=None, prices=[])
+    )
+
+    assert '<span class="tag-dealer">dealer</span>' in html
+    assert '<div class="label">Median (private)</div>' in html

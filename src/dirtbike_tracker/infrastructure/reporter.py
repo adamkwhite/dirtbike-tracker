@@ -7,7 +7,7 @@ Output is suitable for pasting into a note, email, or chat message.
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
+from ..domain.scoring import MarketSnapshot, median_label, project_line, specs_label, vs_label
 
 
 def location_label(listing: dict, width: int) -> str:
@@ -34,7 +34,7 @@ def _summary_lines(stats: dict, trend: float | None) -> list[str]:
     lines = [
         f"- Listings (90d): **{stats['count']}**",
         f"- Low: **${int(stats['low'])}**",
-        f"- Median: **${int(stats['median'])}**",
+        f"- {median_label(stats)}: **${int(stats['median'])}**",
         f"- High: **${int(stats['high'])}**",
     ]
     if line := project_line(stats):

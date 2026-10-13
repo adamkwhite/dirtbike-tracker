@@ -202,7 +202,10 @@ def stats(app: App, model: str):
         return
     click.echo(f"  Listings:  {s['count']}")
     click.echo(f"  Low:       ${int(s['low'])}")
-    click.echo(f"  Median:    ${int(s['median'])}")
+    click.echo(
+        f"  Median:    ${int(s['median'])}"
+        + (" (private sellers)" if s.get("sellers") == "private" else "")
+    )
     if line := project_line(s):
         click.echo(f"  {line}")
     click.echo(f"  High:      ${int(s['high'])}")
