@@ -7,13 +7,13 @@
 priority:
   - slug: crf150f
     goal: project
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 2500       # alert immediately if below this, regardless of market
     notes: "12yo's primary bike. Both brothers ride."
 
   - slug: crf230f
     goal: project
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 3000
     notes: "15yo's bike. Discontinued 2019, tight supply."
 
@@ -21,19 +21,19 @@ priority:
 secondary:
   - slug: ttr125
     goal: project
-    sources: [kijiji]
+    sources: [kijiji, facebook]
     target_price: 1500
     notes: "TTR125LE electric start preferred"
 
   - slug: klx140
     goal: project
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 2000
     notes: "Alternative to CRF150F"
 
   - slug: crf100f
     goal: project
-    sources: [kijiji]
+    sources: [kijiji, facebook]
     target_price: 1500
     notes: "Smaller fallback"
 
@@ -41,12 +41,12 @@ secondary:
 future:
   - slug: crf250f
     goal: project
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4500
 
   - slug: xr250
     goal: project
-    sources: [kijiji]
+    sources: [kijiji, facebook]
     target_price: 2500
 
 # Street (ready to ride in spring, not a project)
