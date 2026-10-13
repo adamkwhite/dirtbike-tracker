@@ -1,8 +1,16 @@
 """Facebook Marketplace parsing and throttling, on synthetic rendered HTML (no browser)."""
 
+import sys
+import types
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
+from click.testing import CliRunner
+
+from dirtbike_tracker.application.cli import cli
+from dirtbike_tracker.application.ports import App
+from dirtbike_tracker.infrastructure import fb_scraper
 from dirtbike_tracker.infrastructure.fb_scraper import (
     FacebookSource,
     build_search_url,
@@ -87,3 +95,104 @@ def test_missing_playwright_is_a_skip_not_a_crash(tmp_path: Path) -> None:
         raise ImportError("No module named 'playwright'")
 
     assert FacebookSource(tmp_path / "fb.json", fetch=no_playwright)("crf150f", "ontario", 3) == []
+
+
+class FakeBrowser:
+    """Stands in for playwright.sync_api: records what the scraper asks the browser to do."""
+
+    def __init__(self, html: str = PAGE) -> None:
+        self.html = html
+        self.calls: list[tuple] = []
+
+    # sync_playwright() is a context manager yielding the playwright object
+    def __call__(self) -> "FakeBrowser":
+        return self
+
+    def __enter__(self) -> "FakeBrowser":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    @property
+    def chromium(self) -> "FakeBrowser":
+        return self
+
+    def launch_persistent_context(self, profile: str, **kwargs: object) -> "FakeBrowser":
+        self.calls.append(("launch", profile, kwargs["headless"]))
+        return self
+
+    def new_page(self) -> "FakeBrowser":
+        return self
+
+    def goto(self, url: str, **_: object) -> None:
+        self.calls.append(("goto", url))
+
+    def wait_for_timeout(self, ms: int) -> None:
+        self.calls.append(("wait", ms))
+
+    def wait_for_event(self, event: str, timeout: int) -> None:
+        self.calls.append(("wait_for", event, timeout))
+
+    def content(self) -> str:
+        return self.html
+
+    def close(self) -> None:
+        self.calls.append(("close",))
+
+
+@pytest.fixture
+def browser(monkeypatch: pytest.MonkeyPatch) -> FakeBrowser:
+    fake = FakeBrowser()
+    module = types.ModuleType("playwright.sync_api")
+    module.sync_playwright = fake  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", module)
+    return fake
+
+
+def test_fetch_renders_headless_with_the_profile(browser: FakeBrowser, tmp_path: Path) -> None:
+    html = fb_scraper.fetch_search_page("https://fb/search", profile_dir=tmp_path / "profile")
+
+    assert html == PAGE
+    assert browser.calls == [
+        ("launch", str(tmp_path / "profile"), True),
+        ("goto", "https://fb/search"),
+        ("wait", fb_scraper.RENDER_WAIT_MS),
+        ("close",),
+    ]
+
+
+def test_login_opens_a_visible_browser_until_closed(browser: FakeBrowser, tmp_path: Path) -> None:
+    fb_scraper.login(profile_dir=tmp_path / "profile")
+
+    assert browser.calls == [
+        ("launch", str(tmp_path / "profile"), False),
+        ("goto", "https://www.facebook.com/login"),
+        ("wait_for", "close", 0),
+        ("close",),
+    ]
+
+
+def test_fb_login_command(monkeypatch: pytest.MonkeyPatch, app: App) -> None:
+    opened: list[bool] = []
+    monkeypatch.setattr(fb_scraper, "login", lambda: opened.append(True))
+
+    result = CliRunner().invoke(cli, ["fb-login"], obj=app)
+
+    assert result.exit_code == 0, result.output
+    assert opened == [True]
+    assert "Saved." in result.output
+
+
+def test_fb_login_without_playwright_says_how_to_install(
+    monkeypatch: pytest.MonkeyPatch, app: App
+) -> None:
+    def missing() -> None:
+        raise ImportError("No module named 'playwright'")
+
+    monkeypatch.setattr(fb_scraper, "login", missing)
+
+    result = CliRunner().invoke(cli, ["fb-login"], obj=app)
+
+    assert result.exit_code == 1
+    assert "pip install -e '.[fb]'" in result.output

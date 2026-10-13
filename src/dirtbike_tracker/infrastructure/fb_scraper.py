@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from ..domain.listing import Listing
 from ..domain.scoring import parse_km, parse_year
@@ -41,7 +41,7 @@ MIN_INTERVAL = timedelta(hours=6)  # per model: ~4 searches a day
 RENDER_WAIT_MS = 6000
 
 _PRICE_RE = re.compile(r"^(?:CA)?\$\s?([\d,]+)$")
-_KM_RE = re.compile(r"^([\d.,]+)\s*(K)?\s*km$", re.I)
+_KM_RE = re.compile(r"^([\d.,]+)(K?) ?km$", re.I)  # "12K km", "12,000 km"
 _YEAR_RE = re.compile(r"\b(19[7-9]\d|20[0-3]\d)\b")
 
 Fetch = Callable[[str], str]  # search url -> rendered html
@@ -89,7 +89,7 @@ def _card_to_listing(
         model_slugs=slugs,
         scraped_at=now,
         year=parse_year(year_match.group(1), datetime.now(UTC).year) if year_match else None,
-        km=next((km for line in rest[2:] if (km := _km(line))), None),
+        km=next(filter(None, map(_km, rest[2:])), None),
         image_url=image,
     )
 
@@ -104,7 +104,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         if not m or m.group(1) in listings:
             continue
         img = link.find("img")
-        image = first_image([img.get("src")]) if img else None
+        image = first_image([img.get("src")]) if isinstance(img, Tag) else None
         listing = _card_to_listing(m.group(1), list(link.stripped_strings), image, model_slug, now)
         if listing:
             listings[m.group(1)] = listing
@@ -173,7 +173,8 @@ class FacebookSource:
         except ImportError:
             print("facebook: Playwright not installed (pip install -e '.[fb]'), skipping")  # noqa: T201
             return []
-        except Exception as exc:  # noqa: BLE001  (browser crash, timeout, FB block: skip this run)
+        # a browser crash, timeout or FB block skips this run; the next run retries
+        except Exception as exc:  # noqa: BLE001
             print(f"facebook: {model_slug} search failed: {exc}")  # noqa: T201
             return []
         state[model_slug] = now.isoformat()
