@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 from ..domain.listing import Listing
 from ..domain.scoring import parse_km, parse_year
@@ -103,8 +103,8 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         m = re.search(r"/marketplace/item/(\d+)", str(link["href"]))
         if not m or m.group(1) in listings:
             continue
-        img = link.find("img")
-        image = first_image([img.get("src")]) if isinstance(img, Tag) else None
+        img = link.select_one("img")
+        image = first_image([img.get("src")]) if img is not None else None
         listing = _card_to_listing(m.group(1), list(link.stripped_strings), image, model_slug, now)
         if listing:
             listings[m.group(1)] = listing
