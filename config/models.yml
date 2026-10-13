@@ -53,13 +53,13 @@ future:
 street:
   - slug: rebel500
     goal: ride             # fit favours runners/safetied; non-runners never alert
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4500
     notes: "Honda Rebel 500 (CMX500)"
 
   - slug: cb500f
     goal: ride
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 3800       # median ~$4300 once cross-posts merge (2026-10-12)
     notes: "Honda CB500F, upright standard"
 
@@ -67,28 +67,28 @@ street:
 dualsport:
   - slug: crf300l
     goal: ride
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 5000
 
   - slug: klx300
     goal: ride
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4000
     notes: "Search also finds the KLX300R (off-road only, not plated)"
 
   - slug: xt250
     goal: ride
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 3800
 
   - slug: cb500x
     goal: ride
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4800
     notes: "Replaced by the NX500 in 2024"
 
   - slug: nx500
     goal: ride
-    sources: [kijiji, autotrader]
+    sources: [kijiji, autotrader, facebook]
     target_price: 6500
     notes: "New for 2024, few used yet"
