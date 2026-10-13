@@ -65,6 +65,17 @@ def test_drops_junk_that_kijiji_filters_would_catch() -> None:
     assert (listings["6"].title, listings["6"].location) == ("2008 crf100f", "Essa, ON")
 
 
+def test_drops_accessory_ads_but_keeps_bikes_that_mention_one() -> None:
+    page = (
+        _card("1", "CA$280", "Luggage racks for CB500X & NX500", "Hamilton, ON")
+        + _card("2", "CA$125", "Honda CB500X / NX500 Saddlebag Supports", "London, ON")
+        + _card("3", "CA$3,900", "2013 Honda CB500X new tires", "Ajax, ON")
+        + _card("4", "CA$900", "Honda CB500X parts bike", "Barrie, ON")
+    )
+
+    assert sorted(x.external_id for x in parse_listings(page, "cb500x")) == ["3", "4"]
+
+
 def test_search_url() -> None:
     assert build_search_url("rebel 500", city="toronto") == (
         "https://www.facebook.com/marketplace/toronto/search/?query=rebel%20500"

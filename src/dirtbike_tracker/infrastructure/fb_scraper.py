@@ -44,6 +44,14 @@ _PRICE_RE = re.compile(r"^(?:CA)?\$\s?([\d,]+)$")
 _KM_RE = re.compile(r"^([\d.,]+)(K?) ?km$", re.I)  # "12K km", "12,000 km"
 _YEAR_RE = re.compile(r"\b(19[7-9]\d|20[0-3]\d)\b")
 _WANTED_RE = re.compile(r"\b(wanted|wtb|iso|looking for)\b", re.I)
+# Street bikes draw accessory ads. A title with one of these words and no year is a part
+# ("Luggage racks for CB500X"); with a year it's a bike that has one ("2014 CB500F, new tires").
+_ACCESSORY_RE = re.compile(
+    r"\b(racks?|luggage|saddlebags?|bags?|panniers?|supports?|brackets?|mounts?|exhaust|"
+    r"muffler|seat|windscreen|windshield|mirrors?|tires?|wheels?|rims?|covers?|guards?|"
+    r"helmets?|jackets?)\b",
+    re.I,
+)
 _BADGES = {"just listed", "sold", "pending"}  # card status lines, not the title
 # FB requires a price, so "no price" ads use one of these (1 and 123 are under MIN_BIKE_PRICE)
 _PLACEHOLDER_PRICES = {1234, 12345, 123456}
@@ -80,6 +88,9 @@ def _card_to_listing(
     # Kijiji and AutoTrader are Ontario-only; FB's radius reaches into New York
     if _WANTED_RE.search(title) or (location and not location.endswith(", ON")):
         return None
+    year_match = _YEAR_RE.search(title)
+    if _ACCESSORY_RE.search(title) and not year_match:
+        return None
     # FB's search already matched the model, so keep vague titles ("2003 Honda crf")
     # that still name its family; drop those naming a different model we know.
     family = re.match(r"[a-z]+", model_slug)
@@ -91,7 +102,6 @@ def _card_to_listing(
     slugs = model_slugs_for(title, model_slug) or ([model_slug] if vague_ok else [])
     if not slugs:
         return None
-    year_match = _YEAR_RE.search(title)
     return Listing(
         source="facebook",
         external_id=item_id,
