@@ -1,4 +1,7 @@
 import json
+from datetime import UTC, datetime
+
+import pytest
 
 from dirtbike_tracker.infrastructure.autotrader_scraper import build_search_url, parse_listings
 
@@ -62,3 +65,16 @@ def test_reads_year_and_km() -> None:
         listing.image_url
         == "https://prod.pictures.autoscout24.net/listing-images/x.jpg/250x188.webp"
     )
+
+
+@pytest.mark.parametrize(
+    ("seller", "year_offset", "expected"),
+    [("PrivateSeller", 0, ["private"]), ("Dealer", -2, ["dealer"]), ("Dealer", 0, [])],
+)
+def test_reads_seller_and_skips_dealer_current_year(
+    seller: str, year_offset: int, expected: list[str]
+) -> None:
+    ad = _ad("used-1", "CRF250F", "U", 5499, year=datetime.now(UTC).year + year_offset)
+    ad["seller"] = {"type": seller}
+
+    assert [x.seller_type for x in parse_listings(_page(ad), "crf250f")] == expected

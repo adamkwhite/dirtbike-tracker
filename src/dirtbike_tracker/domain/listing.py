@@ -22,6 +22,7 @@ class Listing:
     year: int | None = None
     km: int | None = None  # odometer; dirt bikes rarely have one
     image_url: str | None = None  # first photo, small (#10)
+    seller_type: str | None = None  # "private" | "dealer" (#81); None when the site doesn't say
 
     def to_dict(self):
         return asdict(self)

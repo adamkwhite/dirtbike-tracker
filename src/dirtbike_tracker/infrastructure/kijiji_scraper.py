@@ -17,7 +17,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from ..domain.listing import Listing
-from ..domain.scoring import parse_km, parse_year
+from ..domain.scoring import is_dealer_new, parse_km, parse_year
 
 USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -255,15 +255,24 @@ def _first(values: list) -> object:
     return values[0] if values else None
 
 
+# Kijiji's forsaleby values (#81)
+SELLER_TYPES = {"ownr": "private", "delr": "dealer"}
+
+
 def _form_facts(attrs: dict[str, list], this_year: int) -> dict:
-    """new / year / km from an ad's form fields, each only when known."""
+    """new / year / km / seller from an ad's form fields, each only when known.
+
+    new: marked vehicletype=new, or a dealer's current-model-year bike (demo stock, #81).
+    """
     facts: dict = {}
-    if "new" in attrs.get("vehicletype", []):
-        facts["new"] = True
     if year := parse_year(_first(attrs.get("caryear", [])), this_year):
         facts["year"] = year
     if km := parse_km(_first(attrs.get("carmileageinkms", []))):
         facts["km"] = km
+    if seller := SELLER_TYPES.get(str(_first(attrs.get("forsaleby", [])))):
+        facts["seller"] = seller
+    if "new" in attrs.get("vehicletype", []) or is_dealer_new(seller, year, this_year):
+        facts["new"] = True
     return facts
 
 
@@ -371,6 +380,7 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
                 year=facts.get("year"),
                 km=facts.get("km"),
                 image_url=facts.get("image"),
+                seller_type=facts.get("seller"),
             )
         )
 

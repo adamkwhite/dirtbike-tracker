@@ -13,7 +13,14 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from ..domain.scoring import FALLBACK_NOTE, MarketSnapshot, price_per_year, project_line, vs_label
+from ..domain.scoring import (
+    FALLBACK_NOTE,
+    MarketSnapshot,
+    median_label,
+    price_per_year,
+    project_line,
+    vs_label,
+)
 from .reporter import contact_label, location_label
 
 RATING_HEX = {
@@ -60,7 +67,7 @@ def _tiles(stats: dict, t: float | None) -> str:
     return f"""
           <div class="tile"><div class="label">Count</div><div class="val">{stats["count"]}</div></div>
           <div class="tile"><div class="label">Low</div><div class="val">${int(stats["low"])}</div></div>
-          <div class="tile tile-median"><div class="label">Median</div><div class="val">${int(stats["median"])}</div></div>
+          <div class="tile tile-median"><div class="label">{_esc(median_label(stats))}</div><div class="val">${int(stats["median"])}</div></div>
           <div class="tile"><div class="label">High</div><div class="val">${int(stats["high"])}</div></div>
           {project_html}
           {trend_html}
@@ -94,6 +101,8 @@ def _listing_row(listing: dict) -> str:
     if label := contact_label(listing):
         days = label.split(":")[0]
         contacted = f' <span class="contacted" title="{_esc(label)}">{_esc(days)}</span>'
+    if listing.get("seller_type") == "dealer":
+        contacted += ' <span class="tag-dealer">dealer</span>'
     return f"""
               <tr>
                 <td><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>
@@ -362,6 +371,14 @@ def render_dashboard(snaps: list[MarketSnapshot]) -> str:
       border-radius: 4px;
       vertical-align: middle;
       margin-right: 8px;
+    }}
+    .tag-dealer {{
+      margin-left: 6px;
+      padding: 1px 6px;
+      border: 1px solid var(--muted);
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--muted);
     }}
     .contacted {{
       margin-left: 6px;

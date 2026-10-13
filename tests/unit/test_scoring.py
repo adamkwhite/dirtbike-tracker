@@ -5,11 +5,14 @@ from datetime import datetime, timedelta
 import pytest
 
 from dirtbike_tracker.domain.scoring import (
+    is_dealer_new,
     market_stats,
+    median_label,
     needs_detail,
     parse_km,
     parse_year,
     price_per_year,
+    private_market,
     project_fit,
     project_stats,
     rate_listing,
@@ -341,3 +344,30 @@ def test_specs_and_price_per_year() -> None:
     assert price_per_year(bike, this_year=2026) == 227  # #16's example
     assert price_per_year({"price": 9000, "year": 2026}, this_year=2026) == 9000
     assert price_per_year({"price": 2500}, this_year=2026) is None
+
+
+def _sales(*sellers: str | None) -> list[dict]:
+    return [{"price": 1000 + i, "seller_type": s} for i, s in enumerate(sellers)]
+
+
+def test_private_market_needs_enough_private_sales() -> None:
+    enough = _sales("private", "private", "private", "private", "private", "dealer")
+    short = _sales("private", "private", "private", "private", None, "dealer")  # None isn't private
+
+    assert private_market(enough) == (enough[:5], "private")
+    assert private_market(short) == (short, "all")
+
+
+def test_dealer_current_model_year_is_new_stock() -> None:
+    assert is_dealer_new("dealer", 2026, this_year=2026)
+    assert is_dealer_new("dealer", 2027, this_year=2026)  # next model year, sold in the fall
+    assert not is_dealer_new("dealer", 2024, this_year=2026)
+    assert not is_dealer_new("private", 2026, this_year=2026)
+    assert not is_dealer_new("dealer", None, this_year=2026)
+
+
+def test_dealer_shows_in_specs_and_median_label() -> None:
+    assert specs_label({"year": 2021, "seller_type": "dealer"}) == "2021 · dealer"
+    assert specs_label({"year": 2021, "seller_type": "private"}) == "2021"
+    assert median_label({"sellers": "private"}) == "Median (private)"
+    assert median_label({"sellers": "all"}) == "Median"

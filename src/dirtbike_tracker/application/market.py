@@ -6,6 +6,7 @@ from ..domain.scoring import (
     GOALS,
     MarketSnapshot,
     market_stats,
+    private_market,
     project_stats,
     score_listings,
     trend,
@@ -16,11 +17,13 @@ from .ports import ListingStore
 
 def snapshot(slug: str, store: ListingStore, goal: str = "project") -> MarketSnapshot:
     """Fetch a model's market from the store and score it for the model's goal (models.yml)."""
-    market = store.market_listings(slug, days=90)
+    # rate against private sales once there are enough (#81): dealer prices run high
+    market, seller_basis = private_market(store.market_listings(slug, days=90))
     prices = [x["price"] for x in market]
-    stats = market_stats(prices)
+    stats = market_stats(prices) | {"sellers": seller_basis}
     if goal == "project":
         stats |= project_stats(market)
+    sellers = {"private"} if seller_basis == "private" else None
     drops = store.price_drops(slug)
     listings = [
         {
@@ -35,15 +38,23 @@ def snapshot(slug: str, store: ListingStore, goal: str = "project") -> MarketSna
         stats=stats,
         listings=score_listings(listings, stats["median"], stats.get("project_median"), goal),
         trend=trend(
-            [x["price"] for x in store.market_listings(slug, days=30)],
-            [x["price"] for x in store.market_listings(slug, days=90, older_than_days=30)],
+            [x["price"] for x in _only(store.market_listings(slug, days=30), sellers)],
+            [
+                x["price"]
+                for x in _only(store.market_listings(slug, days=90, older_than_days=30), sellers)
+            ],
         ),
         prices=prices,
         sold=store.sold_listings(slug),
         weekly=weekly_medians(
-            store.price_timelines(slug), now=datetime.now(UTC).replace(tzinfo=None)
+            _only(store.price_timelines(slug), sellers), now=datetime.now(UTC).replace(tzinfo=None)
         ),
     )
+
+
+def _only(rows: list[dict], sellers: set[str] | None) -> list[dict]:
+    """Rows from these seller types (None = all), so trend and chart match the median."""
+    return rows if sellers is None else [x for x in rows if x.get("seller_type") in sellers]
 
 
 def model_goal(config: dict, slug: str) -> str:

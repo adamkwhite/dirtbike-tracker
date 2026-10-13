@@ -130,6 +130,25 @@ def vs_label(listing: dict) -> str:
     return VS_LABELS.get(listing.get("basis") or "", "vs median")
 
 
+# A model's market is its private sales once it has this many in the window (#81): dealer
+# prices run high, and a dealer cross-posted to both sites counts twice.
+PRIVATE_MIN_SAMPLES = 5
+
+
+def private_market(market: list[dict]) -> tuple[list[dict], str]:
+    """(rows to rate against, "private" | "all"). Unknown seller type isn't counted as private."""
+    private = [x for x in market if x.get("seller_type") == "private"]
+    return (private, "private") if len(private) >= PRIVATE_MIN_SAMPLES else (market, "all")
+
+
+def is_dealer_new(seller_type: str | None, year: int | None, this_year: int) -> bool:
+    """A dealer's current-or-next-model-year bike is new or demo stock, even when listed as used.
+
+    Sites don't always mark it (Kijiji vehicletype, AutoTrader offerType) and MSRP skews the median.
+    """
+    return seller_type == "dealer" and year is not None and year >= this_year
+
+
 # Sellers who skip Kijiji's km field leave 0 or 1; nothing this low is a real reading
 MIN_REAL_KM = 10
 
@@ -149,10 +168,12 @@ def parse_year(value: object, this_year: int) -> int | None:
 
 
 def specs_label(listing: dict) -> str:
-    """'2018 · 16,672 km', whichever parts are known."""
+    """'2018 · 16,672 km · dealer', whichever parts are known (private sellers aren't labelled)."""
     parts = [str(listing["year"])] if listing.get("year") else []
     if listing.get("km"):
         parts.append(f"{listing['km']:,} km")
+    if listing.get("seller_type") == "dealer":
+        parts.append("dealer")
     return " · ".join(parts)
 
 
@@ -161,6 +182,11 @@ def price_per_year(listing: dict, this_year: int) -> int | None:
     if not listing.get("price") or not listing.get("year"):
         return None
     return round(float(listing["price"]) / max(1, this_year - int(listing["year"])))
+
+
+def median_label(stats: dict) -> str:
+    """'Median (private)' when the market is private sales only (#81), else 'Median'."""
+    return "Median (private)" if stats.get("sellers") == "private" else "Median"
 
 
 def project_line(stats: dict) -> str | None:

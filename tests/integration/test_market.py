@@ -65,6 +65,7 @@ def test_snapshot_scores_active_primary_listings(tmp_path: Path) -> None:
         "count": 3,
         "project_median": None,
         "project_count": 0,
+        "sellers": "all",
     }
     assert snap.trend == -39.1  # recent 1400 vs older median 2300
     assert snap.listings[0]["external_id"] == "cheap"  # -30%, best deal first
@@ -95,6 +96,7 @@ def test_same_price_listings_each_count(tmp_path: Path) -> None:
         "count": 3,
         "project_median": None,
         "project_count": 0,
+        "sellers": "all",
     }
 
 
@@ -325,10 +327,36 @@ def test_year_km_and_photo_stored_and_kept_when_a_rescrape_lacks_them(tmp_path: 
     init_db(db)
     bike = _listing("kijiji", "1742893636", "https://x/1742893636", 5250)
     bike.year, bike.km, bike.image_url = 2018, 16672, "https://media.kijiji.ca/a.jpg"
+    bike.seller_type = "dealer"
     upsert_listings([bike], db_path=db)
     bike.year, bike.km, bike.image_url = None, None, None  # fields didn't load
+    bike.seller_type = None
     upsert_listings([bike], db_path=db)
 
     (listing,) = snapshot("crf150f", SqliteStore(db)).listings
     assert (listing["year"], listing["km"]) == (2018, 16672)
     assert listing["image_url"] == "https://media.kijiji.ca/a.jpg"
+    assert listing["seller_type"] == "dealer"
+
+
+def test_private_sales_set_the_median_once_there_are_enough(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    private = [_listing("kijiji", f"p{i}", f"https://x/p{i}", 3000 + 100 * i) for i in range(5)]
+    dealer = [_listing("kijiji", f"d{i}", f"https://x/d{i}", 7900) for i in range(3)]
+    for x in private:
+        x.seller_type = "private"
+    for x in dealer:
+        x.seller_type = "dealer"
+    upsert_listings(private + dealer, db_path=db)
+
+    snap = snapshot("crf150f", SqliteStore(db))
+    by_id = {x["external_id"]: x for x in snap.listings}
+
+    assert (snap.stats["sellers"], snap.stats["median"], snap.stats["count"]) == (
+        "private",
+        3200,
+        5,
+    )
+    assert by_id["d0"]["rating"] == "HIGH"  # dealer price vs what private sellers ask
+    assert by_id["p0"]["rating"] == "FAIR"

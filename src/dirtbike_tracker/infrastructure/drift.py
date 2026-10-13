@@ -78,6 +78,8 @@ def _kijiji_search_problems(name: str, html: str, slug: str) -> list[str]:
     if leaked := {x.external_id for x in listings} & new_ids:
         found.append(f"{name}: new dealer stock not skipped: {sorted(leaked)}")
     if slug == "rebel500" and listings:  # street bikes fill in the form fields
+        if not any(x.seller_type for x in listings):
+            found.append(f"{name}: forsaleby (dealer/private) stopped parsing (#81)")
         if not any(x.year for x in listings):
             found.append(f"{name}: caryear stopped parsing")
         if not any(x.km for x in listings):
@@ -98,6 +100,8 @@ def _autotrader_problems(name: str, html: str, slug: str) -> list[str]:
         found.append(f"{name}: new dealer stock not skipped: {sorted(leaked)}")
     if listings and not any(x.year for x in listings):
         found.append(f"{name}: modelYear stopped parsing")
+    if listings and not any(x.seller_type for x in listings):
+        found.append(f"{name}: seller.type stopped parsing (#81)")
     if listings and not any(x.km for x in listings):
         found.append(f"{name}: mileageInKm stopped parsing")
     return found
