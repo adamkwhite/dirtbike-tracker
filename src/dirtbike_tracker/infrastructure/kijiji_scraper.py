@@ -79,6 +79,7 @@ def _parse_price(text: str) -> tuple[float | None, str]:
 # Add new ones here as you scrape new models.
 KNOWN_MODEL_SLUGS = [
     "crf50f",
+    "crf70f",
     "crf80f",
     "crf100f",
     "crf125f",
