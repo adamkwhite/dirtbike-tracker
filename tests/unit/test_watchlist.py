@@ -145,3 +145,18 @@ def test_config_option_keeps_its_own_state_and_dashboard(
         tmp_path / "state" / "friend",
         tmp_path / "dashboard-friend.html",
     )
+
+
+@pytest.mark.parametrize(
+    ("title", "year", "wanted"),
+    [
+        ("2003 Honda crf", 2003, False),  # before the CRF250F (2019+)
+        ("2021 Honda CRF250F", 2021, True),
+        ("2023 Honda crf", 2023, False),  # after the CRF230F (to 2019), with a max_year
+        ("Honda CRF250F", None, True),  # unknown year passes
+    ],
+)
+def test_matches_spec_production_years(title: str, year: int | None, wanted: bool) -> None:
+    min_year, max_year = (2003, 2019) if "2023" in title else (2019, None)
+
+    assert matches_spec(_bike("1", title, 2500, year), min_year, max_year=max_year) is wanted

@@ -51,7 +51,7 @@ ACCESSORY_MAX_PRICE = 1000
 _ACCESSORY_RE = re.compile(
     r"\b(racks?|luggage|saddlebags?|bags?|panniers?|supports?|brackets?|mounts?|exhaust|"
     r"muffler|seat|windscreen|windshield|mirrors?|tires?|wheels?|rims?|covers?|guards?|"
-    r"helmets?|jackets?)\b",
+    r"helmets?|jackets?|kits?|lowering)\b",
     re.I,
 )
 _BADGES = {"just listed", "sold", "pending"}  # card status lines, not the title

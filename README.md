@@ -79,7 +79,9 @@ with fit below 5 never alerts, however cheap.
 A model with `goal: ride` in `models.yml` (e.g. the Rebel 500, to ride in spring) flips that:
 needing work, `no safety` and `sold as is` are red flags, and `runs great`, `safetied`,
 `certified`, `low kms`, `new tires` are green. Ride models have no project-bike median.
-Adding a model: an entry in `models.yml` (plus its slug in `KNOWN_MODEL_SLUGS`), and if
+Adding a model: an entry in `models.yml` (plus its slug in `KNOWN_MODEL_SLUGS`) with its
+production years as `min_year` / `max_year` (a listing outside them is another bike or a typo:
+a "2003 Honda crf" isn't a CRF250F; unknown years pass), and if
 AutoTrader's keyword search misses the slug, a spelling in `autotrader_scraper.KEYWORDS`. If
 AutoTrader files it under a model family ("Honda CRF"), add the family path to `FAMILY_PATHS`;
 check the path first, since an unknown one silently returns the whole make page.

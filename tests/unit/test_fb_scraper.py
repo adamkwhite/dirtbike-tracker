@@ -240,3 +240,9 @@ def test_vague_titles_must_not_name_another_variant(title: str, kept: bool) -> N
     page = _card("1", "CA$2,500", title, "Barrie, ON")
 
     assert bool(parse_listings(page, "klx140")) is kept
+
+
+def test_drops_cheap_kits() -> None:
+    page = _card("1", "CA$90", "Honda NX500 / CB500X lowering kit", "London, ON")
+
+    assert parse_listings(page, "nx500") == []
