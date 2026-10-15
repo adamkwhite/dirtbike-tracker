@@ -223,3 +223,20 @@ def test_fb_login_without_playwright_says_how_to_install(
 
     assert result.exit_code == 1
     assert "pip install -e '.[fb]'" in result.output
+
+
+@pytest.mark.parametrize(
+    ("title", "kept"),
+    [
+        ("2005 klx 125L big wheel", False),  # a KLX125: a model we don't list, but not ours
+        ("2009 Kawasaki klx", True),  # vague: no number, trusted to FB's search
+        ("2017 klx 140g", True),
+        ("Kawasaki KLX-140", True),
+        ("Kawasaki KLX 140 G big wheel version", True),  # "wheel", but at a bike's price
+        ("Kawasaki KLX 2010", True),  # a year after the family, not a model number
+    ],
+)
+def test_vague_titles_must_not_name_another_variant(title: str, kept: bool) -> None:
+    page = _card("1", "CA$2,500", title, "Barrie, ON")
+
+    assert bool(parse_listings(page, "klx140")) is kept
