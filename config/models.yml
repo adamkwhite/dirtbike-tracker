@@ -39,6 +39,14 @@ secondary:
     target_price: 2000
     notes: "Alternative to CRF150F"
 
+  - slug: klx125
+    goal: project
+    min_year: 2003
+    max_year: 2006
+    sources: [kijiji, autotrader, facebook, sturgess]
+    target_price: 1500
+    notes: "Air-cooled, carb, kick start. A rebadged Suzuki DR-Z125: DR-Z parts fit. L = big wheel"
+
   - slug: crf100f
     goal: project
     min_year: 2003           # made 2004-2013; a year early is a common seller slip
