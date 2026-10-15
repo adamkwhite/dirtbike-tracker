@@ -51,17 +51,30 @@ RATING_COLORS = {
 }
 
 
-def load_config() -> dict:
-    """Load models.yml. Returns {} if the file doesn't exist."""
-    if not CONFIG_PATH.exists():
+def load_config(path: Path | None = None) -> dict:
+    """Load models.yml (or another watchlist). Returns {} if the file doesn't exist."""
+    path = path or CONFIG_PATH  # resolved per call, so tests can redirect CONFIG_PATH
+    if not path.exists():
         return {}
-    with open(CONFIG_PATH) as f:
+    with open(path) as f:
         return yaml.safe_load(f) or {}
 
 
-def _autotrader_source(slug: str, region: str, pages: int) -> list[Listing]:  # noqa: ARG001
+def _autotrader_source(
+    slug: str,
+    region: str,
+    pages: int,  # noqa: ARG001
+    *,
+    query: str | None = None,
+    include_new: bool = False,
+) -> list[Listing]:
     """AutoTrader as a ListingSource: one keyword page, province code instead of a region slug."""
-    return scrape_autotrader(slug, "on" if region.lower() == "ontario" else region)
+    return scrape_autotrader(
+        slug,
+        "on" if region.lower() == "ontario" else region,
+        query=query,
+        include_new=include_new,
+    )
 
 
 def skip_unconfigured(send: Notifier) -> Notifier:
@@ -77,23 +90,32 @@ def skip_unconfigured(send: Notifier) -> Notifier:
     return wrapped  # type: ignore[return-value]
 
 
-def build_app() -> App:
-    """The composition root: real adapters for every port (ports.py)."""
+def build_app(config_path: Path | None = None) -> App:
+    """The composition root: real adapters for every port (ports.py).
+
+    Another watchlist (`--config config/friend.yml`) shares the DB but keeps its
+    own alert state and dashboard, so its alerts go only to its own ntfy topic.
+    """
     init_db()
+    if config_path is None:
+        state_dir, dashboard_path = STATE_DIR, DASHBOARD_PATH
+    else:
+        state_dir = STATE_DIR / config_path.stem
+        dashboard_path = ROOT / f"dashboard-{config_path.stem}.html"
     return App(
         store=SqliteStore(),
         sources={
             "kijiji": scrape_kijiji,
             "autotrader": _autotrader_source,
             # opt-in per model (models.yml sources); throttled to a few searches a day
-            "facebook": fb_scraper.FacebookSource(STATE_DIR / "fb_searches.json"),
+            "facebook": fb_scraper.FacebookSource(state_dir / "fb_searches.json"),
         },
         # AutoTrader's search page already carries the description, so it has no fetcher
         detail_fetchers={"kijiji": kijiji_ad_description},
         notify=skip_unconfigured(notifier.notify),
-        config=load_config(),
-        state_dir=STATE_DIR,
-        dashboard_path=DASHBOARD_PATH,
+        config=load_config(config_path),
+        state_dir=state_dir,
+        dashboard_path=dashboard_path,
         reports_dir=REPORTS_DIR,
         ping=notifier.ping_healthcheck,
     )
@@ -122,11 +144,18 @@ def _open_in_browser(path: Path) -> None:
 
 
 @click.group()
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Another watchlist, e.g. config/friend.yml (default config/models.yml)",
+)
 @click.pass_context
-def cli(ctx: click.Context):
+def cli(ctx: click.Context, config_path: Path | None):
     """Dirt bike price tracker."""
     if ctx.obj is None:  # tests pass their own App
-        ctx.obj = build_app()
+        ctx.obj = build_app(config_path and config_path.resolve())
 
 
 @cli.command()
@@ -249,7 +278,7 @@ def watch(app: App, region: str, notify: bool, group: str):
     """
     config = app.config
     if not config:
-        click.echo(f"No config at {CONFIG_PATH}. Create one from the example.")
+        click.echo("No models configured. Populate config/models.yml (or the --config file).")
         return
 
     groups = [group] if group else list(config.keys())
@@ -259,7 +288,9 @@ def watch(app: App, region: str, notify: bool, group: str):
     already_notified = notified_ids(app)
     source_counts: Counter = Counter()
     newly_notified = set()
-    totals = {"new": 0, "updated": 0, "deals": 0, "goods": 0, "target_hits": 0, "drops": 0}
+    totals = {
+        "new": 0, "updated": 0, "deals": 0, "goods": 0, "target_hits": 0, "drops": 0, "matches": 0,
+    }  # fmt: skip
 
     for target in all_targets:
         newly_notified |= watch_model(
@@ -283,6 +314,7 @@ def watch(app: App, region: str, notify: bool, group: str):
         f"\nWatch complete. New: {totals['new']}, Updated: {totals['updated']}, "
         f"DEAL alerts: {totals['deals']}, GOOD alerts: {totals['goods']}, "
         f"Target hits: {totals['target_hits']}, Price drops: {totals['drops']}"
+        + (f", Matches: {totals['matches']}" if totals["matches"] else "")
     )
     click.echo(f"Dashboard: file://{app.dashboard_path}")
     app.ping()

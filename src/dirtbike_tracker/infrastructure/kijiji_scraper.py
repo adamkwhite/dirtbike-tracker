@@ -174,6 +174,9 @@ ALLOWED_CATEGORY_PATHS = (
     "/v-sport-other/",
     "/v-street-cruisers-choppers/",
     "/v-sport-touring-motorcycles/",
+    "/v-sport-touring/",
+    "/v-sport-bikes/",
+    "/v-touring/",
     "/v-other-motorcycles/",
     "/v-motocross-other/",
 )
@@ -327,8 +330,11 @@ def _field_text(card: Tag, testid: str, class_pattern: str | None = None, sep: s
     return el.get_text(sep, strip=True) if isinstance(el, Tag) else ""
 
 
-def parse_listings(html: str, model_slug: str) -> list[Listing]:
-    """Extract listing data from a Kijiji search results page."""
+def parse_listings(html: str, model_slug: str, include_new: bool = False) -> list[Listing]:
+    """Extract listing data from a Kijiji search results page.
+
+    New dealer stock is skipped unless `include_new` (a model shopping new, models.yml).
+    """
     soup = BeautifulSoup(html, "html.parser")
     listings = []
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -349,9 +355,8 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         url = urljoin(BASE_URL, str(link_el["href"]))
         ad_id = _extract_external_id(url)
         # Drop unrelated Kijiji categories and new dealer stock
-        if not any(path in url for path in ALLOWED_CATEGORY_PATHS) or meta.get(ad_id, {}).get(
-            "new"
-        ):
+        is_new = meta.get(ad_id, {}).get("new")
+        if not any(path in url for path in ALLOWED_CATEGORY_PATHS) or (is_new and not include_new):
             continue
 
         title_el = card.find(["h3", "h2", "a"], string=True)
@@ -413,10 +418,17 @@ def _title_matches_model(title: str, model_slug: str) -> bool:
     return normalized_slug in normalized_title
 
 
-def scrape_model(model_slug: str, region: str = "ontario", max_pages: int = 3) -> list[Listing]:
-    """Scrape N pages of listings for one model in one region."""
+def scrape_model(
+    model_slug: str,
+    region: str = "ontario",
+    max_pages: int = 3,
+    *,
+    query: str | None = None,
+    include_new: bool = False,
+) -> list[Listing]:
+    """Scrape N pages of listings for one model in one region (`query`: search text, if not the slug)."""
     all_listings = []
-    base = build_search_url(model_slug, region)
+    base = build_search_url(query or model_slug, region)
     for page in range(1, max_pages + 1):
         url = base if page == 1 else f"{base}/page-{page}"
         try:
@@ -428,7 +440,7 @@ def scrape_model(model_slug: str, region: str = "ontario", max_pages: int = 3) -
             print(f"Page {page}: {exc}, stopping.")  # noqa: T201
             break
 
-        page_listings = parse_listings(html, model_slug)
+        page_listings = parse_listings(html, model_slug, include_new)
         if not page_listings:
             break
         all_listings.extend(page_listings)

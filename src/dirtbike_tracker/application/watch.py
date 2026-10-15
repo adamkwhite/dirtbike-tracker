@@ -8,8 +8,8 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, MarketSnapshot, under_target
-from .alerts import notify_deal, notify_good
+from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, MarketSnapshot, matches_spec, under_target
+from .alerts import notify_deal, notify_good, notify_match
 from .details import fetch_details
 from .market import model_goal, snapshot
 from .ports import App, Notifier
@@ -24,16 +24,23 @@ def model_snapshot(app: App, slug: str) -> MarketSnapshot:
     return snapshot(slug, app.store, model_goal(app.config, slug))
 
 
-def alert_for(listing: dict, target_price: float | None) -> tuple[Alert, str, str] | None:
+def alert_for(
+    listing: dict, target_price: float | None, every: bool = False
+) -> tuple[Alert, str, str] | None:
     """(alert fn, dedupe key, totals bucket) for a listing this run, or None.
 
     Price drops are keyed by the new price, so a listing already alerted on
-    alerts again each time it drops into GOOD/DEAL territory.
+    alerts again each time it drops into GOOD/DEAL territory. `every` (models.yml
+    `alert: all`) alerts on each new listing and each drop, whatever its rating.
     """
+    lid = f"{listing['source']}:{listing['external_id']}"
+    if every:
+        if listing.get("price_drop_from") is not None:
+            return notify_match, f"drop:{lid}:{listing['price']:.0f}", "drops"
+        return notify_match, lid, "matches"
     # red flags (no ownership, parts bike...) make a cheap price irrelevant
     if listing.get("fit", FIT_NEUTRAL) < FIT_ALERT_MIN:
         return None
-    lid = f"{listing['source']}:{listing['external_id']}"
     rating = listing["rating"]
     if listing.get("price_drop_from") is not None and rating in ("DEAL", "GOOD"):
         alert = notify_deal if rating == "DEAL" else notify_good
@@ -58,9 +65,16 @@ def watch_model(
 ) -> set:
     """Scrape, upsert and alert for one configured model. Returns the newly notified keys."""
     slug = target["slug"]
+    # only what the entry sets, so sources (and test fakes) without these options still work
+    opts = {k: target[k] for k in ("query", "include_new") if k in target}
     for source in target.get("sources", ["kijiji"]):
         scrape = app.sources.get(source)
-        listings = scrape(slug, region, 3) if scrape else []
+        listings = scrape(slug, region, 3, **opts) if scrape else []
+        listings = [
+            x
+            for x in listings
+            if matches_spec(x, target.get("min_year"), target.get("require", ()))
+        ]
         stats = app.store.upsert_listings(listings)
         totals["new"] += stats["new"]
         totals["updated"] += stats["updated"]
@@ -73,7 +87,7 @@ def watch_model(
         scored = model_snapshot(app, slug).listings
     newly_notified = set()
     for listing in scored:
-        choice = alert_for(listing, target.get("target_price"))
+        choice = alert_for(listing, target.get("target_price"), target.get("alert") == "all")
         if choice is None or choice[1] in already_notified:
             continue
         alert, key, bucket = choice

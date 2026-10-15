@@ -69,3 +69,23 @@ def notify_good(notify: Notifier, listing: dict) -> bool:
         click_url=listing.get("url"),
         attach_url=listing.get("image_url"),
     )
+
+
+def notify_match(notify: Notifier, listing: dict) -> bool:
+    """A watchlist match (models.yml `alert: all`): every new listing, deal or not."""
+    price = f"${int(listing['price'])}" if listing.get("price") else "?"
+    model = listing.get("model_slug") or "bike"
+    prefix, was = _drop_prefix(listing)
+    seller = f" ({listing['seller_type']})" if listing.get("seller_type") else ""
+    body = (
+        f"{was}{listing.get('title', '')}\n{_specs_line(listing)}"
+        f"{listing.get('location') or 'unknown'}{seller}\n{listing.get('url', '')}"
+    )
+    return notify(
+        title=f"{prefix or 'New: '}{model.upper()} {price}",
+        body=body,
+        priority=3,
+        tags=["motorcycle"],
+        click_url=listing.get("url"),
+        attach_url=listing.get("image_url"),
+    )
