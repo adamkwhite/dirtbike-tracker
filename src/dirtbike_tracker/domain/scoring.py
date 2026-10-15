@@ -257,7 +257,7 @@ def matches_spec(
 ) -> bool:
     """A listing a models.yml entry wants: within `min_year`..`max_year` (the model's
     production years, or a watchlist's floor; unknown year passes) and naming every
-    `require` word in its title ("RS", "719").
+    `require` word in its title ("RS", "719"; "L|RL" takes either).
 
     Years catch what a title can't: a "2003 Honda crf" isn't a CRF250F (2019+), and a
     "1977 Yamaha TTR 125" is a typo or another bike (the TTR125 started in 2000).
@@ -271,7 +271,12 @@ def matches_spec(
         return False
     text = listing.title.lower()
     # "1200RS" names RS; "RSV4" doesn't
-    return all(re.search(rf"(?<![a-z]){re.escape(w.lower())}(?![a-z])", text) for w in require)
+    return all(
+        any(
+            re.search(rf"(?<![a-z]){re.escape(alt)}(?![a-z])", text) for alt in w.lower().split("|")
+        )
+        for w in require
+    )
 
 
 def under_target(listing: dict, target_price: float | None) -> bool:

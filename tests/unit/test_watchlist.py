@@ -148,6 +148,20 @@ def test_config_option_keeps_its_own_state_and_dashboard(
 
 
 @pytest.mark.parametrize(
+    ("title", "wanted"),
+    [
+        ("2012 Kawasaki KLX110L", True),
+        ("2025 Kawasaki KLX110R L", True),
+        ("klx110 rl (best offer or trade)", True),  # RL: the L after a letter
+        ("Kawasaki klx 110", False),  # base model
+        ("2023klx110r", False),
+    ],
+)
+def test_matches_spec_require_alternatives(title: str, wanted: bool) -> None:
+    assert matches_spec(_bike("1", title, 2500, 2021), 2010, ["L|RL"]) is wanted
+
+
+@pytest.mark.parametrize(
     ("title", "year", "wanted"),
     [
         ("2003 Honda crf", 2003, False),  # before the CRF250F (2019+)

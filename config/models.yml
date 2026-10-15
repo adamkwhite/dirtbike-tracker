@@ -39,6 +39,14 @@ secondary:
     target_price: 2000
     notes: "Alternative to CRF150F"
 
+  - slug: klx110
+    goal: project
+    min_year: 2010           # the L (manual clutch, taller) arrived in 2010
+    require: ["L|RL"]        # KLX110L, KLX110R L, "klx110 rl"; not the auto-clutch base model
+    sources: [kijiji, autotrader, facebook, sturgess]
+    target_price: 1500
+    notes: "KLX110L: manual clutch, ~0.7 m seat. Air-cooled, carb. Badged KLX110R L from 2021"
+
   - slug: klx125
     goal: project
     min_year: 2003
