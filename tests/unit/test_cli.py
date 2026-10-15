@@ -271,4 +271,9 @@ def test_models_yml_entries_are_valid() -> None:
     for e in entries:
         assert e["slug"] in KNOWN_MODEL_SLUGS, e
         assert e.get("goal") in GOALS, e  # explicit on every entry, for consistency
-        assert set(e.get("sources", ["kijiji"])) <= {"kijiji", "autotrader", "facebook"}, e
+        assert set(e.get("sources", ["kijiji"])) <= {
+            "kijiji",
+            "autotrader",
+            "facebook",
+            "sturgess",
+        }, e

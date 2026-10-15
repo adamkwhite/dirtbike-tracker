@@ -99,6 +99,17 @@ def watch_model(
     return newly_notified
 
 
+def sources_seen(app: App, counts: Counter) -> Counter:
+    """Listings per source, with a whole-inventory source (a dealer's stock file) that fetched
+    fine counted as seen even with no matches: its unmatched listings are sold, not missed."""
+    return Counter(
+        {
+            s: n or int(getattr(app.sources.get(s), "last_fetch_ok", False))
+            for s, n in counts.items()
+        }
+    )
+
+
 def notified_ids(app: App) -> set:
     """Dedupe keys of alerts already sent."""
     path = app.state_dir / "notified_ids.txt"

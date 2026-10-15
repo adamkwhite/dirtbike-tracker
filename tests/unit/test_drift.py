@@ -117,14 +117,33 @@ class FakeSites:
         self.ad_body = ad_body
 
     def get(self, url: str, **_: object) -> object:
-        if "autotrader.ca" in url:
+        if "sturgesscycle.com" in url:
+            text = (
+                "\ufeffvar V6SpbFeeDataVersion=2;\nvar Vehicles="
+                + json.dumps([STURGESS_UNIT])
+                + ";"
+            )
+        elif "autotrader.ca" in url:
             text = _autotrader_page(["U", "N"])
         elif "kijiji.ca/b-" in url:
             title = "2008 Honda CRF150F" if "crf150f" in url else "2019 Honda Rebel 500"
             text = _kijiji_search([YEAR, KM, OWNER], title)
         else:
             text = _ad_page(url.rsplit("/", 1)[-1], self.ad_body)
-        return type("R", (), {"text": text, "raise_for_status": lambda self: None})()
+        attrs = {"text": text, "content": text.encode(), "raise_for_status": lambda self: None}
+        return type("R", (), attrs)()
+
+
+STURGESS_UNIT = {
+    "id": "18938900",
+    "bike_year": "2025",
+    "manuf": "Honda®",
+    "model": "Rebel 500 ABS",
+    "price": "7999",
+    "type": "U",
+    "miles": "1200",
+    "bike_image": "AB6E156B-8E0B-419C-B26C-AA79829A3C28.jpg",
+}
 
 
 def _fake_web(monkeypatch: pytest.MonkeyPatch, sites: FakeSites) -> None:
@@ -142,7 +161,19 @@ def test_record_then_check_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path:
         "kijiji_ad.html",
         "kijiji_search_crf150f.html",
         "kijiji_search_rebel500.html",
+        "sturgess_inventory.js",
     ]
+
+
+def test_reports_a_reshaped_dealer_inventory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _fake_web(monkeypatch, FakeSites())
+    out = tmp_path / "rec"
+    run(out)
+    (out / "sturgess_inventory.js").write_text("var Inventory={};")
+
+    assert run(out, replay=True) == ["sturgess_inventory.js: no `var Vehicles=[...]` units parsed"]
 
 
 def test_reports_ad_page_description_gone(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

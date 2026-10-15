@@ -14,7 +14,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ..domain.listing import Listing
-from . import autotrader_scraper, kijiji_scraper
+from . import autotrader_scraper, dealerspike, kijiji_scraper
 
 # A kid dirt bike (cards, snippets) and a street bike (year/km form fields, dealer stock)
 KIJIJI_SLUGS = ("crf150f", "rebel500")
@@ -22,6 +22,9 @@ AUTOTRADER_SLUG = "rebel500"  # its results include new dealer stock (offerType 
 PRICE_STATES = {"numeric", "please_contact", "swap_trade", "unknown"}
 AD_PAGE = "kijiji_ad.html"
 AUTOTRADER_PAGE = "autotrader_search.html"
+STURGESS_PAGE = "sturgess_inventory.js"
+# Fields the Dealer Spike adapter reads (#99); each must be on at least one unit
+DEALERSPIKE_KEYS = ("id", "bike_year", "manuf", "model", "price", "type", "miles", "bike_image")
 
 
 def record(out: Path) -> None:
@@ -43,6 +46,11 @@ def record(out: Path) -> None:
     url = autotrader_scraper.build_search_url(AUTOTRADER_SLUG)
     (out / AUTOTRADER_PAGE).write_text(autotrader_scraper.fetch_page(url))
     pages[AUTOTRADER_PAGE] = {"url": url, "slug": AUTOTRADER_SLUG}
+
+    url = dealerspike.STURGESS.inventory_url()
+    dealerspike._fetch.cache_clear()  # a fresh recording, not this process's cached copy
+    (out / STURGESS_PAGE).write_text(dealerspike._fetch(url))
+    pages[STURGESS_PAGE] = {"url": url}
 
     manifest = {"recorded_at": datetime.now(UTC).isoformat(timespec="seconds"), "pages": pages}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
@@ -107,6 +115,20 @@ def _autotrader_problems(name: str, html: str, slug: str) -> list[str]:
     return found
 
 
+def _dealerspike_problems(name: str, text: str) -> list[str]:
+    vehicles = dealerspike.parse_vehicles(text)
+    if not vehicles:
+        return [f"{name}: no `var Vehicles=[...]` units parsed"]
+    found = [
+        f"{name}: no unit has {key!r}"
+        for key in DEALERSPIKE_KEYS
+        if not any(v.get(key) for v in vehicles)
+    ]
+    if not any(str(v.get("price", "")).isdigit() for v in vehicles):
+        found.append(f"{name}: prices are no longer plain digits")
+    return found
+
+
 def problems(out: Path) -> list[str]:
     """Everything our parsers no longer read from the recordings in `out`. [] = no drift."""
     manifest_path = out / "manifest.json"
@@ -123,6 +145,8 @@ def problems(out: Path) -> list[str]:
                 found.append(f"{name}: __APOLLO_STATE__ description stopped parsing (#71)")
         elif name == AUTOTRADER_PAGE:
             found += _autotrader_problems(name, html, info["slug"])
+        elif name == STURGESS_PAGE:
+            found += _dealerspike_problems(name, html)
     return found
 
 
