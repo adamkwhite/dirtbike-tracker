@@ -46,16 +46,18 @@ KEYWORDS = {"rebel500": "rebel 500"}
 # Model-family pages (make/model paths) a slug's listings file under (#17). Several models share
 # a family; the title filter assigns each ad to its model. Unknown paths silently return the
 # whole make page, so check a new path with the pagePath guard before adding it.
+HONDA_CRF = ["honda/crf"]
+KAWASAKI_KLX = ["kawasaki/klx"]
 FAMILY_PATHS = {
-    "crf100f": ["honda/crf"],
-    "crf150f": ["honda/crf"],
-    "crf230f": ["honda/crf"],
-    "crf250f": ["honda/crf"],
-    "crf300l": ["honda/crf"],
+    "crf100f": HONDA_CRF,
+    "crf150f": HONDA_CRF,
+    "crf230f": HONDA_CRF,
+    "crf250f": HONDA_CRF,
+    "crf300l": HONDA_CRF,
     "ttr125": ["yamaha/ttr-125", "yamaha/tt-r125"],
-    "klx125": ["kawasaki/klx"],
-    "klx140": ["kawasaki/klx"],
-    "klx300": ["kawasaki/klx"],
+    "klx125": KAWASAKI_KLX,
+    "klx140": KAWASAKI_KLX,
+    "klx300": KAWASAKI_KLX,
     "xr250": ["honda/xr"],
 }
 MAX_FAMILY_PAGES = 3  # 20 ads a page; the used family pages are 1 page today
