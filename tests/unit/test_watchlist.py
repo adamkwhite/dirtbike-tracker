@@ -174,3 +174,21 @@ def test_matches_spec_production_years(title: str, year: int | None, wanted: boo
     min_year, max_year = (2003, 2019) if "2023" in title else (2019, None)
 
     assert matches_spec(_bike("1", title, 2500, year), min_year, max_year=max_year) is wanted
+
+
+def test_a_title_naming_two_models_is_tagged_only_where_it_fits_the_spec(app: App) -> None:
+    ad = replace(
+        _bike("1", "2021 Kawasaki KLX 110 KLX300 D, STREET LEGAL", 3995, 2021),
+        model_slugs=["klx110", "klx300", "kx65"],
+    )
+    config = {
+        "secondary": [{"slug": "klx110", "min_year": 2010, "require": ["L|RL"]}],
+        "dualsport": [{"slug": "klx300", "min_year": 1997}],
+    }
+    app = replace(app, sources={"kijiji": lambda *_, **__: [ad]}, config=config)
+
+    assert CliRunner().invoke(cli, ["watch", "--group", "dualsport"], obj=app).exit_code == 0
+
+    assert [x["external_id"] for x in app.store.active_listings("klx300")] == ["1"]
+    assert app.store.active_listings("klx110") == []  # no L: not a KLX110L
+    assert len(app.store.active_listings("kx65")) == 1  # an untracked model keeps its tag
