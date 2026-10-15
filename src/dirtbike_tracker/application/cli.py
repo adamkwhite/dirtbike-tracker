@@ -27,12 +27,20 @@ from ..infrastructure import fb_scraper, notifier
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
+from ..infrastructure.dealerspike import STURGESS
 from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_description
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
 from ..infrastructure.storage import SqliteStore, init_db
 from .ports import App, Notifier
-from .watch import check_source_health, model_snapshot, notified_ids, record_notified, watch_model
+from .watch import (
+    check_source_health,
+    model_snapshot,
+    notified_ids,
+    record_notified,
+    sources_seen,
+    watch_model,
+)
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 CONFIG_PATH = ROOT / "config" / "models.yml"
@@ -109,6 +117,8 @@ def build_app(config_path: Path | None = None) -> App:
             "autotrader": _autotrader_source,
             # opt-in per model (models.yml sources); throttled to a few searches a day
             "facebook": fb_scraper.FacebookSource(state_dir / "fb_searches.json"),
+            # a dealer's whole used inventory in one cached fetch (#99)
+            "sturgess": STURGESS,
         },
         # AutoTrader's search page already carries the description, so it has no fetcher
         detail_fetchers={"kijiji": kijiji_ad_description},
@@ -163,7 +173,7 @@ def cli(ctx: click.Context, config_path: Path | None):
 @click.option("--region", default="ontario", help="Region slug")
 @click.option(
     "--source",
-    type=click.Choice(["kijiji", "autotrader", "facebook", "all"]),
+    type=click.Choice(["kijiji", "autotrader", "facebook", "sturgess", "all"]),
     default="kijiji",
     help="all = kijiji + autotrader",
 )
@@ -297,10 +307,11 @@ def watch(app: App, region: str, notify: bool, group: str):
             app, target, region, notify, already_notified, source_counts, totals
         )
 
-    app.store.mark_stale([s for s, n in source_counts.items() if n])
+    seen = sources_seen(app, source_counts)
+    app.store.mark_stale([s for s, n in seen.items() if n])
     record_notified(app, already_notified | newly_notified)
     if not group:  # a subset of models coming back empty doesn't mean a scraper broke
-        for warning in check_source_health(app, source_counts, notify):
+        for warning in check_source_health(app, seen, notify):
             click.echo(f"  WARNING: {warning}")
 
     # Refresh the dashboard with every watch run
@@ -370,7 +381,7 @@ def backup(app: App, slot: str):
 @click.option("--notify/--no-notify", default=True, help="Push an ntfy alert on problems")
 @click.pass_obj
 def drift(app: App, out_dir: Path | None, replay: bool, notify: bool):
-    """Site-drift check: record live Kijiji/AutoTrader pages, verify our parsers still read them."""
+    """Site-drift check: record live Kijiji/AutoTrader pages and the Sturgess inventory file, verify our parsers still read them."""
     out = out_dir or RECORDED_DIR
     found = drift_check.run(out, replay=replay)
     if not found:

@@ -1,7 +1,8 @@
 # dirtbike-tracker
 
 Finds a **project bike** to wrench on with the kids: a used dirt bike that needs work, priced
-right, with ownership. Scrapes Kijiji and AutoTrader for the models in `config/models.yml`,
+right, with ownership. Scrapes Kijiji, AutoTrader, Facebook Marketplace and a dealer's used
+inventory (Sturgess Cycle) for the models in `config/models.yml`,
 stores listings in SQLite, rates each one against the model's 90-day market median, scores its
 project fit, and pushes alerts to your phone via [ntfy](https://ntfy.sh).
 
@@ -29,6 +30,7 @@ flowchart TB
         kij["kijiji_scraper.py"]
         at["autotrader_scraper.py"]
         fb["fb_scraper.py<br/>Playwright, opt-in"]
+        ds["dealerspike.py<br/>dealer inventory file"]
         storage[("storage.py<br/>SQLite")]
         render["dashboard.py<br/>reporter.py"]
         notifier["notifier.py"]
@@ -38,7 +40,7 @@ flowchart TB
 
     market -->|score| scoring
     market -->|read via ListingStore| storage
-    watch -->|ListingSource| kij & at & fb
+    watch -->|ListingSource| kij & at & fb & ds
     watch -->|upsert via ListingStore| storage
     cli -->|render snapshot| render
     watch -->|DEAL / GOOD / target / price drop via Notifier| notifier
@@ -46,6 +48,7 @@ flowchart TB
     kijiji{{Kijiji}} --> kij
     autotrader{{AutoTrader}} --> at
     facebook{{"Facebook Marketplace"}} --> fb
+    sturgess{{"Sturgess Cycle (Dealer Spike)"}} --> ds
     notifier --> ntfy{{"ntfy.sh → phone"}}
     notifier --> hc{{healthchecks.io}}
     cli -->|nightly| backup
@@ -242,6 +245,21 @@ with `dirtbike drift --replay --no-notify`. Locally, `make drift` re-records and
 **Never commit `tests/recorded/`** (it's gitignored): the pages are third-party ads with private
 sellers' names and phone numbers, and this repo is public. That's also why CI skips
 `tests/drift`: there are no recordings there.
+
+### Dealer inventory (Sturgess Cycle)
+
+`infrastructure/dealerspike.py` (#99) reads a Dealer Spike dealer's inventory file: the site
+renders its list client-side from `/imglib/Inventory/cache/<site id>/UVehInv.js` (used;
+`VehInv.js` is everything), a `var Vehicles=[...]` literal with every unit. One plain GET per
+watch run (cached across models), no browser, no paging; each model filters it by title.
+Sturgess Cycle (Hamilton, site id 5620) is `dealerspike.STURGESS`; another Dealer Spike dealer
+is one more `DealerSpikeSource(name, base_url, site_id, location)` in `build_app()`.
+
+Every unit is dealer stock (`seller_type = dealer`, so it stays out of the private-sales
+median), and new units plus a dealer's current-model-year bikes are skipped unless a model sets
+`include_new`. A model with none at the dealer is normal: a fetch that worked counts as "seen",
+so unmatched listings age out as sold and source health only alerts if the fetch itself keeps
+failing. The drift check records the file daily.
 
 ### Facebook Marketplace
 
