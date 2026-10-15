@@ -47,8 +47,14 @@ BACKUP_LINE="55 23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRT
 WEEKLY_BACKUP_LINE="58 23 * * 0 cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup --slot weekly 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"
 # Site-drift check (#28), daily before the first watch: alerts if a parser stopped reading a site
 DRIFT_LINE="0 5 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} drift 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/drift.log ${MARKER}"
+# A friend's watchlist (config/friend.yml) to his own ntfy topic, only when FRIEND_NTFY_TOPIC is
+# set. Offset 10 min so it never overlaps the main watch on the shared DB.
+FRIEND_LINE=""
+if [[ -n "${FRIEND_NTFY_TOPIC:-}" ]]; then
+  FRIEND_LINE="10-59/20 6-23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${FRIEND_NTFY_TOPIC} ${DIRTBIKE} --config config/friend.yml watch 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/watch-friend.log ${MARKER}"
+fi
 
-(crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}"; echo "${BACKUP_LINE}"; echo "${WEEKLY_BACKUP_LINE}"; echo "${DRIFT_LINE}") | crontab -
+(crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}"; echo "${BACKUP_LINE}"; echo "${WEEKLY_BACKUP_LINE}"; echo "${DRIFT_LINE}"; if [[ -n "${FRIEND_LINE}" ]]; then echo "${FRIEND_LINE}"; fi) | crontab -
 
 echo "Installed cron entries:"
 crontab -l | grep "${MARKER}"

@@ -7,9 +7,12 @@ fetched by infrastructure/storage.py and composed in application/market.py.
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from statistics import median
+
+from .listing import Listing
 
 # At or below this a "price" is a parts ad or placeholder, not a bike: it is
 # excluded from the market AND never rated or alerted on.
@@ -244,6 +247,20 @@ def urgency(rating: str, age_days: float | None) -> str | None:
     if rating == "GOOD" and age_days > NEGOTIABLE_MIN_DAYS:
         return "NEGOTIABLE"
     return None
+
+
+def matches_spec(listing: Listing, min_year: int | None, require: Sequence[str] = ()) -> bool:
+    """A listing a watchlist entry wants: at least `min_year` (unknown year passes) and
+    naming every `require` word in its title ("RS", "719").
+
+    Title only: dealer descriptions list their other stock ("Speed Triple 1200 RS ...
+    in stock"), which let an RX through. The cost is a trim only in the description.
+    """
+    if min_year and listing.year and listing.year < min_year:
+        return False
+    text = listing.title.lower()
+    # "1200RS" names RS; "RSV4" doesn't
+    return all(re.search(rf"(?<![a-z]){re.escape(w.lower())}(?![a-z])", text) for w in require)
 
 
 def under_target(listing: dict, target_price: float | None) -> bool:

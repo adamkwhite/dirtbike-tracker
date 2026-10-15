@@ -251,6 +251,7 @@ docs/_templates/
 
 # Generated dashboard HTML (regenerated every watch run)
 dashboard.html
+dashboard-*.html
 
 # SQLite database and journal files
 data/listings.db

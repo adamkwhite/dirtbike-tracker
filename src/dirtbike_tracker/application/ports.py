@@ -13,7 +13,23 @@ from typing import Protocol
 
 from ..domain.listing import Listing
 
-ListingSource = Callable[[str, str, int], list[Listing]]  # (model slug, region, max pages)
+
+class ListingSource(Protocol):
+    """Search one site for a model. `query` is the search text when it isn't the slug;
+    `include_new` keeps dealer new stock (models.yml). Only passed when a model sets them."""
+
+    def __call__(
+        self,
+        model_slug: str,
+        region: str,
+        max_pages: int,
+        /,
+        *,
+        query: str | None = None,
+        include_new: bool = False,
+    ) -> list[Listing]: ...
+
+
 AdDetailFetcher = Callable[[str], str | None]  # ad url -> description, None if the fetch failed
 
 

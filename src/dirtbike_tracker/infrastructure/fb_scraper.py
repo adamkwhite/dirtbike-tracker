@@ -187,14 +187,23 @@ class FacebookSource:
         self.fetch = fetch
         self.min_interval = min_interval
 
-    def __call__(self, model_slug: str, region: str, pages: int) -> list[Listing]:  # noqa: ARG002
+    # FB has one results page, no region search and no new/used flag
+    def __call__(
+        self,
+        model_slug: str,
+        region: str,  # noqa: ARG002
+        pages: int,  # noqa: ARG002
+        *,
+        query: str | None = None,
+        include_new: bool = False,  # noqa: ARG002
+    ) -> list[Listing]:
         state = json.loads(self.state_path.read_text()) if self.state_path.exists() else {}
         now = datetime.now(UTC)
         last = state.get(model_slug)
         if last and now - datetime.fromisoformat(last) < self.min_interval:
             return []
         try:
-            html = self.fetch(build_search_url(model_slug))
+            html = self.fetch(build_search_url(query or model_slug))
         except ImportError:
             print("facebook: Playwright not installed (pip install -e '.[fb]'), skipping")  # noqa: T201
             return []

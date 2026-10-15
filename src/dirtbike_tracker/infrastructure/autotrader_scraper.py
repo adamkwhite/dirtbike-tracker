@@ -27,8 +27,8 @@ from .kijiji_scraper import (
     PRICE_STATE_NUMERIC,
     PRICE_STATE_UNKNOWN,
     USER_AGENTS,
-    detect_models_in_title,
     first_image,
+    model_slugs_for,
 )
 
 BASE_URL = "https://www.autotrader.ca"
@@ -51,9 +51,9 @@ KEYWORDS = {"rebel500": "rebel 500"}
 SELLER_TYPES = {"PrivateSeller": "private", "Dealer": "dealer"}
 
 
-def build_search_url(model_slug: str, region: str = "on") -> str:
+def build_search_url(model_slug: str, region: str = "on", query: str | None = None) -> str:
     """Keyword-based AutoTrader search URL in a province."""
-    keyword = KEYWORDS.get(model_slug, model_slug)
+    keyword = query or KEYWORDS.get(model_slug, model_slug)
     return f"{BASE_URL}/motorcycles-atvs/lst/reg_{region}?loc=Ontario&kwd={quote(keyword)}"
 
 
@@ -64,12 +64,13 @@ def fetch_page(url: str, timeout: int = 20) -> str:
     return str(response.text)
 
 
-def parse_listings(html: str, model_slug: str) -> list[Listing]:
+def parse_listings(html: str, model_slug: str, include_new: bool = False) -> list[Listing]:
     """Extract listings from the search page's __NEXT_DATA__ (props.pageProps.listings).
 
     AutoTrader is a Next.js app; the rendered cards have no stable selectors,
     but the embedded page data does. New stock (offerType "N") is skipped:
-    it's dealer MSRP, not used-market prices.
+    it's dealer MSRP, not used-market prices. `include_new` keeps it, for a
+    model shopping new (models.yml).
     """
     script = BeautifulSoup(html, "html.parser").find("script", id="__NEXT_DATA__")
     try:
@@ -78,24 +79,27 @@ def parse_listings(html: str, model_slug: str) -> list[Listing]:
         return []
 
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
-    parsed = (_ad_to_listing(ad, model_slug, now) for ad in ads)
+    parsed = (_ad_to_listing(ad, model_slug, now, include_new) for ad in ads)
     return [listing for listing in parsed if listing is not None]
 
 
-def _ad_to_listing(ad: dict, model_slug: str, now: str) -> Listing | None:
+def _ad_to_listing(ad: dict, model_slug: str, now: str, include_new: bool) -> Listing | None:
     """One __NEXT_DATA__ ad -> Listing, or None for new stock / other models."""
     vehicle = ad.get("vehicle") or {}
     year = parse_year(vehicle.get("modelYear"), datetime.now(UTC).year)
     seller_type = SELLER_TYPES.get(str((ad.get("seller") or {}).get("type")))
     # new stock: marked offerType N, or a dealer's current-model-year bike (demo, #81)
-    if vehicle.get("offerType") == "N" or is_dealer_new(seller_type, year, datetime.now(UTC).year):
+    is_new = vehicle.get("offerType") == "N" or is_dealer_new(
+        seller_type, year, datetime.now(UTC).year
+    )
+    if is_new and not include_new:
         return None
 
     parts = [vehicle.get("modelYear"), vehicle.get("make"), vehicle.get("model")]
     parts.append(vehicle.get("modelVersionInput"))
     title = " ".join(str(p) for p in parts if p)
-    detected = detect_models_in_title(title)
-    if model_slug not in detected and model_slug.lower() not in title.lower():
+    model_slugs = model_slugs_for(title, model_slug)  # "Speed Twin 1200" matches speedtwin1200
+    if not model_slugs:
         return None
 
     price = (ad.get("price") or {}).get("priceRaw")
@@ -109,7 +113,7 @@ def _ad_to_listing(ad: dict, model_slug: str, now: str) -> Listing | None:
         location=(ad.get("location") or {}).get("city") or "",
         posted_text="",
         description=ad.get("description") or "",
-        model_slugs=detected if detected else [model_slug],
+        model_slugs=model_slugs,
         scraped_at=now,
         year=year,
         km=parse_km(vehicle.get("mileageInKm")),
@@ -118,12 +122,14 @@ def _ad_to_listing(ad: dict, model_slug: str, now: str) -> Listing | None:
     )
 
 
-def scrape_model(model_slug: str, region: str = "on") -> list[Listing]:
+def scrape_model(
+    model_slug: str, region: str = "on", *, query: str | None = None, include_new: bool = False
+) -> list[Listing]:
     """Scrape AutoTrader keyword search for a model."""
-    url = build_search_url(model_slug, region)
+    url = build_search_url(model_slug, region, query)
     try:
         html = fetch_page(url)
     except requests.RequestException as exc:
         print(f"AutoTrader fetch failed: {exc}")  # noqa: T201
         return []
-    return parse_listings(html, model_slug)
+    return parse_listings(html, model_slug, include_new)
