@@ -22,7 +22,7 @@ one copy to keep current. Dependency rule: `application` → {`domain`, `infrast
 | infrastructure | `dealerspike.py` | Dealer Spike dealer inventory (#99): `DealerSpikeSource` fetches the dealer's `UVehInv.js` cache file once per run (`lru_cache`), parses `var Vehicles=[...]`, filters by title; `STURGESS` is Sturgess Cycle. Sets `last_fetch_ok`, which `watch.sources_seen` reads so a dealer with no matches still counts as seen |
 | infrastructure | `fb_scraper.py` | Facebook Marketplace (#9): `FacebookSource` renders a search page in Playwright with a persistent profile (logged-out works), parses the cards, and searches each model at most once per `MIN_INTERVAL` (6h). `login()` behind `dirtbike fb-login`. Optional extra `[fb]` |
 | infrastructure | `autotrader_scraper.py` | AutoTrader keyword search plus used-only model-family pages (`FAMILY_PATHS`, #17; rejects a make-page fallback by `pagePath`); parses `__NEXT_DATA__` listings (description included), skips `offerType=N` |
-| infrastructure | `storage.py` | SQLite schema + in-place migrations, upsert, fingerprint dedup, multi-model tagging, `market_prices` / `market_listings`, `price_drops`, likely-sold, dismiss, `set_contact`, `save_full_description` |
+| infrastructure | `storage.py` | SQLite schema + in-place migrations (columns by presence; one-time data fixes by `PRAGMA user_version`), upsert, fingerprint dedup, multi-model tagging, `market_prices` / `market_listings`, `price_drops`, likely-sold, dismiss, `set_contact`, `save_full_description` |
 | infrastructure | `notifier.py` | ntfy.sh transport (the `Notifier` adapter) and the healthchecks.io ping |
 | infrastructure | `dashboard.py`, `reporter.py` | Render a `MarketSnapshot` to HTML / markdown |
 | infrastructure | `drift.py` | Site-drift check (#28): records live search/ad pages into a gitignored dir and lists what our parsers no longer read (fields, photos, year/km, new-stock skip, ad description). `dirtbike drift`, daily cron |
@@ -53,7 +53,7 @@ price_history:
 Two separate dedup mechanisms:
 
 1. **Hard dedup via `(source, external_id)`**: same URL re-scraped on multiple days → one row, `last_seen` updated
-2. **Fingerprint dedup via `(normalized_title, price_bucket, location)`**: cross-posted same bike under different URLs → first copy marked `is_primary=1`, duplicates marked `is_primary=0` and hidden from `list` and median calculations
+2. **Fingerprint dedup via `(normalized_title, price_bucket, location)`**: cross-posted same bike under different URLs → first copy marked `is_primary=1`, duplicates marked `is_primary=0` and hidden from `list`, alerts and median calculations. Dealer listings leave location out (#101): each site names a dealer's place differently ("Oshawa / Durham Region", "WHITBY", "Hamilton, ON"). The cost: two dealers listing an identical bike at an identical price read as one
 
 Fingerprint is MD5 of a normalized key, truncated to 16 chars. Price is bucketed in $50 increments so slight variations don't break the match.
 

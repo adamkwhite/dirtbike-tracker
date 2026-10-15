@@ -99,6 +99,47 @@ def init_db(db_path: Path | None = None) -> None:
     _migrate_old_schema(db_path)
     with connect(db_path) as conn:
         conn.executescript(SCHEMA_INDEXES)
+    _migrate_data(db_path)
+
+
+def _migrate_data(db_path: Path | None = None) -> None:
+    """One-time data fixes, tracked in SQLite's user_version."""
+    with connect(db_path) as conn:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if version < 1:
+            _refingerprint_dealers(conn)
+            conn.execute("PRAGMA user_version = 1")
+
+
+def _refingerprint_dealers(conn: sqlite3.Connection) -> None:
+    """#101: dealer fingerprints drop location; demote the cross-posts that newly match.
+
+    Within each group of active dealer listings sharing the new fingerprint, the
+    first seen stays primary. Only demotes: a listing already non-primary stays so.
+    """
+    rows = conn.execute(
+        "SELECT id, title, price, location FROM listings WHERE seller_type='dealer'"
+    ).fetchall()
+    conn.executemany(
+        "UPDATE listings SET fingerprint=? WHERE id=?",
+        [
+            (_compute_fingerprint(r["title"], r["price"], r["location"], "dealer"), r["id"])
+            for r in rows
+        ],
+    )
+    conn.execute(
+        """
+        UPDATE listings SET is_primary=0
+        WHERE seller_type='dealer' AND is_active=1 AND is_primary=1
+          AND EXISTS (
+            SELECT 1 FROM listings first
+            WHERE first.fingerprint = listings.fingerprint AND first.is_active=1
+              AND first.seller_type='dealer' AND first.is_primary=1
+              AND (first.first_seen < listings.first_seen
+                   OR (first.first_seen = listings.first_seen AND first.id < listings.id))
+          )
+        """
+    )
 
 
 def _migrate_old_schema(db_path: Path | None = None) -> None:
@@ -130,11 +171,22 @@ def _migrate_old_schema(db_path: Path | None = None) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN seller_type TEXT")
 
 
-def _compute_fingerprint(title: str, price: float | None, location: str) -> str:
-    """Hash a (title, price, location) tuple for cross-post dedup."""
+def _compute_fingerprint(
+    title: str, price: float | None, location: str, seller_type: str | None = None
+) -> str:
+    """Hash a (title, price, location) tuple for cross-post dedup.
+
+    Dealer listings leave location out (#101): each site names the dealer's place
+    differently ("Oshawa / Durham Region" on Kijiji, "WHITBY" on AutoTrader,
+    "Hamilton, ON" on the dealer's own site), and a dealer's title + price is
+    already specific. The cost: two dealers listing an identical bike at an
+    identical price read as one.
+    """
     normalized_title = re.sub(r"[^a-z0-9]", "", (title or "").lower())
     price_bucket = int(price // 50) if price else -1
-    normalized_loc = re.sub(r"[^a-z0-9]", "", (location or "").lower())[:12]
+    normalized_loc = (
+        "" if seller_type == "dealer" else re.sub(r"[^a-z0-9]", "", (location or "").lower())[:12]
+    )
     key = f"{normalized_title}|{price_bucket}|{normalized_loc}"
     return hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()[:16]
 
@@ -146,7 +198,9 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
 
     with connect(db_path) as conn:
         for listing in listings:
-            fingerprint = _compute_fingerprint(listing.title, listing.price, listing.location)
+            fingerprint = _compute_fingerprint(
+                listing.title, listing.price, listing.location, listing.seller_type
+            )
 
             existing = conn.execute(
                 "SELECT id, price FROM listings WHERE source=? AND external_id=?",
