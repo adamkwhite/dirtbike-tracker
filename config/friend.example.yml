@@ -5,7 +5,7 @@
 #   query        search text when the slug isn't it (the slug still matches titles, separators ignored)
 #   include_new  keep dealer new stock (models.yml models skip it: MSRP isn't the used market)
 #   min_year     drop older bikes (an unknown year passes)
-#   require      words the title must name ("RS" keeps RS, drops RX/RR/base)
+#   require      words the title must name ("RS" keeps RS, drops RX/RR/base; "L|RL" takes either)
 #   alert: all   push every new listing and every price drop, not only deals
 
 triumph:
