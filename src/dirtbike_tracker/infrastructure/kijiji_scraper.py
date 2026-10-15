@@ -108,6 +108,7 @@ KNOWN_MODEL_SLUGS = [
     "kx125",
     "kx250f",
     "klx110",
+    "klx125",
     "klx140",
     "klx230",
     "klx300",
