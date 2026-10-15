@@ -267,3 +267,8 @@ reports/
 
 # Real recorded pages for tests/drift (#28): third-party ads with personal info, never commit
 tests/recorded/
+
+# Other people's watchlists (--config, #100): personal, not for a public repo
+config/*.yml
+!config/models.yml
+!config/*.example.yml
