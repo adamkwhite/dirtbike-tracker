@@ -59,6 +59,7 @@ FAMILY_PATHS = {
     "klx140": KAWASAKI_KLX,
     "klx300": KAWASAKI_KLX,
     "xr250": ["honda/xr"],
+    "drz125": ["suzuki/dr-z"],
 }
 MAX_FAMILY_PAGES = 3  # 20 ads a page; the used family pages are 1 page today
 
