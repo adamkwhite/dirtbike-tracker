@@ -6,8 +6,10 @@ Runs against an App (ports.py), so tests pass fakes rather than patching modules
 import json
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+from ..domain.listing import Listing
 from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, MarketSnapshot, matches_spec, under_target
 from .alerts import notify_deal, notify_good, notify_match
 from .details import fetch_details
@@ -54,6 +56,19 @@ def alert_for(
     return None
 
 
+def _fits(listing: Listing, entry: dict) -> bool:
+    return matches_spec(
+        listing, entry.get("min_year"), entry.get("require", ()), entry.get("max_year")
+    )
+
+
+def _tagged_to_spec(listing: Listing, specs: dict[str, dict]) -> Listing:
+    """Drop the other models a title names whose spec the listing fails: "2021 KLX 110 KLX300 D"
+    found by the KLX300 search isn't a KLX110L. Models not in the config keep their tag."""
+    slugs = [s for s in listing.model_slugs if s not in specs or _fits(listing, specs[s])]
+    return replace(listing, model_slugs=slugs)
+
+
 def watch_model(
     app: App,
     target: dict,
@@ -67,16 +82,11 @@ def watch_model(
     slug = target["slug"]
     # only what the entry sets, so sources (and test fakes) without these options still work
     opts = {k: target[k] for k in ("query", "include_new") if k in target}
+    specs = {e["slug"]: e for entries in app.config.values() for e in entries or []}
     for source in target.get("sources", ["kijiji"]):
         scrape = app.sources.get(source)
         listings = scrape(slug, region, 3, **opts) if scrape else []
-        listings = [
-            x
-            for x in listings
-            if matches_spec(
-                x, target.get("min_year"), target.get("require", ()), target.get("max_year")
-            )
-        ]
+        listings = [_tagged_to_spec(x, specs) for x in listings if _fits(x, target)]
         stats = app.store.upsert_listings(listings)
         totals["new"] += stats["new"]
         totals["updated"] += stats["updated"]
