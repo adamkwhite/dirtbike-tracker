@@ -3,7 +3,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from dirtbike_tracker.infrastructure.autotrader_scraper import build_search_url, parse_listings
+from dirtbike_tracker.infrastructure import autotrader_scraper
+from dirtbike_tracker.infrastructure.autotrader_scraper import (
+    build_family_url,
+    build_search_url,
+    parse_listings,
+    scrape_model,
+)
 
 
 def _ad(ad_id: str, model: str, offer_type: str, price: int | None, year: int = 2022) -> dict:
@@ -78,3 +84,69 @@ def test_reads_seller_and_skips_dealer_current_year(
     ad["seller"] = {"type": seller}
 
     assert [x.seller_type for x in parse_listings(_page(ad), "crf250f")] == expected
+
+
+def _family_page(path: str, pages: int, *ads: dict) -> str:
+    props = {"listings": list(ads), "numberOfPages": pages}
+    props["pagePath"] = f"/motorcycles-atvs/lst/{path}/reg_on/ot_used?loc=Ontario"
+    payload = json.dumps({"props": {"pageProps": props}})
+    return f'<script id="__NEXT_DATA__" type="application/json">{payload}</script>'
+
+
+@pytest.fixture
+def pages(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """AutoTrader by URL: tests fill it; every fetch is recorded in pages["_fetched"]."""
+    served: dict[str, str] = {}
+    fetched: list[str] = []
+
+    def fetch(url: str) -> str:
+        fetched.append(url)
+        return served.get(url, _page())
+
+    autotrader_scraper._fetch_cached.cache_clear()
+    monkeypatch.setattr(autotrader_scraper, "fetch_page", fetch)
+    served["_fetched"] = fetched  # type: ignore[assignment]
+    return served
+
+
+def test_family_url() -> None:
+    assert build_family_url("honda/crf", page=2) == (
+        "https://www.autotrader.ca/motorcycles-atvs/lst/honda/crf/reg_on/ot_used?loc=Ontario&page=2"
+    )
+
+
+def test_adds_family_pages_to_the_keyword_search(pages: dict) -> None:
+    pages[build_search_url("crf250f")] = _page(_ad("1", "CRF250F", "U", 5499))
+    pages[build_family_url("honda/crf")] = _family_page(
+        "honda/crf",
+        2,
+        _ad("1", "CRF250F", "U", 5499),  # also in the keyword results
+        _ad("2", "CRF", "U", 4800) | {"vehicle": {"model": "CRF", "modelVersionInput": "250F"}},
+        _ad("3", "CRF 300L", "U", 6500),  # another model in the family
+    )
+    pages[build_family_url("honda/crf", page=2)] = _family_page(
+        "honda/crf", 2, _ad("4", "CRF 250F", "U", 3900)
+    )
+
+    assert sorted(x.external_id for x in scrape_model("crf250f")) == ["1", "2", "4"]
+    scrape_model("crf150f")  # shares honda/crf: served from the per-run cache
+    assert pages["_fetched"].count(build_family_url("honda/crf")) == 1
+
+
+def test_rejects_a_make_page_served_for_an_unknown_family(pages: dict) -> None:
+    make_page = _family_page("honda", 54, _ad("9", "CRF250F", "U", 5000))
+    pages[build_family_url("honda/crf")] = make_page
+
+    assert scrape_model("crf250f") == []
+    assert pages["_fetched"].count(build_family_url("honda/crf", page=2)) == 0
+
+
+def test_family_pages_stop_at_the_cap(pages: dict) -> None:
+    for n in range(1, 6):
+        pages[build_family_url("kawasaki/klx", page=n)] = _family_page("kawasaki/klx", 9)
+
+    scrape_model("klx140")
+
+    assert [u for u in pages["_fetched"] if "kawasaki/klx" in u] == [
+        build_family_url("kawasaki/klx", page=n) for n in (1, 2, 3)
+    ]
