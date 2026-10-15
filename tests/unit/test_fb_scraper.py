@@ -246,3 +246,18 @@ def test_drops_cheap_kits() -> None:
     page = _card("1", "CA$90", "Honda NX500 / CB500X lowering kit", "London, ON")
 
     assert parse_listings(page, "nx500") == []
+
+
+@pytest.mark.parametrize(
+    ("price", "title", "kept"),
+    [
+        ("CA$60", "klx140 chain and sprocket kit", False),  # a part
+        ("CA$280", "Luggage racks for KLX140", False),
+        ("CA$700", "klx140 needs work, new tires", True),  # a project bike that has a part
+        ("CA$450", "klx140 non runner, exhaust off", True),
+    ],
+)
+def test_accessory_words_drop_parts_not_cheap_project_bikes(
+    price: str, title: str, kept: bool
+) -> None:
+    assert bool(parse_listings(_card("1", price, title, "Barrie, ON"), "klx140")) is kept
