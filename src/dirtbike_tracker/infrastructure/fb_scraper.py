@@ -47,7 +47,7 @@ _WANTED_RE = re.compile(r"\b(wanted|wtb|iso|looking for)\b", re.I)
 # Street bikes draw accessory ads. A title with one of these words, no year and a parts price
 # is a part ("Luggage racks for CB500X", $280); with a year or a bike's price it's a bike that
 # has one ("2014 CB500F, new tires", "KLX 140 G big wheel version" at $3,200).
-ACCESSORY_MAX_PRICE = 1000
+ACCESSORY_MAX_PRICE = 400  # accessory ads seen: $45-$280; yearless project bikes start around $450
 _ACCESSORY_RE = re.compile(
     r"\b(racks?|luggage|saddlebags?|bags?|panniers?|supports?|brackets?|mounts?|exhaust|"
     r"muffler|seat|windscreen|windshield|mirrors?|tires?|wheels?|rims?|covers?|guards?|"
