@@ -52,7 +52,7 @@ def _invoke(app: App, *args: str) -> str:
 @pytest.fixture
 def market_app(app: App) -> App:
     """The App with Kijiji serving MARKET, already scraped into the store once."""
-    app = replace(app, sources={"kijiji": lambda slug, region, pages: list(MARKET)})
+    app = replace(app, sources={"kijiji": lambda *_, **__: list(MARKET)})
     app.store.upsert_listings(MARKET)
     return app
 
@@ -107,7 +107,7 @@ def test_watch_does_not_alert_on_junk_price_under_target(market_app: App, sent: 
     plastics = _listing("plastics", 50)
     app = replace(
         market_app,
-        sources={"kijiji": lambda *_: [*MARKET, plastics]},
+        sources={"kijiji": lambda *_, **__: [*MARKET, plastics]},
         config={"p": [{"slug": "crf150f", "goal": "project", "target_price": 1500}]},
     )
 
