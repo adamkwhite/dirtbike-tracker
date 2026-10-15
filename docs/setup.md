@@ -71,7 +71,7 @@ tail -f ~/Code/dirtbike-tracker-prod/logs/watch.log
 ```
 
 Default schedule:
-- **Every 20 min, 6am - 11pm**: `watch` (scrape all models, notify)
+- **Every 20 min, 8am - 11pm (8:00-22:40)**: `watch` (scrape all models, notify)
 - **11:30 pm nightly**: write markdown report for CRF150F to `reports/`
 
 Adjust the frequency in `scripts/install_cron.sh` if needed. More frequent =

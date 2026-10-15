@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Install the dirtbike-tracker watch job on cron.
-# Runs every 20 minutes during Ontario waking hours (6am - 11pm ET).
+# Runs every 20 minutes, 8:00-22:40 ET (8am to 11pm).
 # Log lines get prefixed with timestamp via `ts` from moreutils.
 #
 # Run this from the prod clone (~/Code/dirtbike-tracker-prod), not the dev
@@ -40,7 +40,7 @@ fi
 # Timestamp prefix on every line of output
 # Env assignments must prefix the dirtbike command itself: `VAR=x cd dir && cmd`
 # scopes VAR to `cd` only, so watch never saw NTFY_TOPIC.
-CRON_LINE="*/20 6-23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} HEALTHCHECK_URL=${HEALTHCHECK_URL:-} ${DIRTBIKE} watch 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/watch.log ${MARKER}"
+CRON_LINE="*/20 8-22 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} HEALTHCHECK_URL=${HEALTHCHECK_URL:-} ${DIRTBIKE} watch 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/watch.log ${MARKER}"
 REPORT_LINE="30 23 * * * cd ${PROJECT_ROOT} && ${DIRTBIKE} report --model crf150f --write 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/report.log ${MARKER}"
 # Off-box backup after the day's last scrape; weekly slot on Sundays (#26)
 BACKUP_LINE="55 23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"

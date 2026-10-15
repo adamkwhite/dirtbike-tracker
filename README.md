@@ -139,7 +139,7 @@ work on fresh data in dev, copy prod's over between cron ticks:
 git clone https://github.com/adamkwhite/dirtbike-tracker.git ~/Code/dirtbike-tracker-prod
 cd ~/Code/dirtbike-tracker-prod
 python3.13 -m venv venv && venv/bin/pip install -e .
-NTFY_TOPIC=your-topic HEALTHCHECK_URL=https://hc-ping.com/<uuid> ./scripts/install_cron.sh   # every 20 min, 6am-11pm
+NTFY_TOPIC=your-topic HEALTHCHECK_URL=https://hc-ping.com/<uuid> ./scripts/install_cron.sh   # every 20 min, 8am-11pm
 
 # deploy after merging to main
 git -C ~/Code/dirtbike-tracker-prod pull --ff-only
@@ -152,7 +152,7 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 
 | When | Job | Log |
 |---|---|---|
-| every 20 min, 6:00–23:40 | `dirtbike watch` | `logs/watch.log` |
+| every 20 min, 8:00–22:40 | `dirtbike watch` | `logs/watch.log` |
 | 23:30 daily | `dirtbike report --model crf150f --write` | `logs/report.log` |
 | 23:55 daily, 23:58 Sundays | `dirtbike backup` (nightly / `--slot weekly`) | `logs/backup.log` |
 | 05:00 daily | `dirtbike drift` (see Site drift) | `logs/drift.log` |

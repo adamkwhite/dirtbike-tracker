@@ -88,4 +88,4 @@ Local Ubuntu/WSL under cron, running from a separate prod clone (`~/Code/dirtbik
 
 Failure alerting:
 - **A scraper silently breaks:** `watch` pushes an ntfy warning when a source returns 0 listings across every model for 24h
-- **`watch` stops running:** healthchecks.io alerts when the per-run ping stops (schedule `*/20 6-23 * * *`, America/Toronto)
+- **`watch` stops running:** healthchecks.io alerts when the per-run ping stops (schedule `*/20 8-22 * * *`, America/Toronto)
