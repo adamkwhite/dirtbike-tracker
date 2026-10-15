@@ -77,7 +77,9 @@ A model with `goal: ride` in `models.yml` (e.g. the Rebel 500, to ride in spring
 needing work, `no safety` and `sold as is` are red flags, and `runs great`, `safetied`,
 `certified`, `low kms`, `new tires` are green. Ride models have no project-bike median.
 Adding a model: an entry in `models.yml` (plus its slug in `KNOWN_MODEL_SLUGS`), and if
-AutoTrader's keyword search misses the slug, a spelling in `autotrader_scraper.KEYWORDS`.
+AutoTrader's keyword search misses the slug, a spelling in `autotrader_scraper.KEYWORDS`. If
+AutoTrader files it under a model family ("Honda CRF"), add the family path to `FAMILY_PATHS`;
+check the path first, since an unknown one silently returns the whole make page.
 Run `dirtbike watch --group <group> --no-notify` once after deploying, or every listing
 already on the market alerts as new.
 

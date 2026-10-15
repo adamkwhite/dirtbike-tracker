@@ -21,7 +21,7 @@ priority:
 secondary:
   - slug: ttr125
     goal: project
-    sources: [kijiji, facebook]
+    sources: [kijiji, autotrader, facebook]
     target_price: 1500
     notes: "TTR125LE electric start preferred"
 
