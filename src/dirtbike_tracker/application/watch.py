@@ -73,7 +73,9 @@ def watch_model(
         listings = [
             x
             for x in listings
-            if matches_spec(x, target.get("min_year"), target.get("require", ()))
+            if matches_spec(
+                x, target.get("min_year"), target.get("require", ()), target.get("max_year")
+            )
         ]
         stats = app.store.upsert_listings(listings)
         totals["new"] += stats["new"]

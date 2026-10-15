@@ -249,14 +249,25 @@ def urgency(rating: str, age_days: float | None) -> str | None:
     return None
 
 
-def matches_spec(listing: Listing, min_year: int | None, require: Sequence[str] = ()) -> bool:
-    """A listing a watchlist entry wants: at least `min_year` (unknown year passes) and
-    naming every `require` word in its title ("RS", "719").
+def matches_spec(
+    listing: Listing,
+    min_year: int | None,
+    require: Sequence[str] = (),
+    max_year: int | None = None,
+) -> bool:
+    """A listing a models.yml entry wants: within `min_year`..`max_year` (the model's
+    production years, or a watchlist's floor; unknown year passes) and naming every
+    `require` word in its title ("RS", "719").
+
+    Years catch what a title can't: a "2003 Honda crf" isn't a CRF250F (2019+), and a
+    "1977 Yamaha TTR 125" is a typo or another bike (the TTR125 started in 2000).
 
     Title only: dealer descriptions list their other stock ("Speed Triple 1200 RS ...
     in stock"), which let an RX through. The cost is a trim only in the description.
     """
-    if min_year and listing.year and listing.year < min_year:
+    if listing.year and (
+        (min_year and listing.year < min_year) or (max_year and listing.year > max_year)
+    ):
         return False
     text = listing.title.lower()
     # "1200RS" names RS; "RSV4" doesn't
