@@ -164,8 +164,9 @@ changing the schedule in `install_cron.sh`, re-run it from the prod clone with t
 
 ### A friend's watchlist
 
-`config/friend.yml` is a second watchlist with its own alerts: `dirtbike --config
-config/friend.yml watch` shares the listings DB but keeps its own notified state
+`config/friend.yml` is a second watchlist with its own alerts. It's personal, so it's
+gitignored (every `config/*.yml` except `models.yml` is); start one from
+`config/friend.example.yml`. `dirtbike --config config/friend.yml watch` shares the listings DB but keeps its own notified state
 (`data/state/friend/`) and dashboard (`dashboard-friend.html`, local only). Set
 `FRIEND_NTFY_TOPIC` when running `install_cron.sh` to add its watch at :10/:30/:50 (offset from
 the main run), logging to `logs/watch-friend.log`; he subscribes to that topic in the ntfy app.
@@ -174,7 +175,7 @@ Seed it once with `--no-notify` like any new model.
 Entries take extra fields for shopping new, specific bikes: `query` (search text when it isn't
 the slug), `include_new` (keep dealer new stock), `min_year`, `require` (words the title must
 name, e.g. `RS` drops the RX/RR) and `alert: all` (push every new match and every price drop,
-not only deals). See the comments in `config/friend.yml`.
+not only deals). See the comments in `config/friend.example.yml`.
 
 `dirtbike --config config/friend.yml dashboard --open` shows his bikes.
 

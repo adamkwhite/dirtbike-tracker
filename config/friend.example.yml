@@ -1,0 +1,19 @@
+# Example of a second watchlist. Copy to config/<name>.yml (gitignored: config/*.yml other
+# than models.yml) and run `dirtbike --config config/<name>.yml watch` with that person's
+# NTFY_TOPIC. Shares the listings DB with models.yml; keeps its own alert state
+# (data/state/<name>/) and dashboard (dashboard-<name>.html). Fields beyond models.yml's:
+#   query        search text when the slug isn't it (the slug still matches titles, separators ignored)
+#   include_new  keep dealer new stock (models.yml models skip it: MSRP isn't the used market)
+#   min_year     drop older bikes (an unknown year passes)
+#   require      words the title must name ("RS" keeps RS, drops RX/RR/base)
+#   alert: all   push every new listing and every price drop, not only deals
+
+triumph:
+  - slug: speedtwin          # Speed Twin 900 has no RS, so "speedtwin" + RS is the 1200 RS
+    query: speed twin 1200
+    goal: ride
+    sources: [kijiji, autotrader, facebook]
+    include_new: true
+    min_year: 2025
+    require: [RS]
+    alert: all
