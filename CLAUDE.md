@@ -18,6 +18,7 @@ Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
 
 ## Common commands
 - `dirtbike watch` - scrape all models, score, notify
+- `dirtbike watch --no-notify [--group g]` - seed after adding a model, so its backlog doesn't alert. It prints each alert it skipped (`quiet deals: ...`): pass the real finds on to the user, since a seed marks them alerted
 - `dirtbike dashboard --open` - regenerate HTML
 - `dirtbike stats --model crf150f` - market summary
 

@@ -103,6 +103,14 @@ def test_watch_records_deal_only_when_alert_sent(
     assert len(sent) == (0 if args else 1)
 
 
+def test_a_quiet_watch_lists_the_alerts_it_skips(market_app: App, sent: PushSpy) -> None:
+    output = _invoke(market_app, "watch", "--no-notify")
+
+    assert sent == []
+    assert "quiet deals: crf150f $1400" in output
+    assert "a1400" in output
+
+
 def test_watch_does_not_alert_on_junk_price_under_target(market_app: App, sent: PushSpy) -> None:
     plastics = _listing("plastics", 50)
     app = replace(
