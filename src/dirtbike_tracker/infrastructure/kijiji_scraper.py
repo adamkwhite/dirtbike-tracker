@@ -133,6 +133,10 @@ KNOWN_MODEL_SLUGS = [
     "cb500x",
     "nx500",
     "xt250",
+    "mt07",
+    "sv650",
+    "nc750x",
+    "vstrom650",
 ]
 
 
