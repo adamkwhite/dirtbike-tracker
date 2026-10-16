@@ -175,10 +175,10 @@ def test_row_shows_year_km_and_price_per_year() -> None:
 
     html = _listing_row(listing)
 
-    assert '<td class="num muted">2018</td>' in html
-    assert '<td class="num muted">16,672</td>' in html
+    assert '<td class="num muted" data-v="2018">2018</td>' in html
+    assert '<td class="num muted" data-v="16672">16,672</td>' in html
     per_year = round(5250 / (datetime.now().year - 2018))
-    assert f'<td class="num muted">${per_year:,}</td>' in html
+    assert f'<td class="num muted" data-v="{per_year}">${per_year:,}</td>' in html
 
 
 def test_row_shows_lazy_thumbnail_only_when_there_is_a_photo() -> None:
@@ -208,3 +208,30 @@ def test_dealer_tag_and_private_median_label() -> None:
 
     assert '<span class="tag-dealer">dealer</span>' in html
     assert '<div class="label">Median (private)</div>' in html
+
+
+def test_all_dirt_bikes_lists_each_listing_once_cheapest_first(snap: MarketSnapshot) -> None:
+    shared = snap.listings[0]
+    other = MarketSnapshot(
+        slug="crf230f",
+        stats=snap.stats,
+        listings=[shared, {**shared, "url": "https://x/cheap", "price": 300, "title": "Cheap 230"}],
+        trend=None,
+        prices=[],
+    )
+    street = MarketSnapshot(slug="rebel500", stats=snap.stats, listings=[], trend=None, prices=[])
+
+    page = render_dashboard([snap, other, street], combined=["crf150f", "crf230f"])
+
+    table = page.split('id="all"')[1].split("</section>")[0]
+    urls = {x["url"] for x in snap.listings} | {"https://x/cheap"}
+    assert f"ALL DIRT BIKES ({len(urls)})" in page
+    assert table.count("<tr>") - 1 == len(urls)  # the shared listing is one row
+    assert "CRF150F, CRF230F" in table
+    assert table.index("Cheap 230") < table.index(snap.listings[0]["title"][:20])
+    assert "REBEL500" not in table
+    assert 'class="sortable"' in page
+
+
+def test_no_combined_models_no_all_section(snap: MarketSnapshot) -> None:
+    assert 'id="all"' not in render_dashboard([snap])

@@ -32,6 +32,7 @@ from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_de
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
 from ..infrastructure.storage import SqliteStore, init_db
+from .market import model_goal
 from .ports import App, Notifier
 from .watch import (
     check_source_health,
@@ -136,6 +137,12 @@ def _snapshot(app: App, slug: str) -> MarketSnapshot:
         return model_snapshot(app, slug)
     except ValueError as exc:  # unknown goal in models.yml
         raise click.ClickException(str(exc)) from exc
+
+
+def _write_dashboard(app: App, slugs: list[str]) -> Path:
+    """The dashboard, led by every dirt bike (the project models) in one sortable table."""
+    dirt = [s for s in slugs if model_goal(app.config, s) == "project"]
+    return write_dashboard([_snapshot(app, s) for s in slugs], app.dashboard_path, dirt)
 
 
 def _open_in_browser(path: Path) -> None:
@@ -317,7 +324,7 @@ def watch(app: App, region: str, notify: bool, group: str):
     # Refresh the dashboard with every watch run
     all_slugs = [t["slug"] for t in all_targets]
     try:
-        write_dashboard([_snapshot(app, s) for s in all_slugs], app.dashboard_path)
+        _write_dashboard(app, all_slugs)
     except Exception as exc:  # noqa: BLE001
         click.echo(f"  (dashboard write failed: {exc})")
 
@@ -348,7 +355,7 @@ def dashboard(app: App, models: str, open_browser: bool):
             click.echo("No models configured. Pass --models or populate config/models.yml")
             return
 
-    path = write_dashboard([_snapshot(app, s) for s in slugs], app.dashboard_path)
+    path = _write_dashboard(app, slugs)
     click.echo(f"Dashboard written: file://{path}")
     if open_browser:
         _open_in_browser(path)
