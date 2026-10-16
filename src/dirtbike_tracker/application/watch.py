@@ -103,6 +103,11 @@ def watch_model(
         if choice is None or choice[1] in already_notified:
             continue
         alert, key, bucket = choice
+        if (
+            not notify
+        ):  # a seed run: list what it silenced, so a real find isn't lost with the backlog
+            price = f"${listing['price']:.0f}" if listing.get("price") else "no price"
+            print(f"  quiet {bucket}: {slug} {price} {listing['title']} {listing['url']}")  # noqa: T201
         # --no-notify still records, so re-enabling doesn't replay old alerts;
         # a send that fails stays unrecorded and retries next run
         if not notify or alert(app.notify, {**listing, "model_slug": slug}):
