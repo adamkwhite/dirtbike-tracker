@@ -10,6 +10,7 @@ Run via `python src/main.py dashboard` or let cron do it every 20 min.
 
 import html
 import json
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -74,7 +75,12 @@ def _tiles(stats: dict, t: float | None) -> str:
         """
 
 
-def _listing_row(listing: dict) -> str:
+def _sort_key(value) -> str:
+    """A cell's data-v: what the sortable tables sort by ('' sorts last)."""
+    return "" if value is None else _esc(value)
+
+
+def _listing_row(listing: dict, models: list[str] | None = None) -> str:
     rating = listing["rating"]
     delta = listing["delta_pct"]
     delta_str = f"{delta:+.0f}%" if delta is not None else "—"
@@ -103,14 +109,17 @@ def _listing_row(listing: dict) -> str:
         contacted = f' <span class="contacted" title="{_esc(label)}">{_esc(days)}</span>'
     if listing.get("seller_type") == "dealer":
         contacted += ' <span class="tag-dealer">dealer</span>'
+    model_cell = (
+        f'<td class="muted">{_esc(", ".join(m.upper() for m in models))}</td>' if models else ""
+    )
     return f"""
               <tr>
-                <td><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>
-                <td class="num">{_esc(price_str)}</td>
-                <td class="num muted">{listing.get("year") or "—"}</td>
-                <td class="num muted">{f"{listing['km']:,}" if listing.get("km") else "—"}</td>
-                <td class="num muted">{f"${per_year:,}" if per_year else "—"}</td>
-                <td class="num muted" title="{_esc(vs)}">{_esc(delta_str)}</td>
+                <td data-v="{list(RATING_HEX).index(rating) if rating in RATING_HEX else 9}"><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>{model_cell}
+                <td class="num" data-v="{_sort_key(listing["price"] or None)}">{_esc(price_str)}</td>
+                <td class="num muted" data-v="{_sort_key(listing.get("year"))}">{listing.get("year") or "—"}</td>
+                <td class="num muted" data-v="{_sort_key(listing.get("km"))}">{f"{listing['km']:,}" if listing.get("km") else "—"}</td>
+                <td class="num muted" data-v="{_sort_key(per_year)}">{f"${per_year:,}" if per_year else "—"}</td>
+                <td class="num muted" data-v="{_sort_key(delta)}" title="{_esc(vs)}">{_esc(delta_str)}</td>
                 <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
                 <td class="muted">{_esc(loc)}</td>
                 <td>{thumb}<a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a>{contacted}</td>
@@ -140,6 +149,38 @@ def _sold_table(sold: list[dict]) -> str:
         </thead>
         <tbody>{sold_rows}</tbody>
       </table>"""
+
+
+LISTING_HEADERS = (
+    '<th>Price</th><th>Year</th><th>km</th><th title="Price per year of age">$/yr</th><th>vs Med</th>'
+    '<th title="Project fit 0-10: red/green phrases in the ad">Fit</th><th>Location</th><th>Title</th>'
+)
+
+
+def _all_bikes_section(snaps: list[MarketSnapshot]) -> str:
+    """Every active listing of the given models in one table, cheapest first.
+
+    A listing filed under two models ("2003 Honda crf" as CRF150F and CRF230F) is one row
+    naming both; its rating is against the first model's median.
+    """
+    rows: dict[str, tuple[dict, list[str]]] = {}
+    for snap in snaps:
+        for listing in snap.listings:
+            rows.setdefault(listing["url"], (listing, []))[1].append(snap.slug)
+    ordered = sorted(rows.values(), key=lambda r: r[0]["price"] or float("inf"))
+    body = "".join(_listing_row(listing, models) for listing, models in ordered)
+    return f"""
+    <section class="model" id="all">
+      <h2>ALL DIRT BIKES ({len(ordered)})</h2>
+      <p class="muted">Click a column to sort.</p>
+      <table class="sortable">
+        <thead>
+          <tr><th>Rating</th><th>Model</th>{LISTING_HEADERS}</tr>
+        </thead>
+        <tbody>{body}</tbody>
+      </table>
+    </section>
+    """
 
 
 def _model_section(snap: MarketSnapshot) -> str:
@@ -181,9 +222,9 @@ def _model_section(snap: MarketSnapshot) -> str:
       {weekly_html}
       <h3>Price distribution (90d)</h3>
       <div class="chart-wrap"><canvas id="{chart_id}" height="80"></canvas></div>
-      <table>
+      <table class="sortable">
         <thead>
-          <tr><th>Rating</th><th>Price</th><th>Year</th><th>km</th><th title="Price per year of age">$/yr</th><th>vs Med</th><th title="Project fit 0-10: red/green phrases in the ad">Fit</th><th>Location</th><th>Title</th></tr>
+          <tr><th>Rating</th>{LISTING_HEADERS}</tr>
         </thead>
         <tbody>{rows_html}</tbody>
       </table>{sold_html}
@@ -240,10 +281,18 @@ def _model_section(snap: MarketSnapshot) -> str:
     """
 
 
-def render_dashboard(snaps: list[MarketSnapshot]) -> str:
-    """Build the full HTML page."""
+def render_dashboard(snaps: list[MarketSnapshot], combined: Iterable[str] = ()) -> str:
+    """Build the full HTML page. `combined`: the models also listed together, first."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    sections = "\n".join(_model_section(s) for s in snaps)
+    together = [s for s in snaps if s.slug in set(combined)]
+    sections = "\n".join(
+        ([_all_bikes_section(together)] if together else []) + [_model_section(s) for s in snaps]
+    )
+    all_link = (
+        f'<a href="#all">ALL DIRT BIKES ({len({x["url"] for s in together for x in s.listings})})</a>'
+        if together
+        else ""
+    )
 
     return f"""<!doctype html>
 <html lang="en">
@@ -389,6 +438,8 @@ def render_dashboard(snaps: list[MarketSnapshot]) -> str:
       color: var(--accent);
       white-space: nowrap;
     }}
+    table.sortable th {{ cursor: pointer; user-select: none; }}
+    table.sortable th:hover {{ color: var(--accent); }}
     .badge {{
       display: inline-block;
       padding: 2px 8px;
@@ -411,18 +462,43 @@ def render_dashboard(snaps: list[MarketSnapshot]) -> str:
     <div class="meta">Updated {now}</div>
   </header>
   <nav class="nav">
-    {"".join(f'<a href="#{s.slug}">{s.slug.upper()} ({len(s.listings)})</a>' for s in snaps)}
+    {all_link}{"".join(f'<a href="#{s.slug}">{s.slug.upper()} ({len(s.listings)})</a>' for s in snaps)}
   </nav>
   <main>
     {sections}
   </main>
+  <script>
+    // Click a header to sort its table: by each cell's data-v when set, else its text;
+    // empty values sort last.
+    document.querySelectorAll("table.sortable th").forEach((th, col) => {{
+      th.addEventListener("click", () => {{
+        const body = th.closest("table").tBodies[0];
+        const asc = th.dataset.dir !== "asc";
+        th.dataset.dir = asc ? "asc" : "desc";
+        const key = (row) => {{
+          const cell = row.cells[col];
+          const v = cell.dataset.v ?? cell.textContent.trim().toLowerCase();
+          return v === "" || isNaN(v) ? v : Number(v);
+        }};
+        [...body.rows]
+          .sort((a, b) => {{
+            const x = key(a), y = key(b);
+            if (x === "" || y === "") return (x === "") - (y === "");
+            return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
+          }})
+          .forEach((row) => body.appendChild(row));
+      }});
+    }});
+  </script>
 </body>
 </html>
 """
 
 
-def write_dashboard(snaps: list[MarketSnapshot], out_path: Path) -> Path:
+def write_dashboard(
+    snaps: list[MarketSnapshot], out_path: Path, combined: Iterable[str] = ()
+) -> Path:
     """Write the HTML dashboard to disk and return the path."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_dashboard(snaps))
+    out_path.write_text(render_dashboard(snaps, combined))
     return out_path
