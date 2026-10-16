@@ -91,29 +91,52 @@ middleweight:
     goal: ride
     min_year: 2015
     sources: [kijiji, autotrader, facebook, sturgess]
-    target_price: 7000
+    target_price: 6000
     notes: "Yamaha MT-07, 689 cc twin, 184 kg. Sold as the FZ-07 in 2015-2017 (those titles aren't matched)"
 
   - slug: sv650
     goal: ride
     min_year: 2003           # fuel injection from 2003
     sources: [kijiji, autotrader, facebook, sturgess]
-    target_price: 5000
+    target_price: 4000
     notes: "Suzuki SV650, 645 cc V-twin; S = half fairing"
 
   - slug: nc750x
     goal: ride
     min_year: 2014
     sources: [kijiji, autotrader, facebook, sturgess]
-    target_price: 7000
+    target_price: 5500
     notes: "Honda NC750X, low-revving upright; DCT automatic option"
 
   - slug: vstrom650
     goal: ride
     min_year: 2004
     sources: [kijiji, autotrader, facebook, sturgess]
-    target_price: 6500
+    target_price: 4500
     notes: "Suzuki V-Strom 650 (DL650), adventure-touring; XT = spoked wheels"
+
+  - slug: vulcans
+    query: vulcan s          # Kijiji finds 3 for "vulcans", 11 for "vulcan s"
+    goal: ride
+    min_year: 2015
+    sources: [kijiji, autotrader, facebook, sturgess]
+    target_price: 5000
+    notes: "Kawasaki Vulcan S, 649 cc twin cruiser, low seat, adjustable reach"
+
+  - slug: versys650
+    goal: ride
+    min_year: 2008
+    sources: [kijiji, autotrader, facebook, sturgess]
+    target_price: 5000
+    notes: "Kawasaki Versys 650, adventure-touring (the V-Strom 650's rival)"
+
+  - slug: boulevard
+    goal: ride
+    min_year: 2005
+    require: ["C50|C50T|C50SE|M50|S50|805"]   # the 805 cc cruisers, not the S40, C90 or M109
+    sources: [kijiji, autotrader, facebook, sturgess]
+    target_price: 4000
+    notes: "Suzuki Boulevard C50/M50/S50, 805 cc V-twin cruiser (~50 hp)"
 
 # Dual sports: plated trail bikes, ready to ride (familiar from the dirt bikes)
 dualsport:
