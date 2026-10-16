@@ -137,6 +137,9 @@ KNOWN_MODEL_SLUGS = [
     "sv650",
     "nc750x",
     "vstrom650",
+    "vulcans",
+    "versys650",
+    "boulevard",
 ]
 
 

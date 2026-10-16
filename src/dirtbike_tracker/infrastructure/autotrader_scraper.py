@@ -40,7 +40,12 @@ def _headers() -> dict:
 
 
 # Slugs AutoTrader's keyword search only finds spelled another way ("rebel500" returns 0)
-KEYWORDS = {"rebel500": "rebel 500", "mt07": "mt-07", "vstrom650": "v-strom 650"}
+KEYWORDS = {
+    "rebel500": "rebel 500",
+    "mt07": "mt-07",
+    "vstrom650": "v-strom 650",
+    "versys650": "versys 650",
+}
 
 
 # Model-family pages (make/model paths) a slug's listings file under (#17). Several models share
@@ -62,6 +67,9 @@ FAMILY_PATHS = {
     "sv650": ["suzuki/sv-650"],
     "nc750x": ["honda/nc750x"],
     "vstrom650": ["suzuki/v-strom-650"],
+    "vulcans": ["kawasaki/vulcan-s"],
+    "versys650": ["kawasaki/versys-650"],
+    "boulevard": ["suzuki/boulevard"],
     "drz125": ["suzuki/dr-z"],
 }
 MAX_FAMILY_PAGES = 3  # 20 ads a page; the used family pages are 1 page today
