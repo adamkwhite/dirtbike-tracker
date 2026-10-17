@@ -121,3 +121,26 @@ def test_a_page_without_a_key_is_a_failed_fetch(monkeypatch: pytest.MonkeyPatch)
 
     assert source("rebel500", "on", 3) == []
     assert source.last_fetch_ok is False
+
+
+def test_new_units_of_tracked_models_with_msrp_when_below_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    docs = [
+        doc("1", "2025 SUZUKI DR-Z 125", condition="New", price=4205.68, msrp=4705.68),
+        doc("2", "2026 SUZUKI DR-Z 125L", condition="New", price=5020, msrp=5020),
+        doc("3", "2026 KAWASAKI NINJA ZX-4RR", condition="New", price=12591, msrp=11499),
+        doc("4", "2025 SUZUKI DR-Z 125", condition="New", sold=1),
+        doc("5", "2018 SUZUKI DR-Z 125"),  # used
+    ]
+    monkeypatch.setattr(focus, "_inventory", lambda base_url: tuple(docs))
+
+    units = FocusSource("delmastro", "https://dealer.example", "X", dealer="Del Mastro").new_units(
+        ["drz125", "zx4rr"]
+    )
+
+    assert [(u.unit_id, u.model_slug, u.price, u.was, u.dealer) for u in units] == [
+        ("1", "drz125", 4205.68, 4705.68, "Del Mastro"),
+        ("2", "drz125", 5020.0, None, "Del Mastro"),
+        ("3", "zx4rr", 12591.0, None, "Del Mastro"),  # MSRP under the price: no saving
+    ]

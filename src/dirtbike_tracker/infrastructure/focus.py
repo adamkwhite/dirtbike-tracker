@@ -15,9 +15,15 @@ from functools import lru_cache
 
 import requests
 
-from ..domain.listing import Listing
+from ..domain.listing import Listing, NewUnit
 from ..domain.scoring import parse_km, parse_year
-from .kijiji_scraper import PRICE_STATE_NUMERIC, PRICE_STATE_UNKNOWN, USER_AGENTS, model_slugs_for
+from .kijiji_scraper import (
+    PRICE_STATE_NUMERIC,
+    PRICE_STATE_UNKNOWN,
+    USER_AGENTS,
+    model_slugs_for,
+    tracked_model,
+)
 
 PHOTO_URL = "https://dealers.focus-static.com/inventory/{dealer}/w800/{image}"
 CATEGORIES = "[Motorcycles,Powersports]"
@@ -38,8 +44,9 @@ def search_key(page_html: str) -> str | None:
 class FocusSource:
     """A ListingSource over one Focus dealer's used motorcycles and powersports."""
 
-    def __init__(self, name: str, base_url: str, location: str) -> None:
+    def __init__(self, name: str, base_url: str, location: str, dealer: str = "") -> None:
         self.name = name
+        self.dealer = dealer or name  # display name, in markdown alerts
         self.base_url = base_url
         self.location = location
         self.last_fetch_ok = False  # read by watch.sources_seen, as for Dealer Spike
@@ -98,6 +105,34 @@ class FocusSource:
             )
         return listings
 
+    def new_units(self, slugs: list[str]) -> list[NewUnit]:
+        """Available new units of the tracked models (the markdown watch), with the MSRP as
+        `was` when the unit is listed below it. Raises if the dealer is down."""
+        units = []
+        for d in _inventory(self.base_url):
+            title = str(d.get("name") or "")
+            slug = tracked_model(title, slugs)
+            price = float(d.get("price") or 0)
+            if d.get("condition") != "New" or d.get("sold") or not slug or not price:
+                continue
+            msrp = float(d.get("msrp") or 0)
+            image = d.get("image")
+            units.append(
+                NewUnit(
+                    dealer=self.dealer,
+                    unit_id=str(d["id"]),
+                    model_slug=slug,
+                    title=title,
+                    price=price,
+                    was=msrp if msrp > price else None,
+                    url=f"{self.base_url}/inventory/{d.get('slug', '')}",
+                    image_url=PHOTO_URL.format(dealer=d.get("dealer_id"), image=image)
+                    if image
+                    else None,
+                )
+            )
+        return units
+
 
 # ponytail: per-process cache, like dealerspike._fetch: every model filters the same
 # result, so a watch run asks the dealer once. A failed fetch raises, which isn't kept.
@@ -127,4 +162,6 @@ def _inventory(base_url: str, timeout: int = 20) -> tuple[dict, ...]:
     return tuple(hit["document"] for hit in result.get("hits", []))
 
 
-DEL_MASTRO = FocusSource("delmastro", "https://www.delmastro.ca", location="Cavan Monaghan, ON")
+DEL_MASTRO = FocusSource(
+    "delmastro", "https://www.delmastro.ca", location="Cavan Monaghan, ON", dealer="Del Mastro"
+)

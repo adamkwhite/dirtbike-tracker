@@ -6,12 +6,12 @@ pass fakes in instead of patching modules.
 """
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from ..domain.listing import Listing
+from ..domain.listing import Listing, NewUnit
 
 
 class ListingSource(Protocol):
@@ -40,6 +40,10 @@ class WholeInventorySource(ListingSource, Protocol):
 
 
 AdDetailFetcher = Callable[[str], str | None]  # ad url -> description, None if the fetch failed
+
+
+# the tracked model slugs -> that dealer's new units of them. Raises if the dealer is down
+NewStockSource = Callable[[list[str]], list[NewUnit]]
 
 
 class Notifier(Protocol):
@@ -86,5 +90,6 @@ class App:
     dashboard_path: Path
     reports_dir: Path
     ping: Callable[[], bool]  # dead-man's switch after a completed watch
+    new_stock: Mapping[str, NewStockSource] = field(default_factory=dict)  # markdown watch
     # alerts for street, middleweight and dual-sport models, when set (watch.notifier_for)
     street_notify: Notifier | None = None
