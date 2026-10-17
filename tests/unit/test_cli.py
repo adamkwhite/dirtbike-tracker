@@ -285,4 +285,5 @@ def test_models_yml_entries_are_valid() -> None:
             "facebook",
             "sturgess",
             "cycleworld",
+            "dewildt",
         }, e
