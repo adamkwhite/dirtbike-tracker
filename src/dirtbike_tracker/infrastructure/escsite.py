@@ -33,6 +33,20 @@ def _spec(card: Tag, name: str) -> str:
     return text.removeprefix(label.get_text(strip=True)).strip() if label else text
 
 
+def _text(card: Tag, selector: str) -> str:
+    el = card.select_one(selector)
+    if el is None:
+        return ""
+    return str(el.get_text(strip=True))
+
+
+def _photo(card: Tag) -> str | None:
+    img = card.select_one('img[src*="/uploadedimages/"]:not([src*="logos"])')
+    if img is None:
+        return None
+    return str(img.get("src"))
+
+
 def parse_cards(html: str) -> list[dict]:
     """The units on one inventory page, as plain fields. [] if the cards changed shape."""
     units = []
@@ -44,8 +58,6 @@ def parse_cards(html: str) -> list[dict]:
         m = re.search(r"/adid/(\d+)/", href)
         if not m:
             continue
-        price = card.select_one(".price.show-item .price-val")
-        image = card.select_one('img[src*="/uploadedimages/"]:not([src*="logos"])')
         year, model = _spec(card, "year"), _spec(card, "model")
         # some units' Model already reads "2008 Suzuki C50T Boulevard"
         parts = (model,) if year and model.startswith(year) else (year, _spec(card, "make"), model)
@@ -57,8 +69,8 @@ def parse_cards(html: str) -> list[dict]:
                 "title": title or link.get_text(" ", strip=True),
                 "year": year,
                 "km": _spec(card, "odometer").removesuffix("km").strip(),
-                "price": "" if price is None else price.get_text(strip=True),
-                "image": None if image is None else str(image.get("src")),
+                "price": _text(card, ".price.show-item .price-val"),
+                "image": _photo(card),
             }
         )
     return units
