@@ -28,7 +28,7 @@ from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrade
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
 from ..infrastructure.dealerspike import STURGESS
-from ..infrastructure.escsite import CYCLE_WORLD
+from ..infrastructure.escsite import CYCLE_WORLD, DEWILDT
 from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_description
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
@@ -122,6 +122,7 @@ def build_app(config_path: Path | None = None) -> App:
             # a dealer's whole used inventory in one cached fetch (#99)
             "sturgess": STURGESS,
             "cycleworld": CYCLE_WORLD,  # same idea on the EquipmentSearch platform
+            "dewildt": DEWILDT,
         },
         # AutoTrader's search page already carries the description, so it has no fetcher
         detail_fetchers={"kijiji": kijiji_ad_description},
@@ -182,7 +183,9 @@ def cli(ctx: click.Context, config_path: Path | None):
 @click.option("--region", default="ontario", help="Region slug")
 @click.option(
     "--source",
-    type=click.Choice(["kijiji", "autotrader", "facebook", "sturgess", "cycleworld", "all"]),
+    type=click.Choice(
+        ["kijiji", "autotrader", "facebook", "sturgess", "cycleworld", "dewildt", "all"]
+    ),
     default="kijiji",
     help="all = kijiji + autotrader",
 )

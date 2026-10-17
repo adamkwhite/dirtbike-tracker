@@ -1,8 +1,10 @@
-"""Dealer sites on the EquipmentSearch platform, e.g. Cycle World Superstore in Scarborough.
+"""Dealer sites on the EquipmentSearch platform: Cycle World (Scarborough), DeWildt (3 stores).
 
-Used stock is server-rendered at <base>/Pre-Owned/page/<n>/, one `div.item` card per unit
-(the link /Pre-Owned/adid/<id>/..., price, and Year / Make / Model / Km spec fields), with
-"Page 1 of 3" giving the page count. One crawl is the dealer's whole used inventory, so,
+Used stock is server-rendered at <base><path>page/<n>/, one `div.item` card per unit (list
+or grid layout: the link .../adid/<id>/..., price, Year / Make / Model / Km spec fields and,
+for a multi-store dealer, "Location: <store>"), with "Page 1 of 3" giving the page count.
+Everything on these pages is used, so a current-model-year unit is kept (DeWildt had a
+used 2027 YZ250X with 3 hours), unlike the new-stock heuristic for Kijiji/AutoTrader. One crawl is the dealer's whole used inventory, so,
 like Dealer Spike (#99), each model filters it by title and `last_fetch_ok` tells watch a
 dealer with none of a model answered.
 """
@@ -16,7 +18,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from ..domain.listing import Listing
-from ..domain.scoring import is_dealer_new, parse_km, parse_year
+from ..domain.scoring import parse_km, parse_year
 from .kijiji_scraper import PRICE_STATE_NUMERIC, PRICE_STATE_UNKNOWN, USER_AGENTS, model_slugs_for
 
 MAX_PAGES = 10  # 20 units a page; Cycle World had 3 pages (2026-10-16)
@@ -47,10 +49,17 @@ def _photo(card: Tag) -> str | None:
     return str(img.get("src"))
 
 
+def _km(odometer: str) -> str:
+    """ "11288 km" -> "11288"; off-road units read "2 hours", which isn't a distance."""
+    return "" if "hour" in odometer else odometer.removesuffix("km").strip()
+
+
 def parse_cards(html: str) -> list[dict]:
     """The units on one inventory page, as plain fields. [] if the cards changed shape."""
     units = []
-    for card in BeautifulSoup(html, "html.parser").select("div.item.list-group-item"):
+    for card in BeautifulSoup(html, "html.parser").select(
+        "div.item.list-group-item, div.item.grid-group-item"
+    ):
         link = card.select_one('a.model-title-link[href*="/adid/"]')
         if link is None:
             continue
@@ -68,9 +77,11 @@ def parse_cards(html: str) -> list[dict]:
                 "path": href,
                 "title": title or link.get_text(" ", strip=True),
                 "year": year,
-                "km": _spec(card, "odometer").removesuffix("km").strip(),
+                "km": _km(_spec(card, "odometer")),
                 "price": _text(card, ".price.show-item .price-val"),
                 "image": _photo(card),
+                # "Location: Hamilton", or "Locations:Innisfil | Peterborough" for a unit at two
+                "store": re.sub(r"^Locations?:\s*", "", _text(card, ".location-div")),
             }
         )
     return units
@@ -85,6 +96,7 @@ class EscSource:
     """A ListingSource over one EquipmentSearch dealer's used inventory (seller_type dealer)."""
 
     def __init__(self, name: str, base_url: str, location: str, path: str = "/Pre-Owned/") -> None:
+        # location: the dealer's, for cards that don't name their store
         self.name = name
         self.base_url = base_url
         self.location = location
@@ -120,7 +132,7 @@ class EscSource:
         for u in units:
             year = parse_year(u["year"], this_year)
             slugs = model_slugs_for(u["title"], model_slug)
-            if not slugs or is_dealer_new("dealer", year, this_year):
+            if not slugs:
                 continue
             price = re.sub(r"[^\d]", "", u["price"].split("CAD")[0])
             listings.append(
@@ -133,7 +145,7 @@ class EscSource:
                     price_state=PRICE_STATE_NUMERIC
                     if price and int(price)
                     else PRICE_STATE_UNKNOWN,
-                    location=self.location,
+                    location=f"{u['store']}, ON" if u.get("store") else self.location,
                     posted_text="",
                     description="",
                     model_slugs=slugs,
@@ -167,4 +179,7 @@ def _inventory(url: str) -> tuple[dict, ...]:
 
 CYCLE_WORLD = EscSource(
     "cycleworld", "https://cycleworldsuperstore.com", location="Scarborough, ON"
+)
+DEWILDT = EscSource(
+    "dewildt", "https://dewildtmarine.com", location="Hamilton, ON", path="/Pre-Owned-Inventory/"
 )

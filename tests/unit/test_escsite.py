@@ -123,3 +123,26 @@ def test_fetch_failure_returns_nothing_and_marks_the_fetch_failed(
 
     assert source("vulcans", "on", 3) == []
     assert source.last_fetch_ok is False
+
+
+def test_grid_cards_name_their_store_and_hours_are_not_km() -> None:
+    grid = card("9", "2027", "Yamaha", "YZ250X", km="3 hours").replace(
+        "list-group-item", "grid-group-item"
+    )
+    two_stores = card("8", "2023", "Yamaha", "YZ250F")
+    grid = grid.replace(
+        "</div>\n    </div>",
+        '</div>\n<div class="col-xs-12 location-div">Location: Peterborough</div></div>',
+        1,
+    )
+    two_stores = two_stores.replace(
+        "</div>\n    </div>",
+        '</div>\n<div class="col-xs-12 location-div">Locations:Innisfil | Peterborough</div></div>',
+        1,
+    )
+    units = parse_cards(page(grid, two_stores))
+
+    (listing,) = SOURCE.parse(units, "yz250x")  # a used current-model-year bike is kept
+
+    assert (listing.year, listing.km, listing.location) == (2027, None, "Peterborough, ON")
+    assert units[1]["store"] == "Innisfil | Peterborough"
