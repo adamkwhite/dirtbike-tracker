@@ -12,6 +12,8 @@ from dirtbike_tracker.application.ports import App
 from dirtbike_tracker.infrastructure.drift import problems, run
 
 from .conftest import PushSpy
+from .test_escsite import card as esc_card
+from .test_escsite import page as esc_page
 
 
 def _kijiji_search(fields: list[dict], title: str = "2019 Honda Rebel 500") -> str:
@@ -117,7 +119,9 @@ class FakeSites:
         self.ad_body = ad_body
 
     def get(self, url: str, **_: object) -> object:
-        if "sturgesscycle.com" in url:
+        if "cycleworldsuperstore.com" in url:
+            text = esc_page(esc_card("67681179", "2015", "Kawasaki", "VULCAN S"))
+        elif "sturgesscycle.com" in url:
             text = (
                 "\ufeffvar V6SpbFeeDataVersion=2;\nvar Vehicles="
                 + json.dumps([STURGESS_UNIT])
@@ -158,6 +162,7 @@ def test_record_then_check_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path:
     manifest = json.loads((tmp_path / "rec" / "manifest.json").read_text())
     assert sorted(manifest["pages"]) == [
         "autotrader_search.html",
+        "cycleworld_preowned.html",
         "kijiji_ad.html",
         "kijiji_search_crf150f.html",
         "kijiji_search_rebel500.html",
