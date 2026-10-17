@@ -29,6 +29,7 @@ from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
 from ..infrastructure.dealerspike import STURGESS
 from ..infrastructure.escsite import CYCLE_WORLD, DEWILDT
+from ..infrastructure.focus import DEL_MASTRO
 from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_description
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
@@ -123,6 +124,7 @@ def build_app(config_path: Path | None = None) -> App:
             "sturgess": STURGESS,
             "cycleworld": CYCLE_WORLD,  # same idea on the EquipmentSearch platform
             "dewildt": DEWILDT,
+            "delmastro": DEL_MASTRO,  # Focus platform: a Typesense index, one query
         },
         # AutoTrader's search page already carries the description, so it has no fetcher
         detail_fetchers={"kijiji": kijiji_ad_description},
@@ -184,7 +186,16 @@ def cli(ctx: click.Context, config_path: Path | None):
 @click.option(
     "--source",
     type=click.Choice(
-        ["kijiji", "autotrader", "facebook", "sturgess", "cycleworld", "dewildt", "all"]
+        [
+            "kijiji",
+            "autotrader",
+            "facebook",
+            "sturgess",
+            "cycleworld",
+            "dewildt",
+            "delmastro",
+            "all",
+        ]
     ),
     default="kijiji",
     help="all = kijiji + autotrader",

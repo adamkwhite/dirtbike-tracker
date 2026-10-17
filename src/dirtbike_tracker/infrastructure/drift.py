@@ -14,7 +14,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ..domain.listing import Listing
-from . import autotrader_scraper, dealerspike, escsite, kijiji_scraper
+from . import autotrader_scraper, dealerspike, escsite, focus, kijiji_scraper
 
 # A kid dirt bike (cards, snippets) and a street bike (year/km form fields, dealer stock)
 KIJIJI_SLUGS = ("crf150f", "rebel500")
@@ -24,6 +24,9 @@ AD_PAGE = "kijiji_ad.html"
 AUTOTRADER_PAGE = "autotrader_search.html"
 STURGESS_PAGE = "sturgess_inventory.js"
 CYCLE_WORLD_PAGE = "cycleworld_preowned.html"
+DEL_MASTRO_PAGE = "delmastro_inventory.json"
+# Typesense fields the Focus adapter reads; each must be on at least one unit
+FOCUS_KEYS = ("id", "name", "condition", "model_year", "price", "slug", "dealer_id", "image")
 # Fields the Dealer Spike adapter reads (#99); each must be on at least one unit
 DEALERSPIKE_KEYS = ("id", "bike_year", "manuf", "model", "price", "type", "miles", "bike_image")
 
@@ -56,6 +59,11 @@ def record(out: Path) -> None:
     url = escsite.CYCLE_WORLD.base_url + escsite.CYCLE_WORLD.path
     (out / CYCLE_WORLD_PAGE).write_text(escsite.fetch_page(url))
     pages[CYCLE_WORLD_PAGE] = {"url": url}
+
+    focus._inventory.cache_clear()  # a fresh query, not this process's cached result
+    docs = focus._inventory(focus.DEL_MASTRO.base_url)
+    (out / DEL_MASTRO_PAGE).write_text(json.dumps(list(docs)))
+    pages[DEL_MASTRO_PAGE] = {"url": focus.DEL_MASTRO.base_url}
 
     manifest = {"recorded_at": datetime.now(UTC).isoformat(timespec="seconds"), "pages": pages}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
@@ -148,6 +156,18 @@ def _escsite_problems(name: str, html: str) -> list[str]:
     return found
 
 
+def _focus_problems(name: str, text: str) -> list[str]:
+    docs = json.loads(text)
+    if not docs:
+        return [f"{name}: the Typesense query returned no units"]
+    found = [
+        f"{name}: no unit has {key!r}" for key in FOCUS_KEYS if not any(d.get(key) for d in docs)
+    ]
+    if not any(d.get("condition") == "Used" for d in docs):
+        found.append(f"{name}: no unit has condition 'Used'")
+    return found
+
+
 def problems(out: Path) -> list[str]:
     """Everything our parsers no longer read from the recordings in `out`. [] = no drift."""
     manifest_path = out / "manifest.json"
@@ -168,6 +188,8 @@ def problems(out: Path) -> list[str]:
             found += _dealerspike_problems(name, html)
         elif name == CYCLE_WORLD_PAGE:
             found += _escsite_problems(name, html)
+        elif name == DEL_MASTRO_PAGE:
+            found += _focus_problems(name, html)
     return found
 
 
@@ -176,6 +198,6 @@ def run(out: Path, replay: bool = False) -> list[str]:
     if not replay:
         try:
             record(out)
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:  # ValueError: Focus key/JSON
             return [f"recording failed: {exc}"]
     return problems(out)

@@ -286,4 +286,5 @@ def test_models_yml_entries_are_valid() -> None:
             "sturgess",
             "cycleworld",
             "dewildt",
+            "delmastro",
         }, e
