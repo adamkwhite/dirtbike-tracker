@@ -91,3 +91,5 @@ class App:
     reports_dir: Path
     ping: Callable[[], bool]  # dead-man's switch after a completed watch
     new_stock: Mapping[str, NewStockSource] = field(default_factory=dict)  # markdown watch
+    # alerts for street, middleweight and dual-sport models, when set (watch.notifier_for)
+    street_notify: Notifier | None = None

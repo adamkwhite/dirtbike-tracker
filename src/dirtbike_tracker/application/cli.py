@@ -15,6 +15,7 @@ import subprocess  # nosec B404 - fixed argv, no shell
 import webbrowser
 from collections import Counter
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import click
@@ -131,6 +132,9 @@ def build_app(config_path: Path | None = None) -> App:
         # AutoTrader's search page already carries the description, so it has no fetcher
         detail_fetchers={"kijiji": kijiji_ad_description},
         notify=skip_unconfigured(notifier.notify),
+        street_notify=partial(notifier.notify, topic=notifier.NTFY_STREET_TOPIC)
+        if notifier.NTFY_STREET_TOPIC
+        else None,
         config=load_config(config_path),
         state_dir=state_dir,
         dashboard_path=dashboard_path,

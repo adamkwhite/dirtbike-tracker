@@ -127,6 +127,7 @@ Add or remove models in `config/models.yml`. Valid Kijiji slugs live in
 | Var | Purpose |
 |---|---|
 | `NTFY_TOPIC` | ntfy topic to push alerts to. Required unless `--no-notify`. |
+| `NTFY_STREET_TOPIC` | Optional second topic for the street, middleweight and dual-sport groups' alerts (`watch.STREET_GROUPS`), so street and dirt bikes can be muted separately. Unset: they go to `NTFY_TOPIC`. |
 | `NTFY_SERVER` | Defaults to `https://ntfy.sh`. |
 | `FB_CITY` | Facebook Marketplace city slug to search around. Defaults to `toronto`. |
 | `FB_PROFILE_DIR` | Browser profile for the Facebook source. Defaults to `~/.config/dirtbike-tracker/fb-profile` (outside the repo). |
@@ -166,7 +167,7 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 
 Logs are in `~/Code/dirtbike-tracker-prod/logs/` (timestamped if `moreutils` is installed). After
 changing the schedule in `install_cron.sh`, re-run it from the prod clone with the same
-`NTFY_TOPIC` / `HEALTHCHECK_URL` (and `FRIEND_NTFY_TOPIC`, below): it replaces every
+`NTFY_TOPIC` / `NTFY_STREET_TOPIC` / `HEALTHCHECK_URL` (and `FRIEND_NTFY_TOPIC`, below): it replaces every
 `# dirtbike-tracker` line.
 
 ### A friend's watchlist
