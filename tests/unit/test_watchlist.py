@@ -192,3 +192,22 @@ def test_a_title_naming_two_models_is_tagged_only_where_it_fits_the_spec(app: Ap
     assert [x["external_id"] for x in app.store.active_listings("klx300")] == ["1"]
     assert app.store.active_listings("klx110") == []  # no L: not a KLX110L
     assert len(app.store.active_listings("kx65")) == 1  # an untracked model keeps its tag
+
+
+def test_street_models_alert_on_the_street_topic_when_one_is_set(app: App, sent: PushSpy) -> None:
+    street = PushSpy()
+
+    def kijiji(slug: str, region: str, pages: int, **opts: object) -> list[Listing]:
+        bike = _bike(slug, f"2026 Triumph Speed Twin 1200 RS {slug}", 19995, 2026)
+        return [replace(bike, model_slugs=[slug])]
+
+    entry = {k: v for k, v in SPEED_TWIN.items() if k != "query"}
+    app = replace(
+        app,
+        sources={"kijiji": kijiji},
+        config={"priority": [entry], "middleweight": [{**entry, "slug": "street"}]},
+    )
+    CliRunner().invoke(cli, ["watch"], obj=replace(app, street_notify=street))
+
+    assert [p["title"] for p in sent] == ["New: SPEEDTWIN $19995"]
+    assert [p["title"] for p in street] == ["New: STREET $19995"]
