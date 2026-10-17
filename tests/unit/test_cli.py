@@ -284,4 +284,5 @@ def test_models_yml_entries_are_valid() -> None:
             "autotrader",
             "facebook",
             "sturgess",
+            "cycleworld",
         }, e

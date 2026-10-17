@@ -14,7 +14,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ..domain.listing import Listing
-from . import autotrader_scraper, dealerspike, kijiji_scraper
+from . import autotrader_scraper, dealerspike, escsite, kijiji_scraper
 
 # A kid dirt bike (cards, snippets) and a street bike (year/km form fields, dealer stock)
 KIJIJI_SLUGS = ("crf150f", "rebel500")
@@ -23,6 +23,7 @@ PRICE_STATES = {"numeric", "please_contact", "swap_trade", "unknown"}
 AD_PAGE = "kijiji_ad.html"
 AUTOTRADER_PAGE = "autotrader_search.html"
 STURGESS_PAGE = "sturgess_inventory.js"
+CYCLE_WORLD_PAGE = "cycleworld_preowned.html"
 # Fields the Dealer Spike adapter reads (#99); each must be on at least one unit
 DEALERSPIKE_KEYS = ("id", "bike_year", "manuf", "model", "price", "type", "miles", "bike_image")
 
@@ -51,6 +52,10 @@ def record(out: Path) -> None:
     dealerspike._fetch.cache_clear()  # a fresh recording, not this process's cached copy
     (out / STURGESS_PAGE).write_text(dealerspike._fetch(url))
     pages[STURGESS_PAGE] = {"url": url}
+
+    url = escsite.CYCLE_WORLD.base_url + escsite.CYCLE_WORLD.path
+    (out / CYCLE_WORLD_PAGE).write_text(escsite.fetch_page(url))
+    pages[CYCLE_WORLD_PAGE] = {"url": url}
 
     manifest = {"recorded_at": datetime.now(UTC).isoformat(timespec="seconds"), "pages": pages}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
@@ -129,6 +134,20 @@ def _dealerspike_problems(name: str, text: str) -> list[str]:
     return found
 
 
+def _escsite_problems(name: str, html: str) -> list[str]:
+    units = escsite.parse_cards(html)
+    if not units:
+        return [f"{name}: no div.item inventory cards parsed"]
+    found = [
+        f"{name}: no card has a {field}"
+        for field in ("year", "price", "km", "image")
+        if not any(u[field] for u in units)
+    ]
+    if len(units) >= 20 and escsite.page_count(html) == 1:  # a full page, yet no "Page 1 of N"
+        found.append(f"{name}: page count stopped parsing")
+    return found
+
+
 def problems(out: Path) -> list[str]:
     """Everything our parsers no longer read from the recordings in `out`. [] = no drift."""
     manifest_path = out / "manifest.json"
@@ -147,6 +166,8 @@ def problems(out: Path) -> list[str]:
             found += _autotrader_problems(name, html, info["slug"])
         elif name == STURGESS_PAGE:
             found += _dealerspike_problems(name, html)
+        elif name == CYCLE_WORLD_PAGE:
+            found += _escsite_problems(name, html)
     return found
 
 
