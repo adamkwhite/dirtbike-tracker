@@ -12,7 +12,8 @@ import json
 from dataclasses import asdict
 
 from ..domain.listing import NewUnit
-from .ports import App
+from .ports import App, Notifier
+from .watch import notifier_for
 
 STATE_FILE = "new_stock.json"
 
@@ -36,9 +37,9 @@ def _reason(unit: NewUnit, before: float | None) -> tuple[str, float] | None:
     return None
 
 
-def _send(app: App, unit: NewUnit, why: str, was: float) -> bool:
+def _send(send: Notifier, unit: NewUnit, why: str, was: float) -> bool:
     save = was - unit.price
-    return app.notify(
+    return send(
         title=f"MARKDOWN: {unit.model_slug.upper()} ${unit.price:,.0f} (save ${save:,.0f})",
         body=f"{why}, was ${was:,.0f} ({save / was:.0%} off).\n{unit.title}\n{unit.dealer}\n{unit.url}",
         priority=3,
@@ -49,7 +50,12 @@ def _send(app: App, unit: NewUnit, why: str, was: float) -> bool:
 
 
 def _price_to_record(
-    app: App, unit: NewUnit, before: float | None, seeded: bool, notify: bool, lines: list[str]
+    send: Notifier,
+    unit: NewUnit,
+    before: float | None,
+    seeded: bool,
+    notify: bool,
+    lines: list[str],
 ) -> float | None:
     """Alert on this unit if it's worth it; the price to save for next run (None: none yet).
     A first run (not `seeded`) only records; an unsent push keeps the old price, so the next
@@ -60,7 +66,7 @@ def _price_to_record(
     if not notify:
         lines.append(f"quiet markdown: {unit.model_slug} ${unit.price:.0f} {unit.title} {unit.url}")
         return unit.price
-    return unit.price if _send(app, unit, *reason) else before
+    return unit.price if _send(send, unit, *reason) else before
 
 
 def check_markdowns(app: App, notify: bool) -> tuple[list[dict], list[str]]:
@@ -68,7 +74,8 @@ def check_markdowns(app: App, notify: bool) -> tuple[list[dict], list[str]]:
 
     Returns the units seen (for the dashboard) and lines for cli to print: a dealer that
     failed, and on a quiet (--no-notify) run the markdowns it didn't send."""
-    slugs = [e["slug"] for entries in app.config.values() for e in entries or []]
+    groups = {e["slug"]: g for g, entries in app.config.items() for e in entries or []}
+    slugs = list(groups)
     state = _load(app)
     old_prices: dict[str, float] = (state or {}).get("prices", {})
     prices: dict[str, float] = {}
@@ -86,8 +93,9 @@ def check_markdowns(app: App, notify: bool) -> tuple[list[dict], list[str]]:
         for unit in found:
             key = f"{dealer}:{unit.unit_id}"
             units.append(asdict(unit) | {"dealer_key": dealer})
+            send = notifier_for(app, groups.get(unit.model_slug))
             price = _price_to_record(
-                app, unit, old_prices.get(key), state is not None, notify, lines
+                send, unit, old_prices.get(key), state is not None, notify, lines
             )
             if price is not None:
                 prices[key] = price

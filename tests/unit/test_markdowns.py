@@ -122,3 +122,16 @@ def test_markdown_rows_are_the_last_runs_units(app: App) -> None:
         5500,
         "Burlington Cycle",
     )
+
+
+def test_a_street_models_markdown_goes_to_the_street_topic(app: App, sent: PushSpy) -> None:
+    street = PushSpy()
+    dealer = FakeDealer(unit(5000))
+    app = replace(_app(app, dealer), street_notify=street, config={"street": [{"slug": "crf150f"}]})
+    check_markdowns(app, notify=True)
+    dealer.units = [unit(4600)]
+
+    check_markdowns(app, notify=True)
+
+    assert sent == []
+    assert [p["title"] for p in street] == ["MARKDOWN: CRF150F $4,600 (save $400)"]
