@@ -15,7 +15,7 @@ import requests
 from click.testing import CliRunner
 
 from dirtbike_tracker.application import cli as cli_module
-from dirtbike_tracker.infrastructure import notifier, storage
+from dirtbike_tracker.infrastructure import focus, notifier, storage
 
 DEAL_ID, MID_ID, HIGH_ID = "1700000001", "1700000002", "1700000003"
 CUT_SNIPPET = "Good little bike, starts first kick, kids outgrew it ..."  # truncated: fetch the ad
@@ -63,10 +63,24 @@ def _autotrader_search() -> str:
     return f'<script id="__NEXT_DATA__" type="application/json">{payload}</script>'
 
 
+def _burlington_new_stock(price: float) -> str:
+    """One new CRF150F card, its unit as hidden JSON (ARI site builder)."""
+    unit = {
+        "productId": 13847005, "itemYear": 2026, "itemMake": "Honda", "itemModel": "CRF® 150F",
+        "itemPrice": price, "unitPrice": 5000, "itemOnSale": price < 5000, "usageStatus": "New",
+        "itemUrl": "//www.burlington-cycle.com/new-models/13847005i",
+    }  # fmt: skip
+    return f'<span class="datasource hidden">{json.dumps(unit)}</span>'
+
+
 @dataclass
 class FakeResponse:
     text: str = ""
     status_code: int = 200
+    payload: dict | None = None
+
+    def json(self) -> dict:
+        return self.payload or {}
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
@@ -82,6 +96,7 @@ class FakeWeb:
     )
     ad_body: str = "Runs well, ownership in hand. Selling because the kids outgrew it."
     ntfy_status: int = 200
+    new_unit_price: float = 5000  # Burlington's new CRF150F
     fetched: list[str] = field(default_factory=list)
     pushes: list[dict] = field(default_factory=list)
 
@@ -93,10 +108,21 @@ class FakeWeb:
             return FakeResponse(_kijiji_ad(url.rsplit("/", 1)[-1], self.ad_body))
         if "autotrader.ca/motorcycles-atvs/lst" in url:
             return FakeResponse(_autotrader_search())
+        if "burlington-cycle.com" in url:  # one page of new stock, then past the end
+            if "/page/" in url:
+                return FakeResponse(status_code=404)
+            return FakeResponse(_burlington_new_stock(self.new_unit_price))
+        if "delmastro.ca/inventory/" in url:  # the page that carries the search key
+            return FakeResponse("apiKey: 'k3y'")
         raise AssertionError(f"unexpected GET {url}")
 
-    def post(self, url: str, data: bytes, headers: dict, **_: object) -> FakeResponse:
+    def post(
+        self, url: str, data: bytes = b"", headers: dict | None = None, **_: object
+    ) -> FakeResponse:
+        if url.startswith("https://www.delmastro.ca/ts/"):  # its index: no new units
+            return FakeResponse(payload={"results": [{"hits": []}]})
         assert url == "https://ntfy.sh/e2e-topic", url
+        headers = headers or {}
         if self.ntfy_status == 200:
             self.pushes.append({**headers, "body": data.decode()})
         return FakeResponse(status_code=self.ntfy_status)
@@ -111,6 +137,7 @@ def web(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeWeb:
     monkeypatch.setattr(requests, "get", fake.get)
     monkeypatch.setattr(requests, "post", fake.post)
     monkeypatch.setattr("time.sleep", lambda _: None)  # scrapers' rate limit
+    focus._inventory.cache_clear()  # per-process cache: start each test from the fake site
 
     monkeypatch.setattr(storage, "DB_PATH", tmp_path / "listings.db")
     monkeypatch.setattr(cli_module, "STATE_DIR", tmp_path / "state")
@@ -215,3 +242,15 @@ def test_a_quiet_run_lists_the_deal_it_skips_and_marks_it_sent(web: FakeWeb) -> 
     assert "quiet deals: crf150f $1400 2008 Honda CRF150F" in result.output
     _watch()  # the next cron run
     assert web.pushes == []  # the seed recorded it; pass it on from the quiet line instead
+
+
+def test_a_dealer_cutting_a_new_units_price_alerts_once(web: FakeWeb) -> None:
+    _watch()  # the first run records the dealers' new stock
+    web.new_unit_price = 4500
+
+    _watch()
+    _watch()
+
+    markdowns = [t for t in web.titles() if t.startswith("MARKDOWN")]
+    assert markdowns == ["MARKDOWN: CRF150F $4,500 (save $500)"]
+    assert "new stock fetch failed" not in _watch()

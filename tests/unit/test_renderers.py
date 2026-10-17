@@ -235,3 +235,29 @@ def test_all_dirt_bikes_lists_each_listing_once_cheapest_first(snap: MarketSnaps
 
 def test_no_combined_models_no_all_section(snap: MarketSnapshot) -> None:
     assert 'id="all"' not in render_dashboard([snap])
+
+
+def test_new_at_dealers_lists_the_biggest_saving_first(snap: MarketSnapshot) -> None:
+    def unit(title: str, price: float, was: float | None) -> dict:
+        return {
+            "model_slug": "crf150f", "title": title, "price": price, "was": was,
+            "dealer": "Burlington Cycle", "url": f"https://x/{title}",
+        }  # fmt: skip
+
+    units = [
+        unit("Full price", 4959, None),
+        unit("Small cut", 4800, 4900),
+        unit("Big cut", 4200, 4700),
+    ]
+
+    page = render_dashboard([snap], new_units=units)
+
+    section = page.split('id="new"')[1].split("</section>")[0]
+    assert "NEW AT DEALERS (3)" in page
+    assert 'href="#new"' in page
+    assert section.index("Big cut") < section.index("Small cut") < section.index("Full price")
+    assert "$500" in section  # the saving
+
+
+def test_no_new_units_no_section(snap: MarketSnapshot) -> None:
+    assert 'id="new"' not in render_dashboard([snap])

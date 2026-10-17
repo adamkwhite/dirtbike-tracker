@@ -24,6 +24,7 @@ from ..domain.listing import Listing
 from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
 from ..infrastructure import drift as drift_check
 from ..infrastructure import fb_scraper, notifier
+from ..infrastructure.ari import BURLINGTON
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
@@ -34,6 +35,7 @@ from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_de
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
 from ..infrastructure.storage import SqliteStore, init_db
+from .markdowns import check_markdowns, markdown_rows
 from .market import model_goal
 from .ports import App, Notifier
 from .watch import (
@@ -134,6 +136,8 @@ def build_app(config_path: Path | None = None) -> App:
         dashboard_path=dashboard_path,
         reports_dir=REPORTS_DIR,
         ping=notifier.ping_healthcheck,
+        # dealers' new stock, for the markdown watch (markdowns.py)
+        new_stock={"burlington": BURLINGTON, "delmastro": DEL_MASTRO.new_units},
     )
 
 
@@ -144,10 +148,15 @@ def _snapshot(app: App, slug: str) -> MarketSnapshot:
         raise click.ClickException(str(exc)) from exc
 
 
-def _write_dashboard(app: App, slugs: list[str]) -> Path:
-    """The dashboard, led by every dirt bike (the project models) in one sortable table."""
+def _write_dashboard(app: App, slugs: list[str], new_units: list[dict] | None = None) -> Path:
+    """The dashboard, led by every dirt bike (the project models) in one sortable table, then
+    the dealers' new units of the tracked models (the last watch's, unless given)."""
     dirt = [s for s in slugs if model_goal(app.config, s) == "project"]
-    return write_dashboard([_snapshot(app, s) for s in slugs], app.dashboard_path, dirt)
+    units = markdown_rows(app) if new_units is None else new_units
+    snaps = [_snapshot(app, s) for s in slugs]
+    return write_dashboard(
+        snaps, app.dashboard_path, dirt, [u for u in units if u["model_slug"] in slugs]
+    )
 
 
 def _open_in_browser(path: Path) -> None:
@@ -339,11 +348,14 @@ def watch(app: App, region: str, notify: bool, group: str):
     if not group:  # a subset of models coming back empty doesn't mean a scraper broke
         for warning in check_source_health(app, seen, notify):
             click.echo(f"  WARNING: {warning}")
+    new_units, lines = check_markdowns(app, notify)
+    for line in lines:
+        click.echo(f"  {line}")
 
     # Refresh the dashboard with every watch run
     all_slugs = [t["slug"] for t in all_targets]
     try:
-        _write_dashboard(app, all_slugs)
+        _write_dashboard(app, all_slugs, new_units)
     except Exception as exc:  # noqa: BLE001
         click.echo(f"  (dashboard write failed: {exc})")
 

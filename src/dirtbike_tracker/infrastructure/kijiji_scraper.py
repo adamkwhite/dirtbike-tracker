@@ -418,6 +418,11 @@ def model_slugs_for(title: str, model_slug: str) -> list[str]:
     return []
 
 
+def tracked_model(title: str, slugs: list[str]) -> str | None:
+    """The first of `slugs` a title is for, e.g. a dealer's new unit against the watchlist."""
+    return next((s for s in slugs if s in model_slugs_for(title, s)), None)
+
+
 def _title_matches_model(title: str, model_slug: str) -> bool:
     """Loose check that a listing title mentions the model."""
     if not title:

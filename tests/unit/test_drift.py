@@ -12,6 +12,8 @@ from dirtbike_tracker.application.ports import App
 from dirtbike_tracker.infrastructure.drift import problems, run
 
 from .conftest import PushSpy
+from .test_ari import card as ari_card
+from .test_ari import page as ari_page
 from .test_escsite import card as esc_card
 from .test_escsite import page as esc_page
 from .test_focus import doc as focus_doc
@@ -120,7 +122,9 @@ class FakeSites:
         self.ad_body = ad_body
 
     def get(self, url: str, **_: object) -> object:
-        if "delmastro.ca" in url:
+        if "burlington-cycle.com" in url:
+            text = ari_page(ari_card(1, "Vulcan® S", 10704, 10704))
+        elif "delmastro.ca" in url:
             text = "apiKey: 'k3y'"
         elif "cycleworldsuperstore.com" in url:
             text = esc_page(esc_card("67681179", "2015", "Kawasaki", "VULCAN S"))
@@ -175,6 +179,7 @@ def test_record_then_check_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path:
     manifest = json.loads((tmp_path / "rec" / "manifest.json").read_text())
     assert sorted(manifest["pages"]) == [
         "autotrader_search.html",
+        "burlington_new_stock.html",
         "cycleworld_preowned.html",
         "delmastro_inventory.json",
         "kijiji_ad.html",
