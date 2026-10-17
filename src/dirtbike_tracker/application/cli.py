@@ -326,9 +326,12 @@ def watch(app: App, region: str, notify: bool, group: str):
     }  # fmt: skip
 
     for target in all_targets:
-        newly_notified |= watch_model(
+        notified, skipped = watch_model(
             app, target, region, notify, already_notified, source_counts, totals
         )
+        newly_notified |= notified
+        for line in skipped:
+            click.echo(f"  {line}")
 
     seen = sources_seen(app, source_counts)
     app.store.mark_stale([s for s, n in seen.items() if n])

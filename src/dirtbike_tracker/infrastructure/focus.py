@@ -108,7 +108,7 @@ def _inventory(base_url: str, timeout: int = 20) -> tuple[dict, ...]:
     key = search_key(page.text)
     if not key:
         raise ValueError("no Typesense search key on the inventory page")
-    search = {
+    search: dict[str, str | int] = {
         "collection": "vehicles",
         "q": "*",
         "query_by": "name",
