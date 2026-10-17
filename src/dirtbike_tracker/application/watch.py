@@ -19,6 +19,8 @@ from .ports import App, Notifier, WholeInventorySource
 Alert = Callable[[Notifier, dict], bool]
 
 STALE_SOURCE_AFTER = timedelta(hours=24)
+# models.yml groups whose alerts go to the street topic, when one is set
+STREET_GROUPS = frozenset({"street", "middleweight", "dualsport"})
 
 
 def model_snapshot(app: App, slug: str) -> MarketSnapshot:
@@ -54,6 +56,13 @@ def alert_for(
     if rating == "GOOD":
         return notify_good, lid, "goods"
     return None
+
+
+def notifier_for(app: App, group: str | None) -> Notifier:
+    """The street topic's notifier for a street group's model, else the main one."""
+    if group in STREET_GROUPS and app.street_notify is not None:
+        return app.street_notify
+    return app.notify
 
 
 def _fits(listing: Listing, entry: dict) -> bool:
@@ -102,6 +111,7 @@ def watch_model(
         scored = model_snapshot(app, slug).listings
     newly_notified = set()
     skipped = []
+    send = notifier_for(app, target.get("group"))
     for listing in scored:
         choice = alert_for(listing, target.get("target_price"), target.get("alert") == "all")
         if choice is None or choice[1] in already_notified:
@@ -112,7 +122,7 @@ def watch_model(
             skipped.append(f"quiet {bucket}: {slug} {price} {listing['title']} {listing['url']}")
         # --no-notify still records, so re-enabling doesn't replay old alerts;
         # a send that fails stays unrecorded and retries next run
-        if not notify or alert(app.notify, {**listing, "model_slug": slug}):
+        if not notify or alert(send, {**listing, "model_slug": slug}):
             newly_notified.add(key)
         totals[bucket] += 1
     return newly_notified, skipped

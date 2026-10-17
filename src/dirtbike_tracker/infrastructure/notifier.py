@@ -12,6 +12,7 @@ import requests
 
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh")
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "")
+NTFY_STREET_TOPIC = os.environ.get("NTFY_STREET_TOPIC", "")  # street bikes' alerts, if set
 HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "")
 
 
