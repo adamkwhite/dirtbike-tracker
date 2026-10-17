@@ -14,6 +14,7 @@ from dirtbike_tracker.infrastructure.drift import problems, run
 from .conftest import PushSpy
 from .test_escsite import card as esc_card
 from .test_escsite import page as esc_page
+from .test_focus import doc as focus_doc
 
 
 def _kijiji_search(fields: list[dict], title: str = "2019 Honda Rebel 500") -> str:
@@ -119,7 +120,9 @@ class FakeSites:
         self.ad_body = ad_body
 
     def get(self, url: str, **_: object) -> object:
-        if "cycleworldsuperstore.com" in url:
+        if "delmastro.ca" in url:
+            text = "apiKey: 'k3y'"
+        elif "cycleworldsuperstore.com" in url:
             text = esc_page(esc_card("67681179", "2015", "Kawasaki", "VULCAN S"))
         elif "sturgesscycle.com" in url:
             text = (
@@ -137,6 +140,15 @@ class FakeSites:
         attrs = {"text": text, "content": text.encode(), "raise_for_status": lambda self: None}
         return type("R", (), attrs)()
 
+    def post(self, url: str, **_: object) -> object:
+        """Del Mastro's Typesense search."""
+        hits = [{"document": focus_doc("751149", "2018 HONDA REBEL 500")}]
+        attrs = {
+            "json": lambda self: {"results": [{"hits": hits}]},
+            "raise_for_status": lambda self: None,
+        }
+        return type("R", (), attrs)()
+
 
 STURGESS_UNIT = {
     "id": "18938900",
@@ -152,6 +164,7 @@ STURGESS_UNIT = {
 
 def _fake_web(monkeypatch: pytest.MonkeyPatch, sites: FakeSites) -> None:
     monkeypatch.setattr(requests, "get", sites.get)
+    monkeypatch.setattr(requests, "post", sites.post)
     monkeypatch.setattr("time.sleep", lambda _: None)
 
 
@@ -163,6 +176,7 @@ def test_record_then_check_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert sorted(manifest["pages"]) == [
         "autotrader_search.html",
         "cycleworld_preowned.html",
+        "delmastro_inventory.json",
         "kijiji_ad.html",
         "kijiji_search_crf150f.html",
         "kijiji_search_rebel500.html",
@@ -212,3 +226,16 @@ def test_failed_fetch_is_reported_not_raised(
 
 def test_missing_recordings_are_a_problem(tmp_path: Path) -> None:
     assert problems(tmp_path) == [f"no recordings in {tmp_path}"]
+
+
+def test_reports_a_focus_index_with_no_used_units(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _fake_web(monkeypatch, FakeSites())
+    out = tmp_path / "rec"
+    run(out)
+    (out / "delmastro_inventory.json").write_text(
+        json.dumps([focus_doc("1", "2026 HONDA REBEL 500", condition="New")])
+    )
+
+    assert run(out, replay=True) == ["delmastro_inventory.json: no unit has condition 'Used'"]
