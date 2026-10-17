@@ -38,8 +38,11 @@ def parse_cards(html: str) -> list[dict]:
     units = []
     for card in BeautifulSoup(html, "html.parser").select("div.item.list-group-item"):
         link = card.select_one('a.model-title-link[href*="/adid/"]')
-        m = link and re.search(r"/adid/(\d+)/", str(link["href"]))
-        if not link or not m:
+        if link is None:
+            continue
+        href = str(link.get("href", "")).split("#")[0]
+        m = re.search(r"/adid/(\d+)/", href)
+        if not m:
             continue
         price = card.select_one(".price.show-item .price-val")
         image = card.select_one('img[src*="/uploadedimages/"]:not([src*="logos"])')
@@ -50,12 +53,12 @@ def parse_cards(html: str) -> list[dict]:
         units.append(
             {
                 "id": m.group(1),
-                "path": str(link["href"]).split("#")[0],
+                "path": href,
                 "title": title or link.get_text(" ", strip=True),
                 "year": year,
                 "km": _spec(card, "odometer").removesuffix("km").strip(),
-                "price": price.get_text(strip=True) if price else "",
-                "image": str(image["src"]) if image else None,
+                "price": "" if price is None else price.get_text(strip=True),
+                "image": None if image is None else str(image.get("src")),
             }
         )
     return units
