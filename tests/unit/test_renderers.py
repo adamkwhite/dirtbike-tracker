@@ -253,7 +253,8 @@ def test_new_at_dealers_lists_the_biggest_saving_first(snap: MarketSnapshot) -> 
     page = render_dashboard([snap], new_units=units)
 
     section = page.split('id="new"')[1].split("</section>")[0]
-    assert "NEW AT DEALERS (3)" in page and 'href="#new"' in page
+    assert "NEW AT DEALERS (3)" in page
+    assert 'href="#new"' in page
     assert section.index("Big cut") < section.index("Small cut") < section.index("Full price")
     assert "$500" in section  # the saving
 

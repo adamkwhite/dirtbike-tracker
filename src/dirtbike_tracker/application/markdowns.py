@@ -48,6 +48,21 @@ def _send(app: App, unit: NewUnit, why: str, was: float) -> bool:
     )
 
 
+def _price_to_record(
+    app: App, unit: NewUnit, before: float | None, seeded: bool, notify: bool, lines: list[str]
+) -> float | None:
+    """Alert on this unit if it's worth it; the price to save for next run (None: none yet).
+    A first run (not `seeded`) only records; an unsent push keeps the old price, so the next
+    run alerts again; a quiet run lists the markdown instead of sending it."""
+    reason = _reason(unit, before) if seeded else None
+    if not reason:
+        return unit.price
+    if not notify:
+        lines.append(f"quiet markdown: {unit.model_slug} ${unit.price:.0f} {unit.title} {unit.url}")
+        return unit.price
+    return unit.price if _send(app, unit, *reason) else before
+
+
 def check_markdowns(app: App, notify: bool) -> tuple[list[dict], list[str]]:
     """Fetch every dealer's new stock, alert on price cuts, save prices.
 
@@ -62,7 +77,7 @@ def check_markdowns(app: App, notify: bool) -> tuple[list[dict], list[str]]:
     for dealer, fetch in app.new_stock.items():
         try:
             found = fetch(slugs)
-        # a dealer site that's down skips this run; its last prices stay for the next
+        # a dealer site that's down skips this run; its last prices and units stay
         except Exception as exc:  # noqa: BLE001
             lines.append(f"{dealer}: new stock fetch failed: {exc}")
             prices |= {k: v for k, v in old_prices.items() if k.startswith(f"{dealer}:")}
@@ -70,18 +85,12 @@ def check_markdowns(app: App, notify: bool) -> tuple[list[dict], list[str]]:
             continue
         for unit in found:
             key = f"{dealer}:{unit.unit_id}"
-            before = old_prices.get(key)
             units.append(asdict(unit) | {"dealer_key": dealer})
-            reason = _reason(unit, before) if state is not None else None  # first run: record only
-            if reason and not notify:
-                lines.append(
-                    f"quiet markdown: {unit.model_slug} ${unit.price:.0f} {unit.title} {unit.url}"
-                )
-            elif reason and not _send(app, unit, *reason):
-                if before is not None:
-                    prices[key] = before
-                continue  # unsent: keep the old price (or none), so the next run alerts again
-            prices[key] = unit.price
+            price = _price_to_record(
+                app, unit, old_prices.get(key), state is not None, notify, lines
+            )
+            if price is not None:
+                prices[key] = price
     app.state_dir.mkdir(parents=True, exist_ok=True)
     (app.state_dir / STATE_FILE).write_text(
         json.dumps({"prices": prices, "units": units}, indent=1)

@@ -98,9 +98,10 @@ def test_a_page_that_repeats_ends_the_crawl(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_a_site_that_is_down_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(requests, "get", FakeSite().get)  # 404 on the first page
+    source = AriNewStock("B", "https://www.dealer.example")
 
     with pytest.raises(requests.HTTPError):
-        AriNewStock("B", "https://www.dealer.example")(SLUGS)
+        source(SLUGS)
 
 
 @pytest.mark.parametrize(
