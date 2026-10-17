@@ -10,7 +10,7 @@ Run via `python src/main.py dashboard` or let cron do it every 20 min.
 
 import html
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -281,18 +281,56 @@ def _model_section(snap: MarketSnapshot) -> str:
     """
 
 
-def render_dashboard(snaps: list[MarketSnapshot], combined: Iterable[str] = ()) -> str:
-    """Build the full HTML page. `combined`: the models also listed together, first."""
+def _new_units_section(units: list[dict]) -> str:
+    """Dealers' new units of the tracked models (application/markdowns.py), biggest saving first."""
+
+    def saving(u: dict) -> float:
+        return (u["was"] - u["price"]) if u.get("was") else 0.0
+
+    rows = "".join(
+        f"""
+              <tr>
+                <td class="muted">{_esc(u["model_slug"].upper())}</td>
+                <td class="num" data-v="{u["price"]:.0f}">${u["price"]:,.0f}</td>
+                <td class="num muted" data-v="{_sort_key(u.get("was"))}">{f"${u['was']:,.0f}" if u.get("was") else "—"}</td>
+                <td class="num" data-v="{saving(u):.0f}">{f"${saving(u):,.0f}" if saving(u) else "—"}</td>
+                <td class="muted">{_esc(u["dealer"])}</td>
+                <td><a href="{_esc(u["url"])}" target="_blank" rel="noopener">{_esc(u["title"])}</a></td>
+              </tr>"""
+        for u in sorted(units, key=lambda u: (-saving(u), u["price"]))
+    )
+    return f"""
+    <section class="model" id="new">
+      <h2>NEW AT DEALERS ({len(units)})</h2>
+      <p class="muted">New units of the tracked models. A price cut, or a unit listed under its
+        regular price or MSRP, sends a MARKDOWN alert. Not in the used-market medians.</p>
+      <table class="sortable">
+        <thead>
+          <tr><th>Model</th><th>Price</th><th title="Regular price or MSRP">Was</th><th>Save</th><th>Dealer</th><th>Title</th></tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>
+    """
+
+
+def render_dashboard(
+    snaps: list[MarketSnapshot], combined: Iterable[str] = (), new_units: Sequence[dict] = ()
+) -> str:
+    """Build the full HTML page. `combined`: the models also listed together, first;
+    `new_units`: dealers' new stock (the markdown watch), after them."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     together = [s for s in snaps if s.slug in set(combined)]
     sections = "\n".join(
-        ([_all_bikes_section(together)] if together else []) + [_model_section(s) for s in snaps]
+        ([_all_bikes_section(together)] if together else [])
+        + ([_new_units_section(list(new_units))] if new_units else [])
+        + [_model_section(s) for s in snaps]
     )
     all_link = (
         f'<a href="#all">ALL DIRT BIKES ({len({x["url"] for s in together for x in s.listings})})</a>'
         if together
         else ""
-    )
+    ) + (f'<a href="#new">NEW AT DEALERS ({len(new_units)})</a>' if new_units else "")
 
     return f"""<!doctype html>
 <html lang="en">
@@ -496,9 +534,12 @@ def render_dashboard(snaps: list[MarketSnapshot], combined: Iterable[str] = ()) 
 
 
 def write_dashboard(
-    snaps: list[MarketSnapshot], out_path: Path, combined: Iterable[str] = ()
+    snaps: list[MarketSnapshot],
+    out_path: Path,
+    combined: Iterable[str] = (),
+    new_units: list[dict] | None = None,
 ) -> Path:
     """Write the HTML dashboard to disk and return the path."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_dashboard(snaps, combined))
+    out_path.write_text(render_dashboard(snaps, combined, new_units or []))
     return out_path

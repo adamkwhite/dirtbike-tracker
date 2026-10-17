@@ -26,3 +26,19 @@ class Listing:
 
     def to_dict(self):
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class NewUnit:
+    """A dealer's new unit of a tracked model, for the markdown watch (application/markdowns.py).
+
+    `was` is the dealer's regular price or MSRP when the unit is listed below it."""
+
+    dealer: str
+    unit_id: str
+    model_slug: str
+    title: str
+    price: float
+    was: float | None
+    url: str
+    image_url: str | None = None
