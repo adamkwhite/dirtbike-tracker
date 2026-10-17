@@ -205,3 +205,13 @@ def test_shared_db_guard_is_active(web: FakeWeb) -> None:  # tests/conftest.py
 
     with pytest.raises(AssertionError, match="shared data/ DB"):
         sqlite3.connect(shared)
+
+
+def test_a_quiet_run_lists_the_deal_it_skips_and_marks_it_sent(web: FakeWeb) -> None:
+    result = CliRunner().invoke(cli_module.cli, ["watch", "--no-notify"])
+
+    assert result.exit_code == 0, result.output
+    assert web.pushes == []
+    assert "quiet deals: crf150f $1400 2008 Honda CRF150F" in result.output
+    _watch()  # the next cron run
+    assert web.pushes == []  # the seed recorded it; pass it on from the quiet line instead

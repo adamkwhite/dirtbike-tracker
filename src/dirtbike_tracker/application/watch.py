@@ -14,7 +14,7 @@ from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, MarketSnapshot, matches
 from .alerts import notify_deal, notify_good, notify_match
 from .details import fetch_details
 from .market import model_goal, snapshot
-from .ports import App, Notifier
+from .ports import App, Notifier, WholeInventorySource
 
 Alert = Callable[[Notifier, dict], bool]
 
@@ -77,8 +77,11 @@ def watch_model(
     already_notified: set,
     source_counts: Counter,
     totals: dict,
-) -> set:
-    """Scrape, upsert and alert for one configured model. Returns the newly notified keys."""
+) -> tuple[set, list[str]]:
+    """Scrape, upsert and alert for one configured model.
+
+    Returns the newly notified keys, and on a quiet (--no-notify) run the alerts it skipped,
+    one line each, so a seed's real finds aren't lost with its backlog."""
     slug = target["slug"]
     # only what the entry sets, so sources (and test fakes) without these options still work
     opts = {k: target[k] for k in ("query", "include_new") if k in target}
@@ -98,33 +101,31 @@ def watch_model(
     if fetch_details(scored, target.get("target_price"), app.detail_fetchers, app.store):
         scored = model_snapshot(app, slug).listings
     newly_notified = set()
+    skipped = []
     for listing in scored:
         choice = alert_for(listing, target.get("target_price"), target.get("alert") == "all")
         if choice is None or choice[1] in already_notified:
             continue
         alert, key, bucket = choice
-        if (
-            not notify
-        ):  # a seed run: list what it silenced, so a real find isn't lost with the backlog
+        if not notify:
             price = f"${listing['price']:.0f}" if listing.get("price") else "no price"
-            print(f"  quiet {bucket}: {slug} {price} {listing['title']} {listing['url']}")  # noqa: T201
+            skipped.append(f"quiet {bucket}: {slug} {price} {listing['title']} {listing['url']}")
         # --no-notify still records, so re-enabling doesn't replay old alerts;
         # a send that fails stays unrecorded and retries next run
         if not notify or alert(app.notify, {**listing, "model_slug": slug}):
             newly_notified.add(key)
         totals[bucket] += 1
-    return newly_notified
+    return newly_notified, skipped
+
+
+def _fetched_ok(source: object) -> bool:
+    return isinstance(source, WholeInventorySource) and source.last_fetch_ok
 
 
 def sources_seen(app: App, counts: Counter) -> Counter:
-    """Listings per source, with a whole-inventory source (a dealer's stock file) that fetched
-    fine counted as seen even with no matches: its unmatched listings are sold, not missed."""
-    return Counter(
-        {
-            s: n or int(getattr(app.sources.get(s), "last_fetch_ok", False))
-            for s, n in counts.items()
-        }
-    )
+    """Listings per source, with a WholeInventorySource that fetched fine counted as seen even
+    with no matches: its unmatched listings are sold, not missed."""
+    return Counter({s: n or int(_fetched_ok(app.sources.get(s))) for s, n in counts.items()})
 
 
 def notified_ids(app: App) -> set:

@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from ..domain.listing import Listing
 
@@ -28,6 +28,15 @@ class ListingSource(Protocol):
         query: str | None = None,
         include_new: bool = False,
     ) -> list[Listing]: ...
+
+
+@runtime_checkable
+class WholeInventorySource(ListingSource, Protocol):
+    """A dealer source whose one fetch is the dealer's whole stock (Dealer Spike, EquipmentSearch,
+    Focus), filtered per model. `last_fetch_ok`: the last fetch worked, so a model with no
+    matches is out of stock there (sold), not a broken scraper. watch.sources_seen reads it."""
+
+    last_fetch_ok: bool
 
 
 AdDetailFetcher = Callable[[str], str | None]  # ad url -> description, None if the fetch failed
