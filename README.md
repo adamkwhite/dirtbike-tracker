@@ -185,7 +185,9 @@ the slug), `include_new` (keep dealer new stock), `min_year`, `require` (words t
 name, e.g. `RS` drops the RX/RR) and `alert: all` (push every new match and every price drop,
 not only deals). See the comments in `config/friend.example.yml`.
 
-`dirtbike --config config/friend.yml dashboard --open` shows his bikes.
+The main `dashboard.html` has a tab for each watchlist: **Dirt** (the `project` models), **Street**
+(the `ride` models) and **Hoss** (`config/friend.yml`, read from the shared DB, so it fills in
+whenever his watch runs). `dirtbike --config config/friend.yml dashboard --open` shows his bikes alone.
 
 ### Docker
 

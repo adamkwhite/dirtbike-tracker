@@ -10,7 +10,7 @@ Run via `python src/main.py dashboard` or let cron do it every 20 min.
 
 import html
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -157,8 +157,8 @@ LISTING_HEADERS = (
 )
 
 
-def _all_bikes_section(snaps: list[MarketSnapshot]) -> str:
-    """Every active listing of the given models in one table, cheapest first.
+def _all_bikes_section(snaps: list[MarketSnapshot], tab: str) -> str:
+    """Every active listing of a tab's models in one table, cheapest first.
 
     A listing filed under two models ("2003 Honda crf" as CRF150F and CRF230F) is one row
     naming both; its rating is against the first model's median.
@@ -170,8 +170,8 @@ def _all_bikes_section(snaps: list[MarketSnapshot]) -> str:
     ordered = sorted(rows.values(), key=lambda r: r[0]["price"] or float("inf"))
     body = "".join(_listing_row(listing, models) for listing, models in ordered)
     return f"""
-    <section class="model" id="all">
-      <h2>ALL DIRT BIKES ({len(ordered)})</h2>
+    <section class="model" id="all-{tab.lower()}">
+      <h2>ALL {_esc(tab.upper())} BIKES ({len(ordered)})</h2>
       <p class="muted">Click a column to sort.</p>
       <table class="sortable">
         <thead>
@@ -281,7 +281,7 @@ def _model_section(snap: MarketSnapshot) -> str:
     """
 
 
-def _new_units_section(units: list[dict]) -> str:
+def _new_units_section(units: list[dict], tab: str) -> str:
     """Dealers' new units of the tracked models (application/markdowns.py), biggest saving first."""
 
     def saving(u: dict) -> float:
@@ -300,7 +300,7 @@ def _new_units_section(units: list[dict]) -> str:
         for u in sorted(units, key=lambda u: (-saving(u), u["price"]))
     )
     return f"""
-    <section class="model" id="new">
+    <section class="model" id="new-{tab.lower()}">
       <h2>NEW AT DEALERS ({len(units)})</h2>
       <p class="muted">New units of the tracked models. A price cut, or a unit listed under its
         regular price or MSRP, sends a MARKDOWN alert. Not in the used-market medians.</p>
@@ -314,23 +314,44 @@ def _new_units_section(units: list[dict]) -> str:
     """
 
 
-def render_dashboard(
-    snaps: list[MarketSnapshot], combined: Iterable[str] = (), new_units: Sequence[dict] = ()
-) -> str:
-    """Build the full HTML page. `combined`: the models also listed together, first;
-    `new_units`: dealers' new stock (the markdown watch), after them."""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    together = [s for s in snaps if s.slug in set(combined)]
+def _tab(name: str, snaps: list[MarketSnapshot], new_units: Sequence[dict]) -> str:
+    """One tab: its models' listings in one table, the dealers' new units of them, then
+    each model's panel, under its own sticky nav."""
+    key = name.lower()
+    slugs = {s.slug for s in snaps}
+    units = [u for u in new_units if u["model_slug"] in slugs]
     sections = "\n".join(
-        ([_all_bikes_section(together)] if together else [])
-        + ([_new_units_section(list(new_units))] if new_units else [])
+        [_all_bikes_section(snaps, name)]
+        + ([_new_units_section(units, name)] if units else [])
         + [_model_section(s) for s in snaps]
     )
-    all_link = (
-        f'<a href="#all">ALL DIRT BIKES ({len({x["url"] for s in together for x in s.listings})})</a>'
-        if together
-        else ""
-    ) + (f'<a href="#new">NEW AT DEALERS ({len(new_units)})</a>' if new_units else "")
+    links = (
+        f'<a href="#all-{key}">ALL {_esc(name.upper())} BIKES '
+        f"({len({x['url'] for s in snaps for x in s.listings})})</a>"
+        + (f'<a href="#new-{key}">NEW AT DEALERS ({len(units)})</a>' if units else "")
+        + "".join(f'<a href="#{s.slug}">{s.slug.upper()} ({len(s.listings)})</a>' for s in snaps)
+    )
+    return f"""
+  <div class="tab" data-tab="{key}">
+    <nav class="nav">{links}</nav>
+    <main>
+      {sections}
+    </main>
+  </div>"""
+
+
+def render_dashboard(
+    tabs: Mapping[str, list[MarketSnapshot]], new_units: Sequence[dict] = ()
+) -> str:
+    """Build the full HTML page: a tab per watchlist (name -> its models' snapshots), the
+    first shown unless the viewer last picked another. `new_units`: dealers' new stock (the
+    markdown watch), each under the tab holding its model."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    buttons = "".join(
+        f'<button data-tab="{name.lower()}">{_esc(name)} '
+        f"({len({x['url'] for s in snaps for x in s.listings})})</button>"
+        for name, snaps in tabs.items()
+    )
 
     return f"""<!doctype html>
 <html lang="en">
@@ -364,7 +385,22 @@ def render_dashboard(
       display: flex;
       justify-content: space-between;
       align-items: baseline;
+      flex-wrap: wrap;
+      gap: 12px;
     }}
+    .tabs {{ display: flex; gap: 8px; }}
+    .tabs button {{
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      font: inherit;
+      font-size: 14px;
+      padding: 6px 14px;
+      cursor: pointer;
+    }}
+    .tabs button:hover {{ color: var(--accent); }}
+    .tabs button.active {{ color: var(--text); border-color: var(--accent); }}
     header h1 {{ margin: 0; font-size: 24px; font-weight: 600; }}
     header .meta {{ color: var(--muted); font-size: 13px; }}
     .nav {{
@@ -497,15 +533,32 @@ def render_dashboard(
 <body>
   <header>
     <h1>Dirt Bike Tracker</h1>
+    <nav class="tabs">{buttons}</nav>
     <div class="meta">Updated {now}</div>
   </header>
-  <nav class="nav">
-    {all_link}{"".join(f'<a href="#{s.slug}">{s.slug.upper()} ({len(s.listings)})</a>' for s in snaps)}
-  </nav>
-  <main>
-    {sections}
-  </main>
+  {"".join(_tab(name, snaps, new_units) for name, snaps in tabs.items())}
   <script>
+    // Tabs: show one, remember it per browser (storage can be blocked: the page still works),
+    // and open the tab holding a #link's target.
+    const tabs = [...document.querySelectorAll(".tab")];
+    const show = (key) => {{
+      tabs.forEach((t) => (t.hidden = t.dataset.tab !== key));
+      document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === key));
+      try {{ localStorage.setItem("tab", key); }} catch (e) {{}}
+    }};
+    document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab)));
+    const openLinked = () => {{
+      let target = null;
+      try {{ target = location.hash && document.querySelector(location.hash); }} catch (e) {{}}
+      const linked = target && target.closest(".tab");
+      if (linked) {{ show(linked.dataset.tab); target.scrollIntoView(); }}
+      return Boolean(linked);
+    }};
+    let saved = null;
+    try {{ saved = localStorage.getItem("tab"); }} catch (e) {{}}
+    if (!openLinked()) show(tabs.some((t) => t.dataset.tab === saved) ? saved : tabs[0]?.dataset.tab);
+    window.addEventListener("hashchange", openLinked);
+
     // Click a header to sort its table: by each cell's data-v when set, else its text;
     // empty values sort last.
     document.querySelectorAll("table.sortable th").forEach((th, col) => {{
@@ -534,12 +587,9 @@ def render_dashboard(
 
 
 def write_dashboard(
-    snaps: list[MarketSnapshot],
-    out_path: Path,
-    combined: Iterable[str] = (),
-    new_units: list[dict] | None = None,
+    tabs: Mapping[str, list[MarketSnapshot]], out_path: Path, new_units: Sequence[dict] = ()
 ) -> Path:
     """Write the HTML dashboard to disk and return the path."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_dashboard(snaps, combined, new_units or []))
+    out_path.write_text(render_dashboard(tabs, new_units))
     return out_path

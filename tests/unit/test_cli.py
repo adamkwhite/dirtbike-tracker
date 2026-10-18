@@ -150,6 +150,16 @@ def test_watch_pings_and_writes_the_dashboard(market_app: App) -> None:
     assert market_app.dashboard_path.exists()
 
 
+def test_dashboard_tabs_dirt_and_each_other_watchlist(market_app: App) -> None:
+    hoss = {"triumph": [{"slug": "crf150f", "goal": "ride"}]}
+
+    _invoke(replace(market_app, dashboard_tabs={"Hoss": hoss}), "dashboard", "--models", "crf150f")
+
+    page = market_app.dashboard_path.read_text()
+    assert '<button data-tab="dirt">' in page and '<button data-tab="hoss">' in page
+    assert 'data-tab="street"' not in page  # no street models: no empty tab
+
+
 def test_skip_unconfigured_reports_instead_of_raising(capsys: pytest.CaptureFixture[str]) -> None:
     def no_topic(title: str, body: str, **_: object) -> bool:
         raise NotifyConfigError("no topic")

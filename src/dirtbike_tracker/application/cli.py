@@ -14,6 +14,7 @@ import platform
 import subprocess  # nosec B404 - fixed argv, no shell
 import webbrowser
 from collections import Counter
+from dataclasses import replace
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -53,6 +54,8 @@ CONFIG_PATH = ROOT / "config" / "models.yml"
 REPORTS_DIR = ROOT / "reports"
 STATE_DIR = ROOT / "data" / "state"
 DASHBOARD_PATH = ROOT / "dashboard.html"
+# Hoss's watchlist (gitignored): its own alerts, and a tab on the main dashboard
+FRIEND_CONFIG = ROOT / "config" / "friend.yml"
 # Drift-check recordings (#28): third-party ads, gitignored, never committed
 RECORDED_DIR = ROOT / "tests" / "recorded"
 
@@ -111,8 +114,10 @@ def build_app(config_path: Path | None = None) -> App:
     own alert state and dashboard, so its alerts go only to its own ntfy topic.
     """
     init_db()
+    tabs: dict[str, dict] = {}
     if config_path is None:
         state_dir, dashboard_path = STATE_DIR, DASHBOARD_PATH
+        tabs = {"Hoss": load_config(FRIEND_CONFIG)}
     else:
         state_dir = STATE_DIR / config_path.stem
         dashboard_path = ROOT / f"dashboard-{config_path.stem}.html"
@@ -142,6 +147,7 @@ def build_app(config_path: Path | None = None) -> App:
         ping=notifier.ping_healthcheck,
         # dealers' new stock, for the markdown watch (markdowns.py)
         new_stock={"burlington": BURLINGTON, "delmastro": DEL_MASTRO.new_units},
+        dashboard_tabs=tabs,
     )
 
 
@@ -153,14 +159,19 @@ def _snapshot(app: App, slug: str) -> MarketSnapshot:
 
 
 def _write_dashboard(app: App, slugs: list[str], new_units: list[dict] | None = None) -> Path:
-    """The dashboard, led by every dirt bike (the project models) in one sortable table, then
-    the dealers' new units of the tracked models (the last watch's, unless given)."""
-    dirt = [s for s in slugs if model_goal(app.config, s) == "project"]
-    units = markdown_rows(app) if new_units is None else new_units
+    """The dashboard: a Dirt tab (the project models) and a Street tab (the rest), then a tab
+    per other watchlist (App.dashboard_tabs), each with the dealers' new units of its models
+    (the last watch's, unless given). Empty tabs are left out."""
     snaps = [_snapshot(app, s) for s in slugs]
-    return write_dashboard(
-        snaps, app.dashboard_path, dirt, [u for u in units if u["model_slug"] in slugs]
-    )
+    tabs = {
+        "Dirt": [s for s in snaps if model_goal(app.config, s.slug) == "project"],
+        "Street": [s for s in snaps if model_goal(app.config, s.slug) != "project"],
+    }
+    for name, config in app.dashboard_tabs.items():
+        other = replace(app, config=config)  # its goals, not models.yml's
+        tabs[name] = [_snapshot(other, e["slug"]) for g in config.values() for e in g or []]
+    units = markdown_rows(app) if new_units is None else new_units
+    return write_dashboard({n: t for n, t in tabs.items() if t}, app.dashboard_path, units)
 
 
 def _open_in_browser(path: Path) -> None:

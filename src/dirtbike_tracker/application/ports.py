@@ -93,3 +93,5 @@ class App:
     new_stock: Mapping[str, NewStockSource] = field(default_factory=dict)  # markdown watch
     # alerts for street, middleweight and dual-sport models, when set (watch.notifier_for)
     street_notify: Notifier | None = None
+    # other watchlists' configs (tab name -> config), each a tab on this dashboard
+    dashboard_tabs: Mapping[str, dict] = field(default_factory=dict)

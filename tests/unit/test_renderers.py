@@ -51,10 +51,10 @@ def test_write_report(snap: MarketSnapshot, tmp_path: Path) -> None:
 
 
 def test_dashboard_renders_section_and_nav(snap: MarketSnapshot, tmp_path: Path) -> None:
-    path = write_dashboard([snap], tmp_path / "dashboard.html")
+    path = write_dashboard({"Dirt": [snap]}, tmp_path / "dashboard.html")
 
     page = path.read_text()
-    assert page == render_dashboard([snap])
+    assert page == render_dashboard({"Dirt": [snap]})
     assert 'id="crf150f"' in page
     assert 'href="#crf150f"' in page
     assert "CRF150F at 1400" in page
@@ -73,7 +73,7 @@ def test_dashboard_shows_recently_sold(snap: MarketSnapshot) -> None:
         }
     ]
 
-    page = render_dashboard([snap])
+    page = render_dashboard({"Dirt": [snap]})
 
     assert "Recently sold (likely)" in page
     assert "$3600" in page
@@ -83,22 +83,22 @@ def test_dashboard_shows_recently_sold(snap: MarketSnapshot) -> None:
 
 def test_dashboard_weekly_chart_needs_two_weeks(snap: MarketSnapshot) -> None:
     snap.weekly = [("2026-09-28", None), ("2026-10-05", 3100.0)]
-    assert "Weekly median chart appears once" in render_dashboard([snap])
+    assert "Weekly median chart appears once" in render_dashboard({"Dirt": [snap]})
 
     snap.weekly = [("2026-09-28", 3000.0), ("2026-10-05", 3100.0)]
-    page = render_dashboard([snap])
+    page = render_dashboard({"Dirt": [snap]})
     assert 'id="trend-crf150f"' in page
     assert '"data": [3000.0, 3100.0]' in page
 
 
 def test_dashboard_has_inline_favicon(snap: MarketSnapshot) -> None:
-    assert '<link rel="icon" href="data:image/svg+xml,' in render_dashboard([snap])
+    assert '<link rel="icon" href="data:image/svg+xml,' in render_dashboard({"Dirt": [snap]})
 
 
 def test_listing_rows_show_days_on_market(snap: MarketSnapshot) -> None:
     snap.listings = [{**snap.listings[0], "age_days": 14.7}]
 
-    assert "Barrie (14d)" in render_dashboard([snap])
+    assert "Barrie (14d)" in render_dashboard({"Dirt": [snap]})
     assert "Barrie (14d)" in render_report(snap)
 
 
@@ -107,7 +107,9 @@ def test_location_label_without_age() -> None:
 
 
 def test_nav_shows_active_listing_count_per_model(snap: MarketSnapshot) -> None:
-    assert f'<a href="#crf150f">CRF150F ({len(snap.listings)})</a>' in render_dashboard([snap])
+    assert f'<a href="#crf150f">CRF150F ({len(snap.listings)})</a>' in render_dashboard(
+        {"Dirt": [snap]}
+    )
 
 
 def test_dashboard_shows_fit_with_flags_tooltip() -> None:
@@ -210,7 +212,7 @@ def test_dealer_tag_and_private_median_label() -> None:
     assert '<div class="label">Median (private)</div>' in html
 
 
-def test_all_dirt_bikes_lists_each_listing_once_cheapest_first(snap: MarketSnapshot) -> None:
+def test_a_tab_lists_each_listing_once_cheapest_first(snap: MarketSnapshot) -> None:
     shared = snap.listings[0]
     other = MarketSnapshot(
         slug="crf230f",
@@ -221,9 +223,9 @@ def test_all_dirt_bikes_lists_each_listing_once_cheapest_first(snap: MarketSnaps
     )
     street = MarketSnapshot(slug="rebel500", stats=snap.stats, listings=[], trend=None, prices=[])
 
-    page = render_dashboard([snap, other, street], combined=["crf150f", "crf230f"])
+    page = render_dashboard({"Dirt": [snap, other], "Street": [street]})
 
-    table = page.split('id="all"')[1].split("</section>")[0]
+    table = page.split('id="all-dirt"')[1].split("</section>")[0]
     urls = {x["url"] for x in snap.listings} | {"https://x/cheap"}
     assert f"ALL DIRT BIKES ({len(urls)})" in page
     assert table.count("<tr>") - 1 == len(urls)  # the shared listing is one row
@@ -233,8 +235,18 @@ def test_all_dirt_bikes_lists_each_listing_once_cheapest_first(snap: MarketSnaps
     assert 'class="sortable"' in page
 
 
-def test_no_combined_models_no_all_section(snap: MarketSnapshot) -> None:
-    assert 'id="all"' not in render_dashboard([snap])
+def test_each_watchlist_is_a_tab_with_its_own_models(snap: MarketSnapshot) -> None:
+    hoss = MarketSnapshot(slug="speedtwin", stats=snap.stats, listings=[], trend=None, prices=[])
+
+    page = render_dashboard({"Dirt": [snap], "Hoss": [hoss]})
+
+    assert (
+        f'<button data-tab="dirt">Dirt ({len({x["url"] for x in snap.listings})})</button>' in page
+    )
+    assert '<button data-tab="hoss">Hoss (0)</button>' in page
+    dirt, hoss_tab = page.split('<div class="tab" data-tab="hoss">')
+    assert 'id="crf150f"' in dirt and 'id="speedtwin"' not in dirt
+    assert 'id="speedtwin"' in hoss_tab and "ALL HOSS BIKES (0)" in hoss_tab
 
 
 def test_new_at_dealers_lists_the_biggest_saving_first(snap: MarketSnapshot) -> None:
@@ -250,14 +262,18 @@ def test_new_at_dealers_lists_the_biggest_saving_first(snap: MarketSnapshot) -> 
         unit("Big cut", 4200, 4700),
     ]
 
-    page = render_dashboard([snap], new_units=units)
+    street = MarketSnapshot(slug="sv650", stats=snap.stats, listings=[], trend=None, prices=[])
+    other_model = {**units[0], "model_slug": "sv650", "title": "Street unit"}
 
-    section = page.split('id="new"')[1].split("</section>")[0]
+    page = render_dashboard({"Dirt": [snap], "Street": [street]}, new_units=[*units, other_model])
+
+    section = page.split('id="new-dirt"')[1].split("</section>")[0]
     assert "NEW AT DEALERS (3)" in page
-    assert 'href="#new"' in page
+    assert 'href="#new-dirt"' in page
+    assert "Street unit" not in section and 'id="new-street"' in page
     assert section.index("Big cut") < section.index("Small cut") < section.index("Full price")
     assert "$500" in section  # the saving
 
 
 def test_no_new_units_no_section(snap: MarketSnapshot) -> None:
-    assert 'id="new"' not in render_dashboard([snap])
+    assert 'id="new-dirt"' not in render_dashboard({"Dirt": [snap]})
