@@ -10,7 +10,14 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from ..domain.listing import Listing
-from ..domain.scoring import FIT_ALERT_MIN, FIT_NEUTRAL, MarketSnapshot, matches_spec, under_target
+from ..domain.scoring import (
+    FIT_ALERT_MIN,
+    FIT_NEUTRAL,
+    RIDE_MIN_PRICE,
+    MarketSnapshot,
+    matches_spec,
+    under_target,
+)
 from .alerts import notify_deal, notify_good, notify_match
 from .details import fetch_details
 from .market import model_goal, snapshot
@@ -67,7 +74,11 @@ def notifier_for(app: App, group: str | None) -> Notifier:
 
 def _fits(listing: Listing, entry: dict) -> bool:
     return matches_spec(
-        listing, entry.get("min_year"), entry.get("require", ()), entry.get("max_year")
+        listing,
+        entry.get("min_year"),
+        entry.get("require", ()),
+        entry.get("max_year"),
+        RIDE_MIN_PRICE if entry.get("goal") == "ride" else None,
     )
 
 

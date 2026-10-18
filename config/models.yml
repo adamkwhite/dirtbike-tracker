@@ -4,6 +4,7 @@
 # ride: needing work scores down, safety/certified scores up). See README "Fit".
 # min_year / max_year are the model's production years: a listing outside them is another
 # bike or a typo, and is skipped (an unknown year passes).
+# goal: ride models also skip listings under $1,000 (scoring.RIDE_MIN_PRICE): parts and toys.
 
 # Priority targets right now (dad-and-sons trail bikes)
 priority:
