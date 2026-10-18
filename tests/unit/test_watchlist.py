@@ -194,6 +194,22 @@ def test_a_title_naming_two_models_is_tagged_only_where_it_fits_the_spec(app: Ap
     assert len(app.store.active_listings("kx65")) == 1  # an untracked model keeps its tag
 
 
+def test_a_ride_model_skips_parts_prices_a_project_model_keeps_them(app: App) -> None:
+    junk = replace(_bike("1", "Honda CB500X Handguards", 30, None), model_slugs=["cb500x"])
+    bike = replace(_bike("2", "2014 Honda CB500X", 4500, 2014), model_slugs=["cb500x"])
+    project = replace(_bike("3", "Honda CRF150F, needs work", 400, None), model_slugs=["crf150f"])
+    config = {
+        "dualsport": [{"slug": "cb500x", "goal": "ride"}],
+        "priority": [{"slug": "crf150f", "goal": "project"}],
+    }
+    app = replace(app, sources={"kijiji": lambda *_, **__: [junk, bike, project]}, config=config)
+
+    assert CliRunner().invoke(cli, ["watch", "--no-notify"], obj=app).exit_code == 0
+
+    assert [x["external_id"] for x in app.store.active_listings("cb500x")] == ["2"]
+    assert [x["external_id"] for x in app.store.active_listings("crf150f")] == ["3"]
+
+
 def test_street_models_alert_on_the_street_topic_when_one_is_set(app: App, sent: PushSpy) -> None:
     street = PushSpy()
 

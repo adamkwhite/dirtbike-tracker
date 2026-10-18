@@ -17,6 +17,10 @@ from .listing import Listing
 # At or below this a "price" is a parts ad or placeholder, not a bike: it is
 # excluded from the market AND never rated or alerted on.
 MIN_BIKE_PRICE = 100
+# A ride-goal model (a street bike, ready to ride) under this is a part, a toy or a typo'd
+# price: Facebook's search returns "CB500X handguards" ($30) and "CANON REBEL T7" ($500).
+# Project bikes go cheaper, so they keep MIN_BIKE_PRICE.
+RIDE_MIN_PRICE = 1000
 
 RATING_DEAL = -0.30
 RATING_GOOD = -0.10
@@ -254,10 +258,12 @@ def matches_spec(
     min_year: int | None,
     require: Sequence[str] = (),
     max_year: int | None = None,
+    min_price: float | None = None,
 ) -> bool:
     """A listing a models.yml entry wants: within `min_year`..`max_year` (the model's
-    production years, or a watchlist's floor; unknown year passes) and naming every
-    `require` word in its title ("RS", "719"; "L|RL" takes either).
+    production years, or a watchlist's floor; unknown year passes), at `min_price` or more
+    (no price passes) and naming every `require` word in its title ("RS", "719"; "L|RL"
+    takes either).
 
     Years catch what a title can't: a "2003 Honda crf" isn't a CRF250F (2019+), and a
     "1977 Yamaha TTR 125" is a typo or another bike (the TTR125 started in 2000).
@@ -268,6 +274,8 @@ def matches_spec(
     if listing.year and (
         (min_year and listing.year < min_year) or (max_year and listing.year > max_year)
     ):
+        return False
+    if min_price and listing.price is not None and listing.price < min_price:
         return False
     text = listing.title.lower()
     # "1200RS" names RS; "RSV4" doesn't
