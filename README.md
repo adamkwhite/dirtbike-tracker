@@ -176,8 +176,8 @@ changing the schedule in `install_cron.sh`, re-run it from the prod clone with t
 gitignored (every `config/*.yml` except `models.yml` is); start one from
 `config/friend.example.yml`. `dirtbike --config config/friend.yml watch` shares the listings DB but keeps its own notified state
 (`data/state/friend/`) and dashboard (`dashboard-friend.html`, local only). Set
-`FRIEND_NTFY_TOPIC` when running `install_cron.sh` to add its watch at :10/:30/:50, 8:10-22:50 (offset from
-the main run), logging to `logs/watch-friend.log`; he subscribes to that topic in the ntfy app.
+`FRIEND_NTFY_TOPIC` when running `install_cron.sh` to add its watch at 9:10 every third day of the month
+(offset from the main run), logging to `logs/watch-friend.log`; he subscribes to that topic in the ntfy app.
 Seed it once with `--no-notify` like any new model.
 
 Entries take extra fields for shopping new, specific bikes: `query` (search text when it isn't
