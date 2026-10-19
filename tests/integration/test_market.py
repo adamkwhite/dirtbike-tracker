@@ -360,3 +360,27 @@ def test_private_sales_set_the_median_once_there_are_enough(tmp_path: Path) -> N
     )
     assert by_id["d0"]["rating"] == "HIGH"  # dealer price vs what private sellers ask
     assert by_id["p0"]["rating"] == "FAIR"
+
+
+def test_hide_moves_a_listing_to_hidden_with_its_note_and_survives_rescrape(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    bikes = [_listing("kijiji", f"17000000{i}", f"https://x/{i}", 2000 + i) for i in (1, 2)]
+    upsert_listings(bikes, db_path=db)
+    store = SqliteStore(db)
+    (first,) = [x for x in store.active_listings("crf150f") if x["external_id"] == "170000001"]
+
+    assert store.set_hidden(first["id"], True, "too far") == ["170000001"]
+    upsert_listings(bikes, db_path=db)  # seen again by the next scrape
+
+    snap = snapshot("crf150f", store)
+    assert [x["external_id"] for x in snap.listings] == ["170000002"]
+    assert [(x["external_id"], x["hide_note"]) for x in snap.hidden] == [("170000001", "too far")]
+    assert snap.stats["count"] == 2  # still market data
+
+    assert store.set_hidden(first["id"], False) == ["170000001"]
+    snap = snapshot("crf150f", store)
+    assert (len(snap.listings), snap.hidden) == (2, [])
+    assert store.set_hidden(999, True) == []

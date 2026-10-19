@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS listings (
     is_primary INTEGER DEFAULT 1,
     sold_at TEXT,
     dismissed_at TEXT,
+    hidden_at TEXT,
+    hide_note TEXT,
     full_description TEXT,
     detail_fetched_at TEXT,
     contacted_at TEXT,
@@ -169,6 +171,9 @@ def _migrate_old_schema(db_path: Path | None = None) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN image_url TEXT")
         if "seller_type" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN seller_type TEXT")
+        if "hidden_at" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN hidden_at TEXT")
+            conn.execute("ALTER TABLE listings ADD COLUMN hide_note TEXT")
 
 
 def _compute_fingerprint(
@@ -347,12 +352,14 @@ def active_listings(
     model_slug: str | None = None,
     primary_only: bool = True,
     db_path: Path | None = None,
+    hidden: bool = False,
 ) -> list[dict]:
     """
     Return active listings, optionally filtered by model and primary-only.
 
     primary_only=True hides cross-posted duplicates (keeps the first-seen copy).
-    Dismissed listings are always excluded (they still count toward the market).
+    Dismissed and hidden listings are always excluded (they still count toward the market);
+    `hidden=True` returns only the hidden ones instead (the dashboard's Hidden section).
     age_days counts from the source's post time when known (Kijiji's
     activationDate in posted_text), else from when we first saw it.
     """
@@ -366,10 +373,14 @@ def active_listings(
                 SELECT l.*, {age} FROM listings l
                 JOIN listing_models m ON m.listing_id = l.id
                 WHERE l.is_active=1 AND l.dismissed_at IS NULL AND m.model_slug=?
+                AND l.hidden_at IS {"NOT NULL" if hidden else "NULL"}
             """
             params = [model_slug]
         else:
-            sql = f"SELECT *, {age} FROM listings WHERE is_active=1 AND dismissed_at IS NULL"
+            sql = (
+                f"SELECT *, {age} FROM listings WHERE is_active=1 AND dismissed_at IS NULL"
+                f" AND hidden_at IS {'NOT NULL' if hidden else 'NULL'}"
+            )
             params = []
         if primary_only:
             sql += " AND is_primary=1"
@@ -519,6 +530,24 @@ def set_dismissed(ref: str, dismissed: bool, db_path: Path | None = None) -> lis
     return [r["title"] for r in rows]
 
 
+def set_hidden(
+    listing_id: int, hidden: bool, note: str | None = None, db_path: Path | None = None
+) -> list[str]:
+    """Hide (or unhide) a listing from the dashboard and alerts, with an optional note.
+
+    Unlike a dismiss, it stays on the dashboard in its tab's Hidden section. upsert never
+    touches these columns. Returns the listing's title (empty if no such listing).
+    """
+    stamp = datetime.now(UTC).replace(tzinfo=None).isoformat() if hidden else None
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT title FROM listings WHERE id=?", (listing_id,)).fetchall()
+        conn.execute(
+            "UPDATE listings SET hidden_at=?, hide_note=? WHERE id=?",
+            (stamp, (note or None) if hidden else None, listing_id),
+        )
+    return [r["title"] for r in rows]
+
+
 def set_contact(
     ref: str, at: datetime | None, note: str | None = None, db_path: Path | None = None
 ) -> list[str]:
@@ -586,3 +615,9 @@ class SqliteStore:
 
     def set_contact(self, ref: str, at: datetime | None, note: str | None = None) -> list[str]:
         return set_contact(ref, at, note, db_path=self.db_path)
+
+    def hidden_listings(self, model_slug: str) -> list[dict]:
+        return active_listings(model_slug, primary_only=True, db_path=self.db_path, hidden=True)
+
+    def set_hidden(self, listing_id: int, hidden: bool, note: str | None = None) -> list[str]:
+        return set_hidden(listing_id, hidden, note, db_path=self.db_path)

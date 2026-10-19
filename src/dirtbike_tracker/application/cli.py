@@ -30,6 +30,7 @@ from ..infrastructure.ari import BURLINGTON
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
+from ..infrastructure.dashboard_server import make_server
 from ..infrastructure.dealerspike import STURGESS
 from ..infrastructure.escsite import CYCLE_WORLD, DEWILDT
 from ..infrastructure.focus import DEL_MASTRO
@@ -390,21 +391,37 @@ def watch(app: App, region: str, notify: bool, group: str):
 @click.pass_obj
 def dashboard(app: App, models: str, open_browser: bool):
     """Write the HTML dashboard to dashboard.html at the project root."""
-    if models:
-        slugs = [s.strip() for s in models.split(",")]
-    else:
-        slugs = []
-        for group_entries in app.config.values():
-            for entry in group_entries or []:
-                slugs.append(entry["slug"])
-        if not slugs:
-            click.echo("No models configured. Pass --models or populate config/models.yml")
-            return
+    slugs = [s.strip() for s in models.split(",")] if models else _config_slugs(app)
+    if not slugs:
+        click.echo("No models configured. Pass --models or populate config/models.yml")
+        return
 
     path = _write_dashboard(app, slugs)
     click.echo(f"Dashboard written: file://{path}")
     if open_browser:
         _open_in_browser(path)
+
+
+def _config_slugs(app: App) -> list[str]:
+    return [entry["slug"] for entries in app.config.values() for entry in entries or []]
+
+
+def hide_listing(app: App, listing_id: int, hidden: bool, note: str | None) -> bool:
+    """Hide (or unhide) a listing and rebuild the dashboard. False if there's no such listing."""
+    if not app.store.set_hidden(listing_id, hidden, note):
+        return False
+    _write_dashboard(app, _config_slugs(app))
+    return True
+
+
+@cli.command()
+@click.option("--port", default=8765, help="Localhost port (tailscale serve proxies it)")
+@click.pass_obj
+def serve(app: App, port: int):
+    """Serve the dashboard on localhost, with its hide/unhide buttons working."""
+    server = make_server(app.dashboard_path, partial(hide_listing, app), port=port)
+    click.echo(f"Serving {app.dashboard_path.name} on http://127.0.0.1:{port}")
+    server.serve_forever()
 
 
 @cli.command()
