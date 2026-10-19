@@ -80,6 +80,19 @@ def _sort_key(value) -> str:
     return "" if value is None else _esc(value)
 
 
+def _title_tags(listing: dict) -> str:
+    """After a row's title: when the seller was contacted, a dealer tag, and the hide button."""
+    tags = ""
+    if label := contact_label(listing):
+        days = label.split(":")[0]
+        tags = f' <span class="contacted" title="{_esc(label)}">{_esc(days)}</span>'
+    if listing.get("seller_type") == "dealer":
+        tags += ' <span class="tag-dealer">dealer</span>'
+    if listing.get("id") is not None:
+        tags += f' <button class="hide" data-id="{listing["id"]}" title="Hide">✕</button>'
+    return tags
+
+
 def _listing_row(listing: dict, models: list[str] | None = None) -> str:
     rating = listing["rating"]
     delta = listing["delta_pct"]
@@ -103,14 +116,7 @@ def _listing_row(listing: dict, models: list[str] | None = None) -> str:
             f'<a href="{_esc(listing["url"])}" target="_blank" rel="noopener">'
             f'<img class="thumb" src="{_esc(listing["image_url"])}" alt="" loading="lazy"></a>'
         )
-    contacted = ""
-    if label := contact_label(listing):
-        days = label.split(":")[0]
-        contacted = f' <span class="contacted" title="{_esc(label)}">{_esc(days)}</span>'
-    if listing.get("seller_type") == "dealer":
-        contacted += ' <span class="tag-dealer">dealer</span>'
-    if listing.get("id") is not None:
-        contacted += f' <button class="hide" data-id="{listing["id"]}" title="Hide">✕</button>'
+    contacted = _title_tags(listing)
     model_cell = (
         f'<td class="muted">{_esc(", ".join(m.upper() for m in models))}</td>' if models else ""
     )

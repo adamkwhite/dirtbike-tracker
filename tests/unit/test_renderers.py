@@ -292,7 +292,9 @@ def test_hidden_listings_sit_at_the_bottom_of_their_own_tab(snap: MarketSnapshot
     dirt, street_tab = page.split('<div class="tab" data-tab="street">')
     assert '<button class="hide" data-id="5"' in dirt
     hidden = dirt.split('id="hidden-dirt"')[1]
-    assert "HIDDEN (1)" in hidden and "too far" in hidden and 'class="unhide" data-id="6"' in hidden
+    assert "HIDDEN (1)" in hidden
+    assert "too far" in hidden
+    assert 'class="unhide" data-id="6"' in hidden
     assert dirt.index('id="crf150f"') < dirt.index('id="hidden-dirt"')
     assert "Parts bike" not in dirt.split('id="hidden-dirt"')[0]
     assert "hidden-street" not in street_tab  # nothing hidden there: no section

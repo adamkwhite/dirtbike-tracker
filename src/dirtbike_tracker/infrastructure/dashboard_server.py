@@ -31,7 +31,8 @@ def make_server(page: Path, hide: Hide, host: str = "127.0.0.1", port: int = 876
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            # body is the dashboard file this app wrote, nothing from the request (Sonar: false XSS)
+            self.wfile.write(body)  # NOSONAR
 
         def do_POST(self) -> None:
             if self.path != "/hide":
