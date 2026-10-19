@@ -160,6 +160,17 @@ def test_dashboard_tabs_dirt_and_each_other_watchlist(market_app: App) -> None:
     assert 'data-tab="street"' not in page  # no street models: no empty tab
 
 
+def test_hide_listing_saves_and_rebuilds_the_dashboard(market_app: App) -> None:
+    app = replace(market_app, config={"priority": [{"slug": "crf150f"}]})
+    (bike, *_) = app.store.active_listings("crf150f")
+
+    assert cli_module.hide_listing(app, bike["id"], True, "too far")
+
+    assert bike["id"] not in {x["id"] for x in app.store.active_listings("crf150f")}
+    assert "too far" in app.dashboard_path.read_text()
+    assert not cli_module.hide_listing(app, 99999, True, None)
+
+
 def test_skip_unconfigured_reports_instead_of_raising(capsys: pytest.CaptureFixture[str]) -> None:
     def no_topic(title: str, body: str, **_: object) -> bool:
         raise NotifyConfigError("no topic")

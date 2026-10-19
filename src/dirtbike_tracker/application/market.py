@@ -46,6 +46,7 @@ def snapshot(slug: str, store: ListingStore, goal: str = "project") -> MarketSna
         ),
         prices=prices,
         sold=store.sold_listings(slug),
+        hidden=store.hidden_listings(slug),
         weekly=weekly_medians(
             _only(store.price_timelines(slug), sellers), now=datetime.now(UTC).replace(tzinfo=None)
         ),

@@ -109,6 +109,8 @@ def _listing_row(listing: dict, models: list[str] | None = None) -> str:
         contacted = f' <span class="contacted" title="{_esc(label)}">{_esc(days)}</span>'
     if listing.get("seller_type") == "dealer":
         contacted += ' <span class="tag-dealer">dealer</span>'
+    if listing.get("id") is not None:
+        contacted += f' <button class="hide" data-id="{listing["id"]}" title="Hide">✕</button>'
     model_cell = (
         f'<td class="muted">{_esc(", ".join(m.upper() for m in models))}</td>' if models else ""
     )
@@ -281,6 +283,41 @@ def _model_section(snap: MarketSnapshot) -> str:
     """
 
 
+def _hidden_section(snaps: list[MarketSnapshot], tab: str) -> str:
+    """The tab's hidden listings (the ✕ on a row), with their notes, most recently hidden first."""
+    rows: dict[str, tuple[dict, list[str]]] = {}
+    for snap in snaps:
+        for listing in snap.hidden:
+            rows.setdefault(listing["url"], (listing, []))[1].append(snap.slug)
+    if not rows:
+        return ""
+    body = "".join(
+        f"""
+              <tr>
+                <td class="muted">{_esc(", ".join(m.upper() for m in models))}</td>
+                <td class="num" data-v="{_sort_key(x["price"] or None)}">{f"${int(x['price'])}" if x["price"] else "?"}</td>
+                <td class="num muted" data-v="{_sort_key(x.get("year"))}">{x.get("year") or "—"}</td>
+                <td class="muted">{_esc(location_label(x, 28))}</td>
+                <td><a href="{_esc(x["url"])}" target="_blank" rel="noopener">{_esc((x["title"] or "")[:65])}</a></td>
+                <td class="muted">{_esc(x.get("hide_note") or "")}</td>
+                <td class="muted" data-v="{_esc(x["hidden_at"])}">{_esc(x["hidden_at"][:10])}</td>
+                <td><button class="unhide" data-id="{x["id"]}">Unhide</button></td>
+              </tr>"""
+        for x, models in sorted(rows.values(), key=lambda r: r[0]["hidden_at"], reverse=True)
+    )
+    return f"""
+    <section class="model" id="hidden-{tab.lower()}">
+      <h2>HIDDEN ({len(rows)})</h2>
+      <table class="sortable">
+        <thead>
+          <tr><th>Model</th><th>Price</th><th>Year</th><th>Location</th><th>Title</th><th>Note</th><th>Hidden</th><th></th></tr>
+        </thead>
+        <tbody>{body}</tbody>
+      </table>
+    </section>
+    """
+
+
 def _new_units_section(units: list[dict], tab: str) -> str:
     """Dealers' new units of the tracked models (application/markdowns.py), biggest saving first."""
 
@@ -320,16 +357,19 @@ def _tab(name: str, snaps: list[MarketSnapshot], new_units: Sequence[dict]) -> s
     key = name.lower()
     slugs = {s.slug for s in snaps}
     units = [u for u in new_units if u["model_slug"] in slugs]
+    hidden = _hidden_section(snaps, name)
     sections = "\n".join(
         [_all_bikes_section(snaps, name)]
         + ([_new_units_section(units, name)] if units else [])
         + [_model_section(s) for s in snaps]
+        + [hidden]
     )
     links = (
         f'<a href="#all-{key}">ALL {_esc(name.upper())} BIKES '
         f"({len({x['url'] for s in snaps for x in s.listings})})</a>"
         + (f'<a href="#new-{key}">NEW AT DEALERS ({len(units)})</a>' if units else "")
         + "".join(f'<a href="#{s.slug}">{s.slug.upper()} ({len(s.listings)})</a>' for s in snaps)
+        + (f'<a href="#hidden-{key}">HIDDEN</a>' if hidden else "")
     )
     return f"""
   <div class="tab" data-tab="{key}">
@@ -513,6 +553,18 @@ def render_dashboard(
       white-space: nowrap;
     }}
     table.sortable th {{ cursor: pointer; user-select: none; }}
+    button.hide, button.unhide {{
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      font: inherit;
+      font-size: 11px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      cursor: pointer;
+    }}
+    button.hide:hover, button.unhide:hover {{ color: var(--accent); border-color: var(--accent); }}
     table.sortable th:hover {{ color: var(--accent); }}
     .badge {{
       display: inline-block;
@@ -559,6 +611,29 @@ def render_dashboard(
     if (!openLinked()) show(tabs.some((t) => t.dataset.tab === saved) ? saved : tabs[0]?.dataset.tab);
     window.addEventListener("hashchange", openLinked);
 
+    // Hide / unhide a listing: `dirtbike serve` saves it and rebuilds this page, then we reload.
+    // The custom header makes a cross-site request preflight, which the server refuses.
+    document.addEventListener("click", async (e) => {{
+      const b = e.target.closest("button.hide, button.unhide");
+      if (!b) return;
+      const hidden = b.classList.contains("hide");
+      const note = hidden ? prompt("Hide this bike? Note (optional):", "") : "";
+      if (note === null) return;  // cancelled
+      b.disabled = true;
+      try {{
+        const r = await fetch("hide", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json", "X-Dirtbike": "1" }},
+          body: JSON.stringify({{ id: Number(b.dataset.id), hidden, note }}),
+        }});
+        if (!r.ok) throw new Error(r.status);
+        location.reload();
+      }} catch (err) {{
+        b.disabled = false;
+        alert(`Couldn't save (${{err.message}}). Hiding works on the served dashboard, not the file.`);
+      }}
+    }});
+
     // Click a header to sort its table: by each cell's data-v when set, else its text;
     // empty values sort last.
     document.querySelectorAll("table.sortable th").forEach((th, col) => {{
@@ -591,5 +666,8 @@ def write_dashboard(
 ) -> Path:
     """Write the HTML dashboard to disk and return the path."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_dashboard(tabs, new_units))
+    # watch (cron) and serve both rebuild it: replace whole, so a reader never gets half a page
+    tmp = out_path.with_suffix(".tmp")
+    tmp.write_text(render_dashboard(tabs, new_units))
+    tmp.replace(out_path)
     return out_path
