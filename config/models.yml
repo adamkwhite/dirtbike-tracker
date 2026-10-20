@@ -26,6 +26,13 @@ priority:
 
 # Secondary targets (step-up options, parts donors)
 secondary:
+  - slug: crf125f
+    goal: project
+    min_year: 2014
+    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    target_price: 2500
+    notes: "Air-cooled, fuel injected, electric start. FB = big wheel (19/16 in, taller seat)"
+
   - slug: ttr125
     goal: project
     min_year: 2000
