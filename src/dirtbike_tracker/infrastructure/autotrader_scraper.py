@@ -54,6 +54,7 @@ KEYWORDS = {
 HONDA_CRF = ["honda/crf"]
 KAWASAKI_KLX = ["kawasaki/klx"]
 FAMILY_PATHS = {
+    "crf125f": HONDA_CRF,
     "crf150f": HONDA_CRF,
     "crf230f": HONDA_CRF,
     "crf250f": HONDA_CRF,

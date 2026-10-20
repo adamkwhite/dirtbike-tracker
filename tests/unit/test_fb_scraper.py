@@ -261,3 +261,12 @@ def test_accessory_words_drop_parts_not_cheap_project_bikes(
     price: str, title: str, kept: bool
 ) -> None:
     assert bool(parse_listings(_card("1", price, title, "Barrie, ON"), "klx140")) is kept
+
+
+@pytest.mark.parametrize(
+    "title", ["2023 Honda CRF 125F", "2019 crf125fb big wheel", "Honda CRF125F-B"]
+)
+def test_crf125f_takes_both_wheel_sizes(title: str) -> None:
+    (listing,) = parse_listings(_card("1", "CA$3,000", title, "Markham, ON"), "crf125f")
+
+    assert listing.model_slugs == ["crf125f"]
