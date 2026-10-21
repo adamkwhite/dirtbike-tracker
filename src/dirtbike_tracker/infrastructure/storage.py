@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS listings (
     hidden_at TEXT,
     hide_note TEXT,
     notes TEXT,
+    user_year INTEGER,
     full_description TEXT,
     detail_fetched_at TEXT,
     contacted_at TEXT,
@@ -177,6 +178,8 @@ def _migrate_old_schema(db_path: Path | None = None) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN hide_note TEXT")
         if "notes" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN notes TEXT")
+        if "user_year" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN user_year INTEGER")
 
 
 def _compute_fingerprint(
@@ -267,7 +270,8 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
                     "UPDATE listings SET last_seen=?, is_active=1, sold_at=NULL,"
                     " posted_text=COALESCE(NULLIF(?, ''), posted_text),"
                     " description=COALESCE(NULLIF(?, ''), description),"
-                    " year=COALESCE(?, year), km=COALESCE(?, km),"
+                    # a year the viewer set on the dashboard (set_year) beats the ad's
+                    " year=COALESCE(user_year, ?, year), km=COALESCE(?, km),"
                     " image_url=COALESCE(?, image_url),"
                     " seller_type=COALESCE(?, seller_type) WHERE id=?",
                     (
@@ -560,6 +564,16 @@ def set_note(listing_id: int, note: str | None, db_path: Path | None = None) -> 
     return [r["title"] for r in rows]
 
 
+def set_year(listing_id: int, year: int | None, db_path: Path | None = None) -> list[str]:
+    """The viewer's year for a listing (the dashboard's Year cell), kept over the ad's on
+    re-scrapes. None clears it: the year is empty until the next scrape reads the ad's again.
+    Returns the listing's title (empty if no such listing)."""
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT title FROM listings WHERE id=?", (listing_id,)).fetchall()
+        conn.execute("UPDATE listings SET user_year=?, year=? WHERE id=?", (year, year, listing_id))
+    return [r["title"] for r in rows]
+
+
 def set_contact(
     ref: str, at: datetime | None, note: str | None = None, db_path: Path | None = None
 ) -> list[str]:
@@ -636,3 +650,6 @@ class SqliteStore:
 
     def set_note(self, listing_id: int, note: str | None) -> list[str]:
         return set_note(listing_id, note, db_path=self.db_path)
+
+    def set_year(self, listing_id: int, year: int | None) -> list[str]:
+        return set_year(listing_id, year, db_path=self.db_path)
