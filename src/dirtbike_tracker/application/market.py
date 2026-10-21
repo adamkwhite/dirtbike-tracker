@@ -58,6 +58,13 @@ def _only(rows: list[dict], sellers: set[str] | None) -> list[dict]:
     return rows if sellers is None else [x for x in rows if x.get("seller_type") in sellers]
 
 
+def model_make(config: dict, slug: str) -> str:
+    """The model's make in models.yml ("Honda"), or "" when it isn't set."""
+    return next(
+        (str(e.get("make", "")) for g in config.values() for e in g or [] if e["slug"] == slug), ""
+    )
+
+
 def model_goal(config: dict, slug: str) -> str:
     """The model's goal in models.yml (project when it isn't configured). ValueError if unknown."""
     goal = next(

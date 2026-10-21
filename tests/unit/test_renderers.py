@@ -1,5 +1,6 @@
 """Renderers take a MarketSnapshot, so they test without a DB."""
 
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -298,3 +299,33 @@ def test_hidden_listings_sit_at_the_bottom_of_their_own_tab(snap: MarketSnapshot
     assert dirt.index('id="crf150f"') < dirt.index('id="hidden-dirt"')
     assert "Parts bike" not in dirt.split('id="hidden-dirt"')[0]
     assert "hidden-street" not in street_tab  # nothing hidden there: no section
+
+
+def test_a_tab_filters_by_make(snap: MarketSnapshot) -> None:
+    honda = replace(snap, make="Honda")
+    yamaha = replace(
+        snap, slug="ttr125", make="Yamaha",
+        listings=[{**snap.listings[0], "url": "https://x/ttr", "title": "2010 TTR125"}],
+    )  # fmt: skip
+    hidden = {
+        **snap.listings[0],
+        "id": 9,
+        "url": "https://x/h",
+        "hide_note": None,
+        "hidden_at": "2026-10-21",
+    }
+
+    page = render_dashboard({"Dirt": [honda, replace(yamaha, hidden=[hidden])]})
+
+    assert '<button class="make active" data-make="">All</button>' in page
+    assert page.index('data-make="honda">Honda<') < page.index('data-make="yamaha">Yamaha<')
+    assert '<section class="model" id="ttr125" data-make="yamaha">' in page
+    assert '<a href="#ttr125" data-make="yamaha">' in page
+    table = page.split('id="all-dirt"')[1].split("</section>")[0]
+    row = table.split("2010 TTR125")[0].rsplit("<tr", 1)[1]
+    assert row.startswith(' data-make="yamaha">')
+    assert '<tr data-make="yamaha">' in page.split('id="hidden-dirt"')[1]
+
+
+def test_one_make_gets_no_filter(snap: MarketSnapshot) -> None:
+    assert 'button class="make' not in render_dashboard({"Dirt": [replace(snap, make="Honda")]})

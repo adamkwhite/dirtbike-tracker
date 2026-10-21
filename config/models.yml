@@ -5,10 +5,12 @@
 # min_year / max_year are the model's production years: a listing outside them is another
 # bike or a typo, and is skipped (an unknown year passes).
 # goal: ride models also skip listings under $1,000 (scoring.RIDE_MIN_PRICE): parts and toys.
+# make names the brand for the dashboard's per-tab make filter.
 
 # Priority targets right now (dad-and-sons trail bikes)
 priority:
   - slug: crf150f
+    make: Honda
     goal: project
     min_year: 2003
     max_year: 2017
@@ -17,6 +19,7 @@ priority:
     notes: "12yo's primary bike. Both brothers ride."
 
   - slug: crf230f
+    make: Honda
     goal: project
     min_year: 2003
     max_year: 2019
@@ -27,6 +30,7 @@ priority:
 # Secondary targets (step-up options, parts donors)
 secondary:
   - slug: crf125f
+    make: Honda
     goal: project
     min_year: 2014
     sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
@@ -34,6 +38,7 @@ secondary:
     notes: "Air-cooled, fuel injected, electric start. FB = big wheel (19/16 in, taller seat)"
 
   - slug: ttr125
+    make: Yamaha
     goal: project
     min_year: 2000
     sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
@@ -41,6 +46,7 @@ secondary:
     notes: "TTR125LE electric start preferred"
 
   - slug: klx140
+    make: Kawasaki
     goal: project
     min_year: 2008
     sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
@@ -48,6 +54,7 @@ secondary:
     notes: "Alternative to CRF150F"
 
   - slug: klx125
+    make: Kawasaki
     goal: project
     min_year: 2003
     max_year: 2006
@@ -56,6 +63,7 @@ secondary:
     notes: "Air-cooled, carb, kick start. A rebadged Suzuki DR-Z125: DR-Z parts fit. L = big wheel"
 
   - slug: drz125
+    make: Suzuki
     goal: project
     min_year: 2003
     sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
@@ -65,12 +73,14 @@ secondary:
 # Future (15yo step-up when he outgrows the CRF230F)
 future:
   - slug: crf250f
+    make: Honda
     goal: project
     min_year: 2019
     sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
     target_price: 4500
 
   - slug: xr250
+    make: Honda
     goal: project
     min_year: 1979
     max_year: 2004
@@ -80,6 +90,7 @@ future:
 # Street (ready to ride in spring, not a project)
 street:
   - slug: rebel500
+    make: Honda
     goal: ride             # fit favours runners/safetied; non-runners never alert
     min_year: 2017
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
@@ -87,6 +98,7 @@ street:
     notes: "Honda Rebel 500 (CMX500)"
 
   - slug: cb500f
+    make: Honda
     goal: ride
     min_year: 2013
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
@@ -96,6 +108,7 @@ street:
 # Middleweights (650-750 twins): highway-capable, room to grow past a 500
 middleweight:
   - slug: mt07
+    make: Yamaha
     goal: ride
     min_year: 2015
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
@@ -103,6 +116,7 @@ middleweight:
     notes: "Yamaha MT-07, 689 cc twin, 184 kg. Sold as the FZ-07 in 2015-2017 (those titles aren't matched)"
 
   - slug: sv650
+    make: Suzuki
     goal: ride
     min_year: 2003           # fuel injection from 2003
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
@@ -110,6 +124,7 @@ middleweight:
     notes: "Suzuki SV650, 645 cc V-twin; S = half fairing"
 
   - slug: nc750x
+    make: Honda
     goal: ride
     min_year: 2014
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
@@ -117,6 +132,7 @@ middleweight:
     notes: "Honda NC750X, low-revving upright; DCT automatic option"
 
   - slug: vstrom650
+    make: Suzuki
     goal: ride
     min_year: 2004
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
@@ -124,6 +140,7 @@ middleweight:
     notes: "Suzuki V-Strom 650 (DL650), adventure-touring; XT = spoked wheels"
 
   - slug: vulcans
+    make: Kawasaki
     query: vulcan s          # Kijiji finds 3 for "vulcans", 11 for "vulcan s"
     goal: ride
     min_year: 2015
@@ -132,6 +149,7 @@ middleweight:
     notes: "Kawasaki Vulcan S, 649 cc twin cruiser, low seat, adjustable reach"
 
   - slug: versys650
+    make: Kawasaki
     goal: ride
     min_year: 2008
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
@@ -139,6 +157,7 @@ middleweight:
     notes: "Kawasaki Versys 650, adventure-touring (the V-Strom 650's rival)"
 
   - slug: boulevard
+    make: Suzuki
     goal: ride
     min_year: 2005
     require: ["C50|C50T|C50SE|M50|S50|805"]   # the 805 cc cruisers, not the S40, C90 or M109
@@ -149,12 +168,14 @@ middleweight:
 # Dual sports: plated trail bikes, ready to ride (familiar from the dirt bikes)
 dualsport:
   - slug: crf300l
+    make: Honda
     goal: ride
     min_year: 2021
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
     target_price: 5000
 
   - slug: klx300
+    make: Kawasaki
     goal: ride
     min_year: 1997
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
@@ -162,12 +183,14 @@ dualsport:
     notes: "Search also finds the KLX300R (off-road only, not plated)"
 
   - slug: xt250
+    make: Yamaha
     goal: ride
     min_year: 2008
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
     target_price: 3800
 
   - slug: cb500x
+    make: Honda
     goal: ride
     min_year: 2013
     max_year: 2023
@@ -176,6 +199,7 @@ dualsport:
     notes: "Replaced by the NX500 in 2024"
 
   - slug: nx500
+    make: Honda
     goal: ride
     min_year: 2024
     sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]

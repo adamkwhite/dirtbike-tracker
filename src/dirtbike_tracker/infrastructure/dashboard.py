@@ -80,6 +80,11 @@ def _sort_key(value) -> str:
     return "" if value is None else _esc(value)
 
 
+def _make_attr(make: str) -> str:
+    """What the tab's make filter (its nav buttons) matches on; untagged rows always show."""
+    return f' data-make="{_esc(make.lower())}"' if make else ""
+
+
 def _title_tags(listing: dict) -> str:
     """After a row's title: when the seller was contacted, a dealer tag, and the hide button."""
     tags = ""
@@ -93,7 +98,7 @@ def _title_tags(listing: dict) -> str:
     return tags
 
 
-def _listing_row(listing: dict, models: list[str] | None = None) -> str:
+def _listing_row(listing: dict, models: list[str] | None = None, make: str = "") -> str:
     rating = listing["rating"]
     delta = listing["delta_pct"]
     delta_str = f"{delta:+.0f}%" if delta is not None else "—"
@@ -121,7 +126,7 @@ def _listing_row(listing: dict, models: list[str] | None = None) -> str:
         f'<td class="muted">{_esc(", ".join(m.upper() for m in models))}</td>' if models else ""
     )
     return f"""
-              <tr>
+              <tr{_make_attr(make)}>
                 <td data-v="{list(RATING_HEX).index(rating) if rating in RATING_HEX else 9}"><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>{model_cell}
                 <td class="num" data-v="{_sort_key(listing["price"] or None)}">{_esc(price_str)}</td>
                 <td class="num muted" data-v="{_sort_key(listing.get("year"))}">{listing.get("year") or "—"}</td>
@@ -176,7 +181,8 @@ def _all_bikes_section(snaps: list[MarketSnapshot], tab: str) -> str:
         for listing in snap.listings:
             rows.setdefault(listing["url"], (listing, []))[1].append(snap.slug)
     ordered = sorted(rows.values(), key=lambda r: r[0]["price"] or float("inf"))
-    body = "".join(_listing_row(listing, models) for listing, models in ordered)
+    makes = {s.slug: s.make for s in snaps}
+    body = "".join(_listing_row(x, models, makes[models[0]]) for x, models in ordered)
     return f"""
     <section class="model" id="all-{tab.lower()}">
       <h2>ALL {_esc(tab.upper())} BIKES ({len(ordered)})</h2>
@@ -223,7 +229,7 @@ def _model_section(snap: MarketSnapshot) -> str:
     )
 
     return f"""
-    <section class="model" id="{slug}">
+    <section class="model" id="{slug}"{_make_attr(snap.make)}>
       <h2>{slug.upper()}</h2>
       <div class="tiles">{tiles}</div>
       <h3>Median by week</h3>
@@ -297,9 +303,10 @@ def _hidden_section(snaps: list[MarketSnapshot], tab: str) -> str:
             rows.setdefault(listing["url"], (listing, []))[1].append(snap.slug)
     if not rows:
         return ""
+    makes = {s.slug: s.make for s in snaps}
     body = "".join(
         f"""
-              <tr>
+              <tr{_make_attr(makes[models[0]])}>
                 <td class="muted">{_esc(", ".join(m.upper() for m in models))}</td>
                 <td class="num" data-v="{_sort_key(x["price"] or None)}">{f"${int(x['price'])}" if x["price"] else "?"}</td>
                 <td class="num muted" data-v="{_sort_key(x.get("year"))}">{x.get("year") or "—"}</td>
@@ -324,7 +331,7 @@ def _hidden_section(snaps: list[MarketSnapshot], tab: str) -> str:
     """
 
 
-def _new_units_section(units: list[dict], tab: str) -> str:
+def _new_units_section(units: list[dict], tab: str, makes: Mapping[str, str]) -> str:
     """Dealers' new units of the tracked models (application/markdowns.py), biggest saving first."""
 
     def saving(u: dict) -> float:
@@ -332,7 +339,7 @@ def _new_units_section(units: list[dict], tab: str) -> str:
 
     rows = "".join(
         f"""
-              <tr>
+              <tr{_make_attr(makes.get(u["model_slug"], ""))}>
                 <td class="muted">{_esc(u["model_slug"].upper())}</td>
                 <td class="num" data-v="{u["price"]:.0f}">${u["price"]:,.0f}</td>
                 <td class="num muted" data-v="{_sort_key(u.get("was"))}">{f"${u['was']:,.0f}" if u.get("was") else "—"}</td>
@@ -361,20 +368,33 @@ def _tab(name: str, snaps: list[MarketSnapshot], new_units: Sequence[dict]) -> s
     """One tab: its models' listings in one table, the dealers' new units of them, then
     each model's panel, under its own sticky nav."""
     key = name.lower()
-    slugs = {s.slug for s in snaps}
-    units = [u for u in new_units if u["model_slug"] in slugs]
+    makes = {s.slug: s.make for s in snaps}
+    units = [u for u in new_units if u["model_slug"] in makes]
     hidden = _hidden_section(snaps, name)
     sections = "\n".join(
         [_all_bikes_section(snaps, name)]
-        + ([_new_units_section(units, name)] if units else [])
+        + ([_new_units_section(units, name, makes)] if units else [])
         + [_model_section(s) for s in snaps]
         + [hidden]
     )
+    names = sorted({m for m in makes.values() if m})
+    filter_html = (
+        '<span class="makes"><button class="make active" data-make="">All</button>'
+        + "".join(
+            f'<button class="make" data-make="{_esc(m.lower())}">{_esc(m)}</button>' for m in names
+        )
+        + "</span>"
+        if len(names) > 1
+        else ""
+    )
     links = (
-        f'<a href="#all-{key}">ALL {_esc(name.upper())} BIKES '
+        filter_html + f'<a href="#all-{key}">ALL {_esc(name.upper())} BIKES '
         f"({len({x['url'] for s in snaps for x in s.listings})})</a>"
         + (f'<a href="#new-{key}">NEW AT DEALERS ({len(units)})</a>' if units else "")
-        + "".join(f'<a href="#{s.slug}">{s.slug.upper()} ({len(s.listings)})</a>' for s in snaps)
+        + "".join(
+            f'<a href="#{s.slug}"{_make_attr(s.make)}>{s.slug.upper()} ({len(s.listings)})</a>'
+            for s in snaps
+        )
         + (f'<a href="#hidden-{key}">HIDDEN</a>' if hidden else "")
     )
     return f"""
@@ -559,6 +579,20 @@ def render_dashboard(
       white-space: nowrap;
     }}
     table.sortable th {{ cursor: pointer; user-select: none; }}
+    [hidden] {{ display: none !important; }}
+    .makes {{ display: flex; gap: 6px; flex-wrap: wrap; }}
+    button.make {{
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      font: inherit;
+      font-size: 12px;
+      padding: 0 8px;
+      cursor: pointer;
+    }}
+    button.make:hover {{ color: var(--accent); }}
+    button.make.active {{ color: var(--text); border-color: var(--accent); }}
     button.hide, button.unhide {{
       background: none;
       border: 1px solid var(--border);
@@ -639,6 +673,15 @@ def render_dashboard(
         alert(`Couldn't save (${{err.message}}). Hiding works on the served dashboard, not the file.`);
       }}
     }});
+
+    // Make filter: a tab's nav buttons show only that make's rows, model panels and links
+    document.querySelectorAll("button.make").forEach((b) => b.addEventListener("click", () => {{
+      const tab = b.closest(".tab");
+      tab.querySelectorAll("button.make").forEach((x) => x.classList.toggle("active", x === b));
+      tab.querySelectorAll("[data-make]:not(button)").forEach((el) => {{
+        el.hidden = b.dataset.make !== "" && el.dataset.make !== b.dataset.make;
+      }});
+    }}));
 
     // Click a header to sort its table: by each cell's data-v when set, else its text;
     // empty values sort last.
