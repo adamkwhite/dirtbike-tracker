@@ -98,6 +98,20 @@ def _title_tags(listing: dict) -> str:
     return tags
 
 
+def _note_cell(listing: dict) -> str:
+    """The viewer's free-form note: click to edit (saved by `dirtbike serve`, POST /note)."""
+    if listing.get("id") is None:
+        return "<td></td>"
+    return f'<td class="note" data-id="{listing["id"]}" title="Click to edit">{_esc(listing.get("notes") or "")}</td>'
+
+
+def _deal_first(listing: dict) -> tuple:
+    """DEAL, GOOD, FAIR, HIGH, then unrated; within a rating the furthest under median first."""
+    rating = list(RATING_HEX).index(listing["rating"]) if listing["rating"] in RATING_HEX else 9
+    delta = listing.get("delta_pct")
+    return (rating, delta is None, delta or 0, listing["price"] or float("inf"))
+
+
 def _listing_row(listing: dict, models: list[str] | None = None, make: str = "") -> str:
     rating = listing["rating"]
     delta = listing["delta_pct"]
@@ -136,6 +150,7 @@ def _listing_row(listing: dict, models: list[str] | None = None, make: str = "")
                 <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
                 <td class="muted">{_esc(loc)}</td>
                 <td>{thumb}<a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a>{contacted}</td>
+                {_note_cell(listing)}
               </tr>"""
 
 
@@ -167,11 +182,12 @@ def _sold_table(sold: list[dict]) -> str:
 LISTING_HEADERS = (
     '<th>Price</th><th>Year</th><th>km</th><th title="Price per year of age">$/yr</th><th>vs Med</th>'
     '<th title="Project fit 0-10: red/green phrases in the ad">Fit</th><th>Location</th><th>Title</th>'
+    '<th title="Your notes: click a cell to edit">Notes</th>'
 )
 
 
 def _all_bikes_section(snaps: list[MarketSnapshot], tab: str) -> str:
-    """Every active listing of a tab's models in one table, cheapest first.
+    """Every active listing of a tab's models in one table, deals first.
 
     A listing filed under two models ("2003 Honda crf" as CRF150F and CRF230F) is one row
     naming both; its rating is against the first model's median.
@@ -180,7 +196,7 @@ def _all_bikes_section(snaps: list[MarketSnapshot], tab: str) -> str:
     for snap in snaps:
         for listing in snap.listings:
             rows.setdefault(listing["url"], (listing, []))[1].append(snap.slug)
-    ordered = sorted(rows.values(), key=lambda r: r[0]["price"] or float("inf"))
+    ordered = sorted(rows.values(), key=lambda r: _deal_first(r[0]))
     makes = {s.slug: s.make for s in snaps}
     body = "".join(_listing_row(x, models, makes[models[0]]) for x, models in ordered)
     return f"""
@@ -593,6 +609,10 @@ def render_dashboard(
     }}
     button.make:hover {{ color: var(--accent); }}
     button.make.active {{ color: var(--text); border-color: var(--accent); }}
+    td.note {{ cursor: text; min-width: 120px; max-width: 260px; white-space: pre-wrap; }}
+    td.note:empty::before {{ content: "+ note"; color: var(--border); }}
+    td.note:hover {{ color: var(--accent); }}
+    td.note:empty:hover::before {{ color: var(--muted); }}
     button.hide, button.unhide {{
       background: none;
       border: 1px solid var(--border);
@@ -682,6 +702,25 @@ def render_dashboard(
         el.hidden = b.dataset.make !== "" && el.dataset.make !== b.dataset.make;
       }});
     }}));
+
+    // Notes: click a cell to edit; saved without a reload, shown in every table holding the bike
+    document.addEventListener("click", async (e) => {{
+      const cell = e.target.closest("td.note[data-id]");
+      if (!cell) return;
+      const note = prompt("Note for this bike (empty clears it):", cell.textContent);
+      if (note === null) return;  // cancelled
+      try {{
+        const r = await fetch("note", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json", "X-Dirtbike": "1" }},
+          body: JSON.stringify({{ id: Number(cell.dataset.id), note }}),
+        }});
+        if (!r.ok) throw new Error(r.status);
+        document.querySelectorAll(`td.note[data-id="${{cell.dataset.id}}"]`).forEach((c) => (c.textContent = note.trim()));
+      }} catch (err) {{
+        alert(`Couldn't save (${{err.message}}). Notes work on the served dashboard, not the file.`);
+      }}
+    }});
 
     // Click a header to sort its table: by each cell's data-v when set, else its text;
     // empty values sort last.

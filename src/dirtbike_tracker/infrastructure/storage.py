@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS listings (
     dismissed_at TEXT,
     hidden_at TEXT,
     hide_note TEXT,
+    notes TEXT,
     full_description TEXT,
     detail_fetched_at TEXT,
     contacted_at TEXT,
@@ -174,6 +175,8 @@ def _migrate_old_schema(db_path: Path | None = None) -> None:
         if "hidden_at" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN hidden_at TEXT")
             conn.execute("ALTER TABLE listings ADD COLUMN hide_note TEXT")
+        if "notes" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN notes TEXT")
 
 
 def _compute_fingerprint(
@@ -548,6 +551,15 @@ def set_hidden(
     return [r["title"] for r in rows]
 
 
+def set_note(listing_id: int, note: str | None, db_path: Path | None = None) -> list[str]:
+    """Save the viewer's free-form note on a listing (the dashboard's Notes column; empty
+    clears it). upsert never touches it. Returns the listing's title (empty if no such listing)."""
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT title FROM listings WHERE id=?", (listing_id,)).fetchall()
+        conn.execute("UPDATE listings SET notes=? WHERE id=?", (note or None, listing_id))
+    return [r["title"] for r in rows]
+
+
 def set_contact(
     ref: str, at: datetime | None, note: str | None = None, db_path: Path | None = None
 ) -> list[str]:
@@ -621,3 +633,6 @@ class SqliteStore:
 
     def set_hidden(self, listing_id: int, hidden: bool, note: str | None = None) -> list[str]:
         return set_hidden(listing_id, hidden, note, db_path=self.db_path)
+
+    def set_note(self, listing_id: int, note: str | None) -> list[str]:
+        return set_note(listing_id, note, db_path=self.db_path)
