@@ -414,12 +414,22 @@ def hide_listing(app: App, listing_id: int, hidden: bool, note: str | None) -> b
     return True
 
 
+def note_listing(app: App, listing_id: int, note: str | None) -> bool:
+    """Save a listing's note and rebuild the dashboard. False if there's no such listing."""
+    if not app.store.set_note(listing_id, note):
+        return False
+    _write_dashboard(app, _config_slugs(app))
+    return True
+
+
 @cli.command()
 @click.option("--port", default=8765, help="Localhost port (tailscale serve proxies it)")
 @click.pass_obj
 def serve(app: App, port: int):
     """Serve the dashboard on localhost, with its hide/unhide buttons working."""
-    server = make_server(app.dashboard_path, partial(hide_listing, app), port=port)
+    server = make_server(
+        app.dashboard_path, partial(hide_listing, app), partial(note_listing, app), port=port
+    )
     click.echo(f"Serving {app.dashboard_path.name} on http://127.0.0.1:{port}")
     server.serve_forever()
 

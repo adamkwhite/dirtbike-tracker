@@ -171,6 +171,20 @@ def test_hide_listing_saves_and_rebuilds_the_dashboard(market_app: App) -> None:
     assert not cli_module.hide_listing(app, 99999, True, None)
 
 
+def test_note_listing_saves_and_rebuilds_the_dashboard(market_app: App) -> None:
+    app = replace(market_app, config={"priority": [{"slug": "crf150f"}]})
+    (bike, *_) = app.store.active_listings("crf150f")
+
+    assert cli_module.note_listing(app, bike["id"], "asked for VIN <b>")
+
+    (saved,) = [x for x in app.store.active_listings("crf150f") if x["id"] == bike["id"]]
+    assert saved["notes"] == "asked for VIN <b>"
+    assert "asked for VIN &lt;b&gt;" in app.dashboard_path.read_text()
+    assert cli_module.note_listing(app, bike["id"], None)
+    assert not [x for x in app.store.active_listings("crf150f") if x["notes"]]
+    assert not cli_module.note_listing(app, 99999, "x")
+
+
 def test_skip_unconfigured_reports_instead_of_raising(capsys: pytest.CaptureFixture[str]) -> None:
     def no_topic(title: str, body: str, **_: object) -> bool:
         raise NotifyConfigError("no topic")

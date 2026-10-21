@@ -11,6 +11,7 @@ import pytest
 from dirtbike_tracker.infrastructure.dashboard_server import make_server
 
 HIDES: list[tuple[int, bool, str | None]] = []
+NOTES: list[tuple[int, str | None]] = []
 
 
 @pytest.fixture
@@ -19,12 +20,17 @@ def port(tmp_path: Path) -> Iterator[int]:
     page.write_text("<p>bikes</p>")
     (tmp_path / "listings.db").write_text("secret")
     HIDES.clear()
+    NOTES.clear()
 
     def hide(listing_id: int, hidden: bool, note: str | None) -> bool:
         HIDES.append((listing_id, hidden, note))
         return listing_id != 404
 
-    server = make_server(page, hide, port=0)
+    def note(listing_id: int, text: str | None) -> bool:
+        NOTES.append((listing_id, text))
+        return listing_id != 404
+
+    server = make_server(page, hide, note, port=0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield server.server_address[1]
     server.shutdown()
@@ -63,3 +69,15 @@ def test_hide_needs_the_custom_header_and_valid_json(port: int) -> None:
         _request(port, "POST", "/hide", {"id": 404, "hidden": True}, **{"X-Dirtbike": "1"}) == 404
     )
     assert HIDES[:2] == [(7, True, "too far"), (7, False, None)]
+
+
+def test_note_saves_trimmed_text_and_clears_on_empty(port: int) -> None:
+    h = {"X-Dirtbike": "1"}
+
+    assert _request(port, "POST", "/note", {"id": 7, "note": "asked VIN"}) == 403
+    assert _request(port, "POST", "/note", {"note": "x"}, **h) == 400
+    assert _request(port, "POST", "/note", {"id": 7, "note": "  asked VIN  "}, **h) == 204
+    assert _request(port, "POST", "/note", {"id": 7, "note": ""}, **h) == 204
+    assert _request(port, "POST", "/note", {"id": 404, "note": "x"}, **h) == 404
+    assert NOTES[:2] == [(7, "asked VIN"), (7, None)]
+    assert HIDES == []

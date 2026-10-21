@@ -198,6 +198,9 @@ listing to the **Hidden** section at the bottom of its tab, with an Unhide butto
 listing stops alerting and stays hidden across re-scrapes, but still counts toward the market
 median. `dismiss` is the stronger version for junk: never shown anywhere.
 
+The **Notes** column holds your own notes on a bike ("asked for VIN", "Dad's friend knows him"):
+click a cell to edit, empty clears it. The all-bikes table opens deals first; click a header to re-sort.
+
 The buttons need `dirtbike serve`, which serves only the dashboard page (nothing else under the
 project, so `data/` is never reachable) and saves hides to the DB, rebuilding the page. Run it
 from the prod clone and bind it to localhost; reach it from your phone with `tailscale serve`.

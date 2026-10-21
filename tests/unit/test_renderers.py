@@ -329,3 +329,21 @@ def test_a_tab_filters_by_make(snap: MarketSnapshot) -> None:
 
 def test_one_make_gets_no_filter(snap: MarketSnapshot) -> None:
     assert 'button class="make' not in render_dashboard({"Dirt": [replace(snap, make="Honda")]})
+
+
+def test_all_bikes_table_puts_deals_first_and_shows_notes(snap: MarketSnapshot) -> None:
+    base = {**snap.listings[0], "fit": 5, "fit_flags": []}
+    rows = [
+        {**base, "id": 1, "url": "u1", "title": "Cheap but high", "price": 500, "rating": "HIGH", "delta_pct": 30.0},
+        {**base, "id": 2, "url": "u2", "title": "Good one", "price": 1800, "rating": "GOOD", "delta_pct": -15.0},
+        {**base, "id": 3, "url": "u3", "title": "Big deal", "price": 1500, "rating": "DEAL", "delta_pct": -40.0, "notes": "asked VIN"},
+        {**base, "id": 4, "url": "u4", "title": "Small deal", "price": 1200, "rating": "DEAL", "delta_pct": -25.0},
+    ]  # fmt: skip
+
+    page = render_dashboard({"Dirt": [replace(snap, listings=rows)]})
+
+    table = page.split('id="all-dirt"')[1].split("</section>")[0]
+    order = [table.index(t) for t in ("Big deal", "Small deal", "Good one", "Cheap but high")]
+    assert order == sorted(order)
+    assert '<td class="note" data-id="3" title="Click to edit">asked VIN</td>' in table
+    assert '<td class="note" data-id="4" title="Click to edit"></td>' in table
