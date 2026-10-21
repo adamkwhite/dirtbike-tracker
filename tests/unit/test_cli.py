@@ -185,6 +185,18 @@ def test_note_listing_saves_and_rebuilds_the_dashboard(market_app: App) -> None:
     assert not cli_module.note_listing(app, 99999, "x")
 
 
+def test_year_listing_saves_and_rebuilds_the_dashboard(market_app: App) -> None:
+    app = replace(market_app, config={"priority": [{"slug": "crf150f"}]})
+    (bike, *_) = app.store.active_listings("crf150f")
+
+    assert cli_module.year_listing(app, bike["id"], 2004)
+
+    (saved,) = [x for x in app.store.active_listings("crf150f") if x["id"] == bike["id"]]
+    assert saved["year"] == 2004
+    assert f'year mine" data-id="{bike["id"]}" data-v="2004"' in app.dashboard_path.read_text()
+    assert not cli_module.year_listing(app, 99999, 2004)
+
+
 def test_skip_unconfigured_reports_instead_of_raising(capsys: pytest.CaptureFixture[str]) -> None:
     def no_topic(title: str, body: str, **_: object) -> bool:
         raise NotifyConfigError("no topic")

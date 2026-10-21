@@ -1,5 +1,6 @@
 """snapshot() against a real SQLite DB in tmp_path."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -384,3 +385,23 @@ def test_hide_moves_a_listing_to_hidden_with_its_note_and_survives_rescrape(
     snap = snapshot("crf150f", store)
     assert (len(snap.listings), snap.hidden) == (2, [])
     assert store.set_hidden(999, True) == []
+
+
+def test_a_year_set_on_the_dashboard_outlasts_rescrapes_until_cleared(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    bike = replace(_listing("kijiji", "170000001", "https://x/1", 1600), year=2005)
+    upsert_listings([bike], db_path=db)
+    store = SqliteStore(db)
+    (row,) = store.active_listings("crf150f")
+
+    assert store.set_year(row["id"], 2004) == ["170000001"]  # the VIN says 2004
+    upsert_listings([bike], db_path=db)  # the ad still says 2005
+    (row,) = store.active_listings("crf150f")
+    assert (row["year"], row["user_year"]) == (2004, 2004)
+
+    store.set_year(row["id"], None)
+    upsert_listings([bike], db_path=db)
+    (row,) = store.active_listings("crf150f")
+    assert (row["year"], row["user_year"]) == (2005, None)
+    assert store.set_year(999, 2004) == []

@@ -3,7 +3,8 @@ The dashboard over HTTP, with the hide/unhide button behind it (`dirtbike serve`
 
 Serves one file at `/` and nothing else, so `data/` (the DB, contact notes) is never
 reachable. POST /hide {"id", "hidden", "note"} saves through the `hide` callback, which
-also rebuilds the page; POST /note {"id", "note"} saves a listing's note through `note`.
+also rebuilds the page; POST /note {"id", "note"} and POST /year {"id", "year"} (null
+clears it) save a listing's note and year through `note` and `year`.
 Requests must carry `X-Dirtbike: 1`: a custom header makes a
 browser preflight a cross-site request, and there is no OPTIONS handler, so another site
 can't hide bikes through the viewer's browser. Bind to localhost; tailscale serve proxies it.
@@ -11,6 +12,7 @@ can't hide bikes through the viewer's browser. Bind to localhost; tailscale serv
 
 import json
 from collections.abc import Callable
+from datetime import date
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -18,10 +20,23 @@ from pathlib import Path
 Hide = Callable[[int, bool, str | None], bool]
 # (listing id, note) -> whether the listing exists
 Note = Callable[[int, str | None], bool]
+# (listing id, model year) -> whether the listing exists
+Year = Callable[[int, int | None], bool]
+FIRST_YEAR = 1950  # older is a typo, not a bike we'd buy
+
+
+def _model_year(value: object) -> int | None:
+    """A posted year: None clears it; ValueError unless FIRST_YEAR..next year."""
+    if value in (None, ""):
+        return None
+    year = int(str(value))
+    if not FIRST_YEAR <= year <= date.today().year + 1:
+        raise ValueError(year)
+    return year
 
 
 def make_server(
-    page: Path, hide: Hide, note: Note, host: str = "127.0.0.1", port: int = 8765
+    page: Path, hide: Hide, note: Note, year: Year, host: str = "127.0.0.1", port: int = 8765
 ) -> HTTPServer:
     """One request at a time (ponytail: a single viewer), so two hides never rebuild at once."""
 
@@ -40,7 +55,7 @@ def make_server(
             self.wfile.write(body)  # NOSONAR
 
         def do_POST(self) -> None:
-            if self.path not in ("/hide", "/note"):
+            if self.path not in ("/hide", "/note", "/year"):
                 self.send_error(404)
                 return
             if self.headers.get("X-Dirtbike") != "1":
@@ -52,13 +67,16 @@ def make_server(
                 listing_id = int(req["id"])
                 hidden = bool(req["hidden"]) if self.path == "/hide" else False
                 text = str(req.get("note") or "").strip()[: 200 if self.path == "/hide" else 1000]
+                model_year = _model_year(req.get("year"))
             except (ValueError, KeyError, TypeError):
                 self.send_error(400)
                 return
             if self.path == "/hide":
                 found = hide(listing_id, hidden, text or None)
-            else:
+            elif self.path == "/note":
                 found = note(listing_id, text or None)
+            else:
+                found = year(listing_id, model_year)
             if not found:
                 self.send_error(404)
                 return

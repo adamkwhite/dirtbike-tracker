@@ -12,6 +12,7 @@ from dirtbike_tracker.infrastructure.dashboard_server import make_server
 
 HIDES: list[tuple[int, bool, str | None]] = []
 NOTES: list[tuple[int, str | None]] = []
+YEARS: list[tuple[int, int | None]] = []
 
 
 @pytest.fixture
@@ -21,6 +22,7 @@ def port(tmp_path: Path) -> Iterator[int]:
     (tmp_path / "listings.db").write_text("secret")
     HIDES.clear()
     NOTES.clear()
+    YEARS.clear()
 
     def hide(listing_id: int, hidden: bool, note: str | None) -> bool:
         HIDES.append((listing_id, hidden, note))
@@ -30,7 +32,11 @@ def port(tmp_path: Path) -> Iterator[int]:
         NOTES.append((listing_id, text))
         return listing_id != 404
 
-    server = make_server(page, hide, note, port=0)
+    def year(listing_id: int, model_year: int | None) -> bool:
+        YEARS.append((listing_id, model_year))
+        return listing_id != 404
+
+    server = make_server(page, hide, note, year, port=0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield server.server_address[1]
     server.shutdown()
@@ -81,3 +87,15 @@ def test_note_saves_trimmed_text_and_clears_on_empty(port: int) -> None:
     assert _request(port, "POST", "/note", {"id": 404, "note": "x"}, **h) == 404
     assert NOTES[:2] == [(7, "asked VIN"), (7, None)]
     assert HIDES == []
+
+
+def test_year_takes_a_model_year_or_null(port: int) -> None:
+    h = {"X-Dirtbike": "1"}
+
+    assert _request(port, "POST", "/year", {"id": 7, "year": 2004}) == 403
+    for bad in (1800, 2999, "abc", 20.5):
+        assert _request(port, "POST", "/year", {"id": 7, "year": bad}, **h) == 400, bad
+    assert _request(port, "POST", "/year", {"id": 7, "year": "2004"}, **h) == 204
+    assert _request(port, "POST", "/year", {"id": 7, "year": None}, **h) == 204
+    assert _request(port, "POST", "/year", {"id": 404, "year": 2004}, **h) == 404
+    assert YEARS[:2] == [(7, 2004), (7, None)]

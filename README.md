@@ -199,7 +199,9 @@ listing stops alerting and stays hidden across re-scrapes, but still counts towa
 median. `dismiss` is the stronger version for junk: never shown anywhere.
 
 The **Notes** column holds your own notes on a bike ("asked for VIN", "Dad's friend knows him"):
-click a cell to edit, empty clears it. The all-bikes table opens deals first; click a header to re-sort.
+click a cell to edit, empty clears it. Click a **Year** to set it when the ad has none or
+gets it wrong (the VIN says 2004): yours is underlined and outlasts re-scrapes; empty hands it
+back to the ad. The all-bikes table opens deals first; click a header to re-sort.
 
 The buttons need `dirtbike serve`, which serves only the dashboard page (nothing else under the
 project, so `data/` is never reachable) and saves hides to the DB, rebuilding the page. Run it

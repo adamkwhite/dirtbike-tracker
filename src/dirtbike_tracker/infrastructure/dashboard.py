@@ -105,6 +105,19 @@ def _note_cell(listing: dict) -> str:
     return f'<td class="note" data-id="{listing["id"]}" title="Click to edit">{_esc(listing.get("notes") or "")}</td>'
 
 
+def _year_cell(listing: dict) -> str:
+    """The year, click to set it (POST /year): one you set is underlined and outlasts re-scrapes."""
+    year = listing.get("year")
+    if listing.get("id") is None:
+        return f'<td class="num muted" data-v="{_sort_key(year)}">{year or "—"}</td>'
+    mine = " mine" if listing.get("user_year") else ""
+    tip = "Set by you: click to change" if mine else "Click to set the year"
+    return (
+        f'<td class="num muted year{mine}" data-id="{listing["id"]}" data-v="{_sort_key(year)}"'
+        f' title="{tip}">{year or "—"}</td>'
+    )
+
+
 def _deal_first(listing: dict) -> tuple:
     """DEAL, GOOD, FAIR, HIGH, then unrated; within a rating the furthest under median first."""
     rating = list(RATING_HEX).index(listing["rating"]) if listing["rating"] in RATING_HEX else 9
@@ -143,7 +156,7 @@ def _listing_row(listing: dict, models: list[str] | None = None, make: str = "")
               <tr{_make_attr(make)}>
                 <td data-v="{list(RATING_HEX).index(rating) if rating in RATING_HEX else 9}"><span class="badge" style="background:{RATING_HEX.get(rating, "#6b7280")}">{_esc(rating)}</span></td>{model_cell}
                 <td class="num" data-v="{_sort_key(listing["price"] or None)}">{_esc(price_str)}</td>
-                <td class="num muted" data-v="{_sort_key(listing.get("year"))}">{listing.get("year") or "—"}</td>
+                {_year_cell(listing)}
                 <td class="num muted" data-v="{_sort_key(listing.get("km"))}">{f"{listing['km']:,}" if listing.get("km") else "—"}</td>
                 <td class="num muted" data-v="{_sort_key(per_year)}">{f"${per_year:,}" if per_year else "—"}</td>
                 <td class="num muted" data-v="{_sort_key(delta)}" title="{_esc(vs)}">{_esc(delta_str)}</td>
@@ -613,6 +626,9 @@ def render_dashboard(
     td.note:empty::before {{ content: "+ note"; color: var(--border); }}
     td.note:hover {{ color: var(--accent); }}
     td.note:empty:hover::before {{ color: var(--muted); }}
+    td.year[data-id] {{ cursor: text; }}
+    td.year[data-id]:hover {{ color: var(--accent); }}
+    td.year.mine {{ text-decoration: underline dotted; }}
     button.hide, button.unhide {{
       background: none;
       border: 1px solid var(--border);
@@ -719,6 +735,32 @@ def render_dashboard(
         document.querySelectorAll(`td.note[data-id="${{cell.dataset.id}}"]`).forEach((c) => (c.textContent = note.trim()));
       }} catch (err) {{
         alert(`Couldn't save (${{err.message}}). Notes work on the served dashboard, not the file.`);
+      }}
+    }});
+
+    // Year: click a cell to set it (empty clears yours); every cell for the bike updates in place
+    document.addEventListener("click", async (e) => {{
+      const cell = e.target.closest("td.year[data-id]");
+      if (!cell) return;
+      const shown = cell.textContent.trim();
+      const input = prompt("Model year (empty clears yours):", shown === "—" ? "" : shown);
+      if (input === null) return;  // cancelled
+      const year = input.trim() === "" ? null : Number(input.trim());
+      try {{
+        const r = await fetch("year", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json", "X-Dirtbike": "1" }},
+          body: JSON.stringify({{ id: Number(cell.dataset.id), year }}),
+        }});
+        if (r.status === 400) return alert(`${{input}} isn't a model year (1950 to next year).`);
+        if (!r.ok) throw new Error(r.status);
+        document.querySelectorAll(`td.year[data-id="${{cell.dataset.id}}"]`).forEach((c) => {{
+          c.textContent = year ?? "—";
+          c.dataset.v = year ?? "";
+          c.classList.toggle("mine", year !== null);
+        }});
+      }} catch (err) {{
+        alert(`Couldn't save (${{err.message}}). Editing works on the served dashboard, not the file.`);
       }}
     }});
 
