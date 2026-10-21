@@ -115,6 +115,7 @@ class MarketSnapshot:
     sold: list[dict] = field(default_factory=list)  # likely-sold, most recent first
     weekly: list[tuple[str, float | None]] = field(default_factory=list)  # (week start, median)
     hidden: list[dict] = field(default_factory=list)  # hidden from the dashboard, with notes
+    make: str = ""  # models.yml `make`, for the dashboard's make filter
 
 
 def market_stats(prices: list[float]) -> dict:

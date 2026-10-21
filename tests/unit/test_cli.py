@@ -11,7 +11,7 @@ from click.testing import CliRunner
 
 from dirtbike_tracker.application import cli as cli_module
 from dirtbike_tracker.application.cli import cli, skip_unconfigured
-from dirtbike_tracker.application.market import model_goal
+from dirtbike_tracker.application.market import model_goal, model_make
 from dirtbike_tracker.application.ports import App
 from dirtbike_tracker.application.watch import alert_for
 from dirtbike_tracker.domain.listing import Listing
@@ -283,6 +283,13 @@ def test_model_goal_from_config() -> None:
     assert model_goal(config, "crf150f") == "project"  # not configured
 
 
+def test_model_make_from_config() -> None:
+    config = {"street": [{"slug": "rebel500", "make": "Honda"}, {"slug": "mt07"}], "x": None}
+
+    assert model_make(config, "rebel500") == "Honda"
+    assert model_make(config, "mt07") == ""  # unset: the dashboard filter shows it always
+
+
 def test_unknown_goal_is_a_clear_error(app: App) -> None:
     app = replace(app, config={"g": [{"slug": "rebel500", "goal": "tour"}]})
 
@@ -300,6 +307,7 @@ def test_models_yml_entries_are_valid() -> None:
     for e in entries:
         assert e["slug"] in KNOWN_MODEL_SLUGS, e
         assert e.get("goal") in GOALS, e  # explicit on every entry, for consistency
+        assert e.get("make"), e  # the dashboard's make filter
         assert set(e.get("sources", ["kijiji"])) <= {
             "kijiji",
             "autotrader",

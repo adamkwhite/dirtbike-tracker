@@ -10,6 +10,7 @@
 
 triumph:
   - slug: speedtwin          # Speed Twin 900 has no RS, so "speedtwin" + RS is the 1200 RS
+    make: Triumph
     query: speed twin 1200
     goal: ride
     sources: [kijiji, autotrader, facebook]

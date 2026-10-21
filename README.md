@@ -188,7 +188,8 @@ not only deals). See the comments in `config/friend.example.yml`.
 
 The main `dashboard.html` has a tab for each watchlist: **Dirt** (the `project` models), **Street**
 (the `ride` models) and **Hoss** (`config/friend.yml`, read from the shared DB, so it fills in
-whenever his watch runs). `dirtbike --config config/friend.yml dashboard --open` shows his bikes alone.
+whenever his watch runs). `dirtbike --config config/friend.yml dashboard --open` shows his bikes alone. Each tab's
+make buttons (Honda, Yamaha, ...; every `models.yml` entry sets `make`) show only that brand's bikes.
 
 ### Hiding bikes on the dashboard
 
