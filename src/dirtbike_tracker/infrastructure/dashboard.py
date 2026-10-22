@@ -13,6 +13,7 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote_plus
 
 from ..domain.scoring import (
     FALLBACK_NOTE,
@@ -98,6 +99,19 @@ def _title_tags(listing: dict) -> str:
     return tags
 
 
+def _location_cell(listing: dict) -> str:
+    """'Barrie (14d)', linked to a Google Maps search for the town (every source is Ontario:
+    "Muskoka" alone could be elsewhere). Kijiji's "Markham / York Region" keeps the town."""
+    town = (listing.get("location") or "").split(",")[0].split("/")[0].strip()
+    if not town:
+        return f'<td class="muted">{_esc(location_label(listing, 28))}</td>'
+    url = "https://www.google.com/maps/search/?api=1&query=" + quote_plus(f"{town}, ON")
+    return (
+        f'<td class="muted"><a class="map" href="{_esc(url)}" target="_blank" rel="noopener">'
+        f"{_esc(location_label(listing, 28))}</a></td>"
+    )
+
+
 def _note_cell(listing: dict) -> str:
     """The viewer's free-form note: click to edit (saved by `dirtbike serve`, POST /note)."""
     if listing.get("id") is None:
@@ -139,7 +153,6 @@ def _listing_row(listing: dict, models: list[str] | None = None, make: str = "")
         price_str = {"please_contact": "Contact", "swap_trade": "Trade only"}.get(
             listing.get("price_state", ""), "?"
         )
-    loc = location_label(listing, 28)
     title = (listing["title"] or "")[:65]
     per_year = price_per_year(listing, datetime.now().year)
     thumb = ""
@@ -161,7 +174,7 @@ def _listing_row(listing: dict, models: list[str] | None = None, make: str = "")
                 <td class="num muted" data-v="{_sort_key(per_year)}">{f"${per_year:,}" if per_year else "—"}</td>
                 <td class="num muted" data-v="{_sort_key(delta)}" title="{_esc(vs)}">{_esc(delta_str)}</td>
                 <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
-                <td class="muted">{_esc(loc)}</td>
+                {_location_cell(listing)}
                 <td>{thumb}<a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a>{contacted}</td>
                 {_note_cell(listing)}
               </tr>"""
@@ -339,7 +352,7 @@ def _hidden_section(snaps: list[MarketSnapshot], tab: str) -> str:
                 <td class="muted">{_esc(", ".join(m.upper() for m in models))}</td>
                 <td class="num" data-v="{_sort_key(x["price"] or None)}">{f"${int(x['price'])}" if x["price"] else "?"}</td>
                 <td class="num muted" data-v="{_sort_key(x.get("year"))}">{x.get("year") or "—"}</td>
-                <td class="muted">{_esc(location_label(x, 28))}</td>
+                {_location_cell(x)}
                 <td><a href="{_esc(x["url"])}" target="_blank" rel="noopener">{_esc((x["title"] or "")[:65])}</a></td>
                 <td class="muted">{_esc(x.get("hide_note") or "")}</td>
                 <td class="muted" data-v="{_esc(x["hidden_at"])}">{_esc(x["hidden_at"][:10])}</td>
@@ -582,6 +595,8 @@ def render_dashboard(
     td.muted, .muted {{ color: var(--muted); }}
     td a {{ color: var(--text); text-decoration: none; }}
     td a:hover {{ color: var(--accent); }}
+    td a.map {{ color: var(--muted); }}
+    td a.map:hover {{ color: var(--accent); text-decoration: underline; }}
     .thumb {{
       width: 72px;
       height: 54px;

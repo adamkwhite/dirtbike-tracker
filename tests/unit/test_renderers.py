@@ -7,6 +7,7 @@ from pathlib import Path
 from dirtbike_tracker.domain.scoring import MarketSnapshot, score_listings
 from dirtbike_tracker.infrastructure.dashboard import (
     _listing_row,
+    _location_cell,
     _model_section,
     render_dashboard,
     write_dashboard,
@@ -354,3 +355,12 @@ def test_a_reload_keeps_the_scroll_position(snap: MarketSnapshot) -> None:
 
     assert 'history.scrollRestoration = "manual"' in page
     assert 'sessionStorage.setItem("scrollY"' in page
+
+
+def test_location_links_to_a_maps_search_for_the_town() -> None:
+    kijiji = _location_cell({"location": "Markham / York Region", "age_days": 3})
+    fb = _location_cell({"location": "Kawartha Lakes, ON"})
+
+    assert "query=Markham%2C+ON" in kijiji and ">Markham / York Region (3d)</a>" in kijiji
+    assert "query=Kawartha+Lakes%2C+ON" in fb
+    assert "<a" not in _location_cell({"location": ""})
