@@ -241,7 +241,7 @@ def scrape(app: App, model: str, region: str, source: str, pages: int):
         click.echo(f"  {src}: {len(listings)} listings")
 
     stats = app.store.upsert_listings(all_listings)
-    stale = app.store.mark_stale(scraped_ok)
+    stale = app.store.mark_stale(scraped_ok, [model])
     click.echo(
         f"\nTotal {len(all_listings)}. "
         f"New: {stats['new']}, Updated: {stats['updated']}, "
@@ -359,7 +359,7 @@ def watch(app: App, region: str, notify: bool, group: str):
             click.echo(f"  {line}")
 
     seen = sources_seen(app, source_counts)
-    app.store.mark_stale([s for s, n in seen.items() if n])
+    app.store.mark_stale([s for s, n in seen.items() if n], [t["slug"] for t in all_targets])
     record_notified(app, already_notified | newly_notified)
     if not group:  # a subset of models coming back empty doesn't mean a scraper broke
         for warning in check_source_health(app, seen, notify):
