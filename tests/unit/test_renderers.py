@@ -347,3 +347,10 @@ def test_all_bikes_table_puts_deals_first_and_shows_notes(snap: MarketSnapshot) 
     assert order == sorted(order)
     assert '<td class="note" data-id="3" title="Click to edit">asked VIN</td>' in table
     assert '<td class="note" data-id="4" title="Click to edit"></td>' in table
+
+
+def test_a_reload_keeps_the_scroll_position(snap: MarketSnapshot) -> None:
+    page = render_dashboard({"Dirt": [snap]})
+
+    assert 'history.scrollRestoration = "manual"' in page
+    assert 'sessionStorage.setItem("scrollY"' in page
