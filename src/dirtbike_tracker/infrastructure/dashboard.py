@@ -684,7 +684,17 @@ def render_dashboard(
     }};
     let saved = null;
     try {{ saved = localStorage.getItem("tab"); }} catch (e) {{}}
-    if (!openLinked()) show(tabs.some((t) => t.dataset.tab === saved) ? saved : tabs[0]?.dataset.tab);
+    // A reload (a hide rebuilds the page, or F5) comes back where it was: the browser's own
+    // restore can land before the tab switch hides the other tabs, a screen or more off.
+    history.scrollRestoration = "manual";
+    let y = null;
+    try {{ y = sessionStorage.getItem("scrollY"); sessionStorage.removeItem("scrollY"); }} catch (e) {{}}
+    addEventListener("pagehide", () => {{
+      try {{ sessionStorage.setItem("scrollY", String(scrollY)); }} catch (e) {{}}
+    }});
+    const fallback = () => show(tabs.some((t) => t.dataset.tab === saved) ? saved : tabs[0]?.dataset.tab);
+    if (y !== null) {{ fallback(); scrollTo(0, Number(y)); }}
+    else if (!openLinked()) fallback();
     window.addEventListener("hashchange", openLinked);
 
     // Hide / unhide a listing: `dirtbike serve` saves it and rebuilds this page, then we reload.
@@ -723,7 +733,9 @@ def render_dashboard(
     document.addEventListener("click", async (e) => {{
       const cell = e.target.closest("td.note[data-id]");
       if (!cell) return;
+      const at = scrollY;
       const note = prompt("Note for this bike (empty clears it):", cell.textContent);
+      scrollTo(0, at);
       if (note === null) return;  // cancelled
       try {{
         const r = await fetch("note", {{
@@ -743,7 +755,9 @@ def render_dashboard(
       const cell = e.target.closest("td.year[data-id]");
       if (!cell) return;
       const shown = cell.textContent.trim();
+      const at = scrollY;
       const input = prompt("Model year (empty clears yours):", shown === "—" ? "" : shown);
+      scrollTo(0, at);
       if (input === null) return;  // cancelled
       const year = input.trim() === "" ? null : Number(input.trim());
       try {{
