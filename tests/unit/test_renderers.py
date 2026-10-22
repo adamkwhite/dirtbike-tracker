@@ -364,3 +364,14 @@ def test_location_links_to_a_maps_search_for_the_town() -> None:
     assert "query=Markham%2C+ON" in kijiji and ">Markham / York Region (3d)</a>" in kijiji
     assert "query=Kawartha+Lakes%2C+ON" in fb
     assert "<a" not in _location_cell({"location": ""})
+
+
+def test_location_hover_shows_post_date_and_first_seen() -> None:
+    both = _location_cell(
+        {"location": "Lincoln, ON", "posted_text": "2026-09-11T18:01:01.000Z",
+         "first_seen": "2026-10-13T21:56:25"}
+    )  # fmt: skip
+    seen_only = _location_cell({"location": "Lincoln, ON", "first_seen": "2026-10-13T21:56:25"})
+
+    assert 'title="Posted 2026-09-11, first seen 2026-10-13"' in both
+    assert 'title="First seen 2026-10-13"' in seen_only

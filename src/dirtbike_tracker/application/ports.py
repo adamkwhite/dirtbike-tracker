@@ -40,6 +40,9 @@ class WholeInventorySource(ListingSource, Protocol):
 
 
 AdDetailFetcher = Callable[[str], str | None]  # ad url -> description, None if the fetch failed
+# ad url -> post time (UTC ISO, like Kijiji's activationDate), None if the ad shows none;
+# raises if the fetch failed
+PostDateFetcher = Callable[[str], str | None]
 
 
 # the tracked model slugs -> that dealer's new units of them. Raises if the dealer is down
@@ -79,6 +82,8 @@ class ListingStore(Protocol):
     def set_hidden(self, listing_id: int, hidden: bool, note: str | None = None) -> list[str]: ...
     def set_note(self, listing_id: int, note: str | None) -> list[str]: ...
     def set_year(self, listing_id: int, year: int | None) -> list[str]: ...
+    def undated_listings(self, sources: Iterable[str], limit: int) -> list[dict]: ...
+    def set_posted(self, listing_id: int, posted: str | None) -> None: ...
 
 
 @dataclass
@@ -99,3 +104,5 @@ class App:
     street_notify: Notifier | None = None
     # other watchlists' configs (tab name -> config), each a tab on this dashboard
     dashboard_tabs: Mapping[str, dict] = field(default_factory=dict)
+    # sources whose search cards carry no post time: read it from the ad page (Facebook)
+    post_dates: Mapping[str, PostDateFetcher] = field(default_factory=dict)

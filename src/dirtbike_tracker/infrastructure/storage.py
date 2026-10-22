@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS listings (
     hide_note TEXT,
     notes TEXT,
     user_year INTEGER,
+    posted_checked_at TEXT,
     full_description TEXT,
     detail_fetched_at TEXT,
     contacted_at TEXT,
@@ -180,6 +181,8 @@ def _migrate_old_schema(db_path: Path | None = None) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN notes TEXT")
         if "user_year" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN user_year INTEGER")
+        if "posted_checked_at" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN posted_checked_at TEXT")
 
 
 def _compute_fingerprint(
@@ -440,12 +443,14 @@ def market_listings(
 def sold_listings(
     model_slug: str, days: int = 90, limit: int = 5, db_path: Path | None = None
 ) -> list[dict]:
-    """Most recent likely-sold primary listings for a model, with days on market."""
+    """Most recent likely-sold primary listings for a model, with days on market (from the
+    source post date when known)."""
     cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).isoformat()
     with connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT l.*, CAST(julianday(l.last_seen) - julianday(l.first_seen) AS INTEGER)
+            SELECT l.*, CAST(julianday(l.last_seen)
+                   - julianday(COALESCE(NULLIF(l.posted_text, ''), l.first_seen)) AS INTEGER)
                    AS days_listed
             FROM listings l
             JOIN listing_models m ON m.listing_id = l.id
@@ -581,6 +586,37 @@ def set_year(listing_id: int, year: int | None, db_path: Path | None = None) -> 
     return [r["title"] for r in rows]
 
 
+def undated_listings(sources: Iterable[str], limit: int, db_path: Path | None = None) -> list[dict]:
+    """Shown listings from `sources` with no post time whose ad page wasn't read yet, newest
+    first (so a new ad is dated within a run or two while the backlog drains)."""
+    sources = list(sources)
+    if not sources:
+        return []
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, source, url FROM listings
+            WHERE is_active=1 AND is_primary=1 AND dismissed_at IS NULL AND hidden_at IS NULL
+              AND COALESCE(posted_text, '')='' AND posted_checked_at IS NULL
+              AND source IN ({",".join("?" * len(sources))})
+            ORDER BY first_seen DESC LIMIT ?
+            """,  # only "?" placeholders are interpolated
+            (*sources, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_posted(listing_id: int, posted: str | None, db_path: Path | None = None) -> None:
+    """Save the post time read from a listing's ad page, and mark the page read either way
+    (None: it had none), so it isn't fetched again. upsert keeps a stored post time."""
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE listings SET posted_text=COALESCE(?, posted_text), posted_checked_at=?"
+            " WHERE id=?",
+            (posted, datetime.now(UTC).replace(tzinfo=None).isoformat(), listing_id),
+        )
+
+
 def set_contact(
     ref: str, at: datetime | None, note: str | None = None, db_path: Path | None = None
 ) -> list[str]:
@@ -660,3 +696,9 @@ class SqliteStore:
 
     def set_year(self, listing_id: int, year: int | None) -> list[str]:
         return set_year(listing_id, year, db_path=self.db_path)
+
+    def undated_listings(self, sources: Iterable[str], limit: int) -> list[dict]:
+        return undated_listings(sources, limit, db_path=self.db_path)
+
+    def set_posted(self, listing_id: int, posted: str | None) -> None:
+        set_posted(listing_id, posted, db_path=self.db_path)

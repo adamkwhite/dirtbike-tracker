@@ -101,13 +101,23 @@ def _title_tags(listing: dict) -> str:
 
 def _location_cell(listing: dict) -> str:
     """'Barrie (14d)', linked to a Google Maps search for the town (every source is Ontario:
-    "Muskoka" alone could be elsewhere). Kijiji's "Markham / York Region" keeps the town."""
+    "Muskoka" alone could be elsewhere). Kijiji's "Markham / York Region" keeps the town.
+    Hovering shows the ad's post date and when we first saw it."""
+    posted, seen = (listing.get("posted_text") or "")[:10], (listing.get("first_seen") or "")[:10]
+    dates = ", ".join(
+        ([f"Posted {posted}"] if posted else []) + ([f"first seen {seen}"] if seen else [])
+    )
+    td = (
+        f'<td class="muted" title="{_esc(dates[:1].upper() + dates[1:])}">'
+        if dates
+        else ('<td class="muted">')
+    )
     town = (listing.get("location") or "").split(",")[0].split("/")[0].strip()
     if not town:
-        return f'<td class="muted">{_esc(location_label(listing, 28))}</td>'
+        return f"{td}{_esc(location_label(listing, 28))}</td>"
     url = "https://www.google.com/maps/search/?api=1&query=" + quote_plus(f"{town}, ON")
     return (
-        f'<td class="muted"><a class="map" href="{_esc(url)}" target="_blank" rel="noopener">'
+        f'{td}<a class="map" href="{_esc(url)}" target="_blank" rel="noopener">'
         f"{_esc(location_label(listing, 28))}</a></td>"
     )
 
