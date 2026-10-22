@@ -38,6 +38,7 @@ from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_de
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
 from ..infrastructure.storage import SqliteStore, init_db
+from .details import fetch_post_dates
 from .markdowns import check_markdowns, markdown_rows
 from .market import model_goal
 from .ports import App, Notifier
@@ -148,6 +149,7 @@ def build_app(config_path: Path | None = None) -> App:
         ping=notifier.ping_healthcheck,
         # dealers' new stock, for the markdown watch (markdowns.py)
         new_stock={"burlington": BURLINGTON, "delmastro": DEL_MASTRO.new_units},
+        post_dates={"facebook": fb_scraper.ad_post_date},  # FB's search cards carry no date
         dashboard_tabs=tabs,
     )
 
@@ -358,6 +360,8 @@ def watch(app: App, region: str, notify: bool, group: str):
         for line in skipped:
             click.echo(f"  {line}")
 
+    if dated := fetch_post_dates(app.post_dates, app.store):
+        click.echo(f"Post dates read: {dated}")
     seen = sources_seen(app, source_counts)
     app.store.mark_stale([s for s, n in seen.items() if n], [t["slug"] for t in all_targets])
     record_notified(app, already_notified | newly_notified)

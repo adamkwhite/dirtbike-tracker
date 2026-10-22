@@ -59,6 +59,11 @@ _BADGES = {"just listed", "sold", "pending"}  # card status lines, not the title
 _PLACEHOLDER_PRICES = {1234, 12345, 123456}
 
 Fetch = Callable[[str], str]  # search url -> rendered html
+# The ad's own post time follows its description in the page's data; seller reviews on the
+# same page carry a creation_time too, so the anchor matters.
+_POSTED_RE = re.compile(
+    r'"redacted_description":\{"text":"(?:[^"\\]|\\.)*"\},"creation_time":(\d+)'
+)
 
 
 def build_search_url(model_slug: str, city: str = CITY) -> str:
@@ -158,6 +163,19 @@ def fetch_search_page(url: str, profile_dir: Path = PROFILE_DIR, headless: bool 
             return str(page.content())
         finally:
             context.close()
+
+
+def parse_post_time(html: str) -> str | None:
+    """An ad page's post time, as UTC ISO like Kijiji's activationDate; None if it shows none."""
+    m = _POSTED_RE.search(html)
+    if not m:
+        return None
+    return datetime.fromtimestamp(int(m.group(1)), UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def ad_post_date(url: str, fetch: Fetch = fetch_search_page) -> str | None:
+    """The PostDateFetcher for Facebook: render the ad page, read its post time."""
+    return parse_post_time(fetch(url))
 
 
 def login(profile_dir: Path = PROFILE_DIR) -> None:

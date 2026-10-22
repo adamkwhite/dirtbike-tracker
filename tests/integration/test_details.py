@@ -5,16 +5,16 @@ from pathlib import Path
 import pytest
 
 from dirtbike_tracker.application import details
-from dirtbike_tracker.application.details import fetch_details
+from dirtbike_tracker.application.details import fetch_details, fetch_post_dates
 from dirtbike_tracker.application.market import snapshot
 from dirtbike_tracker.application.watch import alert_for
 from dirtbike_tracker.domain.listing import Listing
 from dirtbike_tracker.infrastructure.storage import SqliteStore, connect, init_db, upsert_listings
 
 
-def _listing(ext_id: str, price: float, description: str = "") -> Listing:
+def _listing(ext_id: str, price: float, description: str = "", source: str = "kijiji") -> Listing:
     return Listing(
-        source="kijiji",
+        source=source,
         external_id=ext_id,
         url=f"https://www.kijiji.ca/v-dirt-bikes-motocross/x/{ext_id}",
         title=f"Honda CRF150F {ext_id}",
@@ -171,3 +171,44 @@ def test_search_snippet_never_overwrites_a_fetched_body(db: Path) -> None:
     upsert_listings([short], db_path=db)
 
     assert _by_id(db)["deal"]["description"] == "fetched body"
+
+
+def test_post_dates_read_newest_undated_first_once_each(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(details, "POST_DATE_BUDGET", 2)
+    store = SqliteStore(db)
+    upsert_listings(
+        [_listing(n, 2000, source="facebook") for n in ("old", "dateless", "new")], db_path=db
+    )
+    with connect(db) as conn:  # first seen: old, then dateless, then new
+        for i, n in enumerate(("old", "dateless", "new")):
+            conn.execute(
+                "UPDATE listings SET first_seen=? WHERE external_id=?", (f"2026-10-1{i}", n)
+            )
+    pages = {"new": "2026-09-11T18:01:01.000Z", "dateless": None, "old": "2025-06-02T15:29:58.000Z"}
+    fetched: list[str] = []
+
+    def fake(url: str) -> str | None:
+        fetched.append(url.rsplit("/", 1)[-1])
+        return pages[fetched[-1]]
+
+    assert fetch_post_dates({"facebook": fake}, store) == 1  # new, then dateless: no date
+    assert fetch_post_dates({"facebook": fake}, store) == 1  # old; nothing is read twice
+    assert fetch_post_dates({"facebook": fake}, store) == 0
+    assert fetched == ["new", "dateless", "old"]
+    upsert_listings([_listing("old", 2000, source="facebook")], db_path=db)  # rescrape: no date
+    assert _by_id(db)["old"]["posted_text"] == "2025-06-02T15:29:58.000Z"
+    assert _by_id(db)["old"]["age_days"] > 365
+
+
+def test_a_failed_post_date_fetch_stops_and_retries_next_run(db: Path) -> None:
+    store = SqliteStore(db)
+    upsert_listings([_listing("fb", 2000, source="facebook")], db_path=db)
+
+    def blocked(_: str) -> str | None:
+        raise TimeoutError
+
+    assert fetch_post_dates({"facebook": blocked}, store) == 0
+    assert fetch_post_dates({"facebook": lambda _: "2026-09-11T18:01:01.000Z"}, store) == 1
+    assert fetch_post_dates({}, store) == 0

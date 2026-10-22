@@ -270,3 +270,15 @@ def test_crf125f_takes_both_wheel_sizes(title: str) -> None:
     (listing,) = parse_listings(_card("1", "CA$3,000", title, "Markham, ON"), "crf125f")
 
     assert listing.model_slugs == ["crf125f"]
+
+
+def test_post_time_is_the_ads_not_a_seller_reviews() -> None:
+    page = (
+        '{"seller_review_snippets":[{"creation_time":1786492036,"review_text":"Bad attitude"}],'
+        '"redacted_description":{"text":"Runs great \\"as is\\"\\nNew clutch"},'
+        '"creation_time":1789149661}'
+    )
+
+    assert fb_scraper.parse_post_time(page) == "2026-09-11T18:01:01.000Z"
+    assert fb_scraper.parse_post_time('{"creation_time":1786492036}') is None
+    assert fb_scraper.ad_post_date("u", fetch=lambda _: page) == "2026-09-11T18:01:01.000Z"
