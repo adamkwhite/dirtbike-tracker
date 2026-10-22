@@ -117,7 +117,7 @@ def test_mark_stale_tags_likely_sold_only_for_sources_that_scraped(tmp_path: Pat
     _add(db, "fresh", 2700, days_ago=0)
     _add(db, "at-gone-4d", 2800, days_ago=4, source="autotrader")  # source broken this run
 
-    assert mark_stale(["kijiji"], db_path=db) == 2
+    assert mark_stale(["kijiji"], ["crf150f"], db_path=db) == 2
 
     is_active, sold_at = _row(db, "gone-4d")
     assert is_active == 0
@@ -125,14 +125,23 @@ def test_mark_stale_tags_likely_sold_only_for_sources_that_scraped(tmp_path: Pat
     assert _row(db, "gone-2d") == (0, None)  # inactive, not yet "sold"
     assert _row(db, "fresh") == (1, None)
     assert _row(db, "at-gone-4d") == (1, None)
-    assert mark_stale([], db_path=db) == 0
+    assert mark_stale([], ["crf150f"], db_path=db) == 0
+
+
+def test_mark_stale_leaves_models_another_watchlist_scrapes(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "friends-bike", 20000, days_ago=4)  # crf150f stands in for a Hoss model
+
+    assert mark_stale(["kijiji"], ["drz125"], db_path=db) == 0
+    assert _row(db, "friends-bike") == (1, None)
 
 
 def test_sold_listings_feed_snapshot_and_relisting_clears_tag(tmp_path: Path) -> None:
     db = tmp_path / "listings.db"
     init_db(db)
     _add(db, "sold", 2500, days_ago=5)
-    mark_stale(["kijiji"], db_path=db)
+    mark_stale(["kijiji"], ["crf150f"], db_path=db)
 
     sold = sold_listings("crf150f", db_path=db)
     assert [(s["external_id"], s["days_listed"]) for s in sold] == [("sold", 0)]

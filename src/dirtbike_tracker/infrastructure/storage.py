@@ -318,11 +318,14 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
 
 def mark_stale(
     sources: Iterable[str],
+    models: Iterable[str],
     cutoff_hours: int = 48,
     sold_after_hours: int = 72,
     db_path: Path | None = None,
 ) -> int:
-    """Age out listings from `sources` not seen recently. Returns count marked inactive.
+    """Age out listings of `models` from `sources` not seen recently. Returns count marked
+    inactive. Only the models this run scraped: the friend watchlist runs every 3 days, so
+    the main watch would otherwise age its bikes out (and mark them sold) between runs.
 
     Unseen for `cutoff_hours` -> inactive; for `sold_after_hours` -> likely sold
     (sold_at = last_seen, the best estimate of when it went). Pass only sources
@@ -331,26 +334,30 @@ def mark_stale(
     """
     # ponytail: scrape_model caps at 3 pages; a model with more results than that
     # would see its oldest listings fall off and read as sold. Fine at current volumes.
-    sources = list(sources)
-    if not sources:
+    sources, models = list(sources), list(models)
+    if not sources or not models:
         return 0
     marks = ",".join("?" * len(sources))
+    of_models = (
+        "AND id IN (SELECT listing_id FROM listing_models WHERE model_slug IN "
+        f"({','.join('?' * len(models))}))"
+    )
     with connect(db_path) as conn:
         cursor = conn.execute(
             f"""
             UPDATE listings SET is_active=0
-            WHERE is_active=1 AND source IN ({marks})
+            WHERE is_active=1 AND source IN ({marks}) {of_models}
               AND julianday('now') - julianday(last_seen) > ?
             """,  # only "?" placeholders are interpolated
-            (*sources, cutoff_hours / 24.0),
+            (*sources, *models, cutoff_hours / 24.0),
         )
         conn.execute(
             f"""
             UPDATE listings SET sold_at=last_seen
-            WHERE sold_at IS NULL AND source IN ({marks})
+            WHERE sold_at IS NULL AND source IN ({marks}) {of_models}
               AND julianday('now') - julianday(last_seen) > ?
             """,  # only "?" placeholders are interpolated
-            (*sources, sold_after_hours / 24.0),
+            (*sources, *models, sold_after_hours / 24.0),
         )
         return int(cursor.rowcount)
 
@@ -613,8 +620,8 @@ class SqliteStore:
     def upsert_listings(self, listings: Iterable[Listing]) -> dict:
         return upsert_listings(listings, db_path=self.db_path)
 
-    def mark_stale(self, sources: Iterable[str]) -> int:
-        return mark_stale(sources, db_path=self.db_path)
+    def mark_stale(self, sources: Iterable[str], models: Iterable[str]) -> int:
+        return mark_stale(sources, models, db_path=self.db_path)
 
     def active_listings(self, model_slug: str) -> list[dict]:
         return active_listings(model_slug, primary_only=True, db_path=self.db_path)
