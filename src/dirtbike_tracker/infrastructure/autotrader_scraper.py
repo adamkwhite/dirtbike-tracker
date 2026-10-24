@@ -62,6 +62,7 @@ FAMILY_PATHS = {
     "ttr125": ["yamaha/ttr-125", "yamaha/tt-r125"],
     "klx125": KAWASAKI_KLX,
     "klx140": KAWASAKI_KLX,
+    "klx230": KAWASAKI_KLX,
     "klx300": KAWASAKI_KLX,
     "xr250": ["honda/xr"],
     "mt07": ["yamaha/mt-07"],

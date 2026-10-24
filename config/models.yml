@@ -108,6 +108,14 @@ future:
     sources: [kijiji, autotrader, facebook]
     target_price: 4500
 
+  - slug: klx230
+    make: Kawasaki
+    goal: project
+    min_year: 2020
+    sources: [kijiji, autotrader, facebook]
+    target_price: 3800
+    notes: "Air-cooled, fuel injected, electric start. R = off-road, R S = lowered R; S = plated dual sport, SM = supermoto"
+
   - slug: xr250
     make: Honda
     goal: project
