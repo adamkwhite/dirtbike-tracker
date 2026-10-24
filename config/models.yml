@@ -6,6 +6,15 @@
 # bike or a typo, and is skipped (an unknown year passes).
 # goal: ride models also skip listings under $1,000 (scoring.RIDE_MIN_PRICE): parts and toys.
 # make names the brand for the dashboard's per-tab make filter.
+# sources are the searches; dealers below are added to every model (or to the groups listed).
+
+# Whole-inventory dealers (one fetch is the dealer's whole used stock, filtered by title per
+# model): checked for every model, or only the listed groups' models.
+dealers:
+  sturgess: all
+  cycleworld: [street, middleweight, dualsport]  # carries no dirt bikes
+  dewildt: all
+  delmastro: all
 
 # Priority targets right now (dad-and-sons trail bikes)
 priority:
@@ -14,7 +23,7 @@ priority:
     goal: project
     min_year: 2003
     max_year: 2017
-    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 2500       # alert immediately if below this, regardless of market
     notes: "12yo's primary bike. Both brothers ride."
 
@@ -23,7 +32,7 @@ priority:
     goal: project
     min_year: 2003
     max_year: 2019
-    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 3000
     notes: "15yo's bike. Discontinued 2019, tight supply."
 
@@ -33,7 +42,7 @@ secondary:
     make: Honda
     goal: project
     min_year: 2014
-    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 2500
     notes: "Air-cooled, fuel injected, electric start. FB = big wheel (19/16 in, taller seat)"
 
@@ -41,7 +50,7 @@ secondary:
     make: Yamaha
     goal: project
     min_year: 2000
-    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 1500
     notes: "TTR125LE electric start preferred"
 
@@ -49,7 +58,7 @@ secondary:
     make: Kawasaki
     goal: project
     min_year: 2008
-    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 2000
     notes: "Alternative to CRF150F"
 
@@ -58,7 +67,7 @@ secondary:
     goal: project
     min_year: 2003
     max_year: 2006
-    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 1500
     notes: "Air-cooled, carb, kick start. A rebadged Suzuki DR-Z125: DR-Z parts fit. L = big wheel"
 
@@ -66,7 +75,7 @@ secondary:
     make: Suzuki
     goal: project
     min_year: 2003
-    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 1800
     notes: "The KLX125's twin, sold far longer. Air-cooled, carb, kick start. L = big wheel"
 
@@ -76,7 +85,7 @@ future:
     make: Honda
     goal: project
     min_year: 2019
-    sources: [kijiji, autotrader, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4500
 
   - slug: xr250
@@ -84,7 +93,7 @@ future:
     goal: project
     min_year: 1979
     max_year: 2004
-    sources: [kijiji, facebook, sturgess, dewildt, delmastro]
+    sources: [kijiji, facebook]
     target_price: 2500
 
 # Street (ready to ride in spring, not a project)
@@ -93,7 +102,7 @@ street:
     make: Honda
     goal: ride             # fit favours runners/safetied; non-runners never alert
     min_year: 2017
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4500
     notes: "Honda Rebel 500 (CMX500)"
 
@@ -101,7 +110,7 @@ street:
     make: Honda
     goal: ride
     min_year: 2013
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 3800       # median ~$4300 once cross-posts merge (2026-10-12)
     notes: "Honda CB500F, upright standard"
 
@@ -111,7 +120,7 @@ middleweight:
     make: Yamaha
     goal: ride
     min_year: 2015
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 6000
     notes: "Yamaha MT-07, 689 cc twin, 184 kg. Sold as the FZ-07 in 2015-2017 (those titles aren't matched)"
 
@@ -119,7 +128,7 @@ middleweight:
     make: Suzuki
     goal: ride
     min_year: 2003           # fuel injection from 2003
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4000
     notes: "Suzuki SV650, 645 cc V-twin; S = half fairing"
 
@@ -127,7 +136,7 @@ middleweight:
     make: Honda
     goal: ride
     min_year: 2014
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 5500
     notes: "Honda NC750X, low-revving upright; DCT automatic option"
 
@@ -135,7 +144,7 @@ middleweight:
     make: Suzuki
     goal: ride
     min_year: 2004
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4500
     notes: "Suzuki V-Strom 650 (DL650), adventure-touring; XT = spoked wheels"
 
@@ -144,7 +153,7 @@ middleweight:
     query: vulcan s          # Kijiji finds 3 for "vulcans", 11 for "vulcan s"
     goal: ride
     min_year: 2015
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 5000
     notes: "Kawasaki Vulcan S, 649 cc twin cruiser, low seat, adjustable reach"
 
@@ -152,7 +161,7 @@ middleweight:
     make: Kawasaki
     goal: ride
     min_year: 2008
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 5000
     notes: "Kawasaki Versys 650, adventure-touring (the V-Strom 650's rival)"
 
@@ -161,7 +170,7 @@ middleweight:
     goal: ride
     min_year: 2005
     require: ["C50|C50T|C50SE|M50|S50|805"]   # the 805 cc cruisers, not the S40, C90 or M109
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4000
     notes: "Suzuki Boulevard C50/M50/S50, 805 cc V-twin cruiser (~50 hp)"
 
@@ -171,14 +180,14 @@ dualsport:
     make: Honda
     goal: ride
     min_year: 2021
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 5000
 
   - slug: klx300
     make: Kawasaki
     goal: ride
     min_year: 1997
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4000
     notes: "Search also finds the KLX300R (off-road only, not plated)"
 
@@ -186,7 +195,7 @@ dualsport:
     make: Yamaha
     goal: ride
     min_year: 2008
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 3800
 
   - slug: cb500x
@@ -194,7 +203,7 @@ dualsport:
     goal: ride
     min_year: 2013
     max_year: 2023
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 4800
     notes: "Replaced by the NX500 in 2024"
 
@@ -202,6 +211,6 @@ dualsport:
     make: Honda
     goal: ride
     min_year: 2024
-    sources: [kijiji, autotrader, facebook, sturgess, cycleworld, dewildt, delmastro]
+    sources: [kijiji, autotrader, facebook]
     target_price: 6500
     notes: "New for 2024, few used yet"

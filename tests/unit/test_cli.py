@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from dirtbike_tracker.application import cli as cli_module
@@ -325,6 +326,21 @@ def test_unknown_goal_is_a_clear_error(app: App) -> None:
     assert "unknown goal 'tour'" in result.output
 
 
+def test_dealers_join_every_model_or_only_their_groups(tmp_path: Path) -> None:
+    path = tmp_path / "models.yml"
+    path.write_text(
+        "dealers:\n  sturgess: all\n  cycleworld: [street]\n"
+        "priority:\n  - slug: crf150f\n    sources: [kijiji, sturgess]\n"
+        "street:\n  - slug: rebel500\n"
+    )
+
+    config = cli_module.load_config(path)
+
+    assert list(config) == ["priority", "street"]  # dealers is config, not a group
+    assert config["priority"][0]["sources"] == ["kijiji", "sturgess"]  # not listed twice
+    assert config["street"][0]["sources"] == ["kijiji", "sturgess", "cycleworld"]
+
+
 def test_models_yml_entries_are_valid() -> None:
     entries = [e for group in cli_module.load_config().values() for e in group or []]
     slugs = [e["slug"] for e in entries]
@@ -343,3 +359,7 @@ def test_models_yml_entries_are_valid() -> None:
             "dewildt",
             "delmastro",
         }, e
+    raw = yaml.safe_load(cli_module.CONFIG_PATH.read_text())
+    for dealer, groups in raw["dealers"].items():
+        assert dealer in {"sturgess", "cycleworld", "dewildt", "delmastro"}, dealer
+        assert groups == "all" or set(groups) <= raw.keys() - {"dealers"}, (dealer, groups)

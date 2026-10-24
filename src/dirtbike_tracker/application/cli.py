@@ -70,12 +70,24 @@ RATING_COLORS = {
 
 
 def load_config(path: Path | None = None) -> dict:
-    """Load models.yml (or another watchlist). Returns {} if the file doesn't exist."""
+    """Load models.yml (or another watchlist): its model groups, each model's sources followed
+    by the file's `dealers:` (dealer -> "all", or the groups whose models it carries), so the
+    rest of the app sees every key as a group. Returns {} if the file doesn't exist."""
     path = path or CONFIG_PATH  # resolved per call, so tests can redirect CONFIG_PATH
     if not path.exists():
         return {}
     with open(path) as f:
-        return yaml.safe_load(f) or {}
+        config: dict = yaml.safe_load(f) or {}
+    dealers = config.pop("dealers", None) or {}
+    for group, entries in config.items() if dealers else ():
+        for entry in entries or []:
+            searches = entry.get("sources", ["kijiji"])
+            entry["sources"] = searches + [
+                d
+                for d, groups in dealers.items()
+                if (groups == "all" or group in groups) and d not in searches
+            ]
+    return config
 
 
 def _autotrader_source(
