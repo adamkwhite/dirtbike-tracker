@@ -26,7 +26,6 @@ from ..domain.listing import Listing
 from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
 from ..infrastructure import drift as drift_check
 from ..infrastructure import fb_scraper, notifier
-from ..infrastructure.ari import BURLINGTON
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
@@ -148,7 +147,7 @@ def build_app(config_path: Path | None = None) -> App:
         reports_dir=REPORTS_DIR,
         ping=notifier.ping_healthcheck,
         # dealers' new stock, for the markdown watch (markdowns.py)
-        new_stock={"burlington": BURLINGTON, "delmastro": DEL_MASTRO.new_units},
+        new_stock={"delmastro": DEL_MASTRO.new_units},
         post_dates={"facebook": fb_scraper.ad_post_date},  # FB's search cards carry no date
         dashboard_tabs=tabs,
     )
