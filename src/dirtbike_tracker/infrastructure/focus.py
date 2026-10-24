@@ -11,7 +11,6 @@ each model filters it by title and `last_fetch_ok` tells watch the dealer answer
 import random
 import re
 from datetime import UTC, datetime
-from functools import lru_cache
 
 import requests
 
@@ -24,6 +23,7 @@ from .kijiji_scraper import (
     model_slugs_for,
     tracked_model,
 )
+from .run_cache import OncePerRun
 
 PHOTO_URL = "https://dealers.focus-static.com/inventory/{dealer}/w800/{image}"
 CATEGORIES = "[Motorcycles,Powersports]"
@@ -135,8 +135,8 @@ class FocusSource:
 
 
 # ponytail: per-process cache, like dealerspike._fetch: every model filters the same
-# result, so a watch run asks the dealer once. A failed fetch raises, which isn't kept.
-@lru_cache(maxsize=4)
+# result, so a watch run asks the dealer once, failure included (run_cache).
+@OncePerRun
 def _inventory(base_url: str, timeout: int = 20) -> tuple[dict, ...]:
     page = requests.get(f"{base_url}/inventory/", headers=_headers(), timeout=timeout)
     page.raise_for_status()

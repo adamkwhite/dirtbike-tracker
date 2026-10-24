@@ -114,15 +114,19 @@ def test_one_crawl_of_every_page_serves_every_model(monkeypatch: pytest.MonkeyPa
 def test_fetch_failure_returns_nothing_and_marks_the_fetch_failed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    asked: list[str] = []
+
     def down(url: str, **_: object) -> object:
-        raise requests.ConnectionError("dealer site down")
+        asked.append(url)
+        raise requests.HTTPError("403 Client Error: Forbidden")
 
     escsite._inventory.cache_clear()
     monkeypatch.setattr(requests, "get", down)
     source = EscSource("cycleworld", "https://dealer.example", "Scarborough, ON")
 
     assert source("vulcans", "on", 3) == []
-    assert source.last_fetch_ok is False
+    assert source("mt07", "on", 3) == []  # the next model doesn't ask the dealer again
+    assert (len(asked), source.last_fetch_ok) == (1, False)
 
 
 def test_grid_cards_name_their_store_and_hours_are_not_km() -> None:
