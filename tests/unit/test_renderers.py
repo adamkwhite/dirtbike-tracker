@@ -328,11 +328,29 @@ def test_a_tab_filters_by_make(snap: MarketSnapshot) -> None:
     assert '<tr data-make="yamaha">' in page.split('id="hidden-dirt"')[1]
 
 
-def test_model_heading_shows_cc_when_set(snap: MarketSnapshot) -> None:
-    assert '<h2>CRF150F <span class="cc">157 cc</span></h2>' in render_dashboard(
-        {"Dirt": [replace(snap, cc=157)]}
+def test_a_tab_filters_by_cc_alongside_make(snap: MarketSnapshot) -> None:
+    small = replace(snap, make="Honda", cc=150)
+    big = replace(
+        snap, slug="crf250f", make="Honda", cc=250,
+        listings=[{**snap.listings[0], "url": "https://x/250", "title": "2019 CRF250F"}],
+    )  # fmt: skip
+
+    page = render_dashboard({"Dirt": [small, big]})
+
+    assert '<button class="cc active" data-cc="">Any cc</button>' in page
+    assert page.index('data-cc="150">150<') < page.index('data-cc="250">250<')
+    assert '<section class="model" id="crf250f" data-make="honda" data-cc="250">' in page
+    table = page.split('id="all-dirt"')[1].split("</section>")[0]
+    assert (
+        table.split("2019 CRF250F")[0]
+        .rsplit("<tr", 1)[1]
+        .startswith(' data-make="honda" data-cc="250">')
     )
-    assert "<h2>CRF150F</h2>" in render_dashboard({"Dirt": [snap]})
+    assert 'button class="make' not in page  # one make: no make buttons, cc ones still
+
+
+def test_one_cc_gets_no_filter(snap: MarketSnapshot) -> None:
+    assert 'button class="cc' not in render_dashboard({"Dirt": [replace(snap, cc=150)]})
 
 
 def test_one_make_gets_no_filter(snap: MarketSnapshot) -> None:
