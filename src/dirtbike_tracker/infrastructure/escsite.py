@@ -12,7 +12,6 @@ dealer with none of a model answered.
 import random
 import re
 from datetime import UTC, datetime
-from functools import lru_cache
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -20,6 +19,7 @@ from bs4 import BeautifulSoup, Tag
 from ..domain.listing import Listing
 from ..domain.scoring import parse_km, parse_year
 from .kijiji_scraper import PRICE_STATE_NUMERIC, PRICE_STATE_UNKNOWN, USER_AGENTS, model_slugs_for
+from .run_cache import OncePerRun
 
 MAX_PAGES = 10  # 20 units a page; Cycle World had 3 pages (2026-10-16)
 _PAGES_RE = re.compile(r"Page \d+ of (\d+)")
@@ -167,8 +167,8 @@ def fetch_page(url: str, timeout: int = 20) -> str:
 
 
 # ponytail: per-process cache, like dealerspike._fetch: every model filters the same crawl,
-# so a watch run fetches each page once. A failed fetch raises, which lru_cache doesn't keep.
-@lru_cache(maxsize=4)
+# so a watch run crawls once, failure included (run_cache).
+@OncePerRun
 def _inventory(url: str) -> tuple[dict, ...]:
     first = fetch_page(url)
     units = parse_cards(first)

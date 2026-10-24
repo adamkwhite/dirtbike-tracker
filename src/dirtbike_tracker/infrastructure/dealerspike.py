@@ -11,13 +11,13 @@ import json
 import random
 import re
 from datetime import UTC, datetime
-from functools import lru_cache
 
 import requests
 
 from ..domain.listing import Listing
 from ..domain.scoring import is_dealer_new, parse_km, parse_year
 from .kijiji_scraper import PRICE_STATE_NUMERIC, PRICE_STATE_UNKNOWN, USER_AGENTS, model_slugs_for
+from .run_cache import OncePerRun
 
 PHOTO_CDN = "https://cdn.dealerspike.com/imglib/v1/300x225/imglib/Assets/Inventory"
 _TRADEMARKS = re.compile(r"[®™]")
@@ -129,8 +129,8 @@ class DealerSpikeSource:
 
 
 # ponytail: per-process cache: every model filters the same file, so a watch run fetches it
-# once (each cron run is a new process). A failed fetch raises, which lru_cache doesn't keep.
-@lru_cache(maxsize=4)
+# once (each cron run is a new process), failure included (run_cache).
+@OncePerRun
 def _fetch(url: str, timeout: int = 20) -> str:
     headers = {"User-Agent": random.choice(USER_AGENTS)}  # NOSONAR - UA rotation, not security
     response = requests.get(url, headers=headers, timeout=timeout)
