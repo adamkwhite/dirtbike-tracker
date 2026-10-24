@@ -74,7 +74,8 @@ current-model-year bike is treated as new/demo stock and skipped, like the sites
 phrases in the title/description: +2 per green flag (`doesn't run`, `needs work`, `project`,
 `ownership`, `trail`, ...), -3 per red flag (`no ownership`, `seized`, `blown`, `race bike`).
 Needing work is the point; "runs great" is neutral. Lists live in `domain/scoring.py`. A listing
-with fit below 5 never alerts, however cheap.
+with fit below 5 never alerts, however cheap. The dashboard shows the Fit column only for `ride`
+models: on project bikes it was 5 for 93% of ads (2026-10-24), so there it only gates alerts.
 
 A model with `goal: ride` in `models.yml` (e.g. the Rebel 500, to ride in spring) flips that:
 needing work, `no safety` and `sold as is` are red flags, and `runs great`, `safetied`,
