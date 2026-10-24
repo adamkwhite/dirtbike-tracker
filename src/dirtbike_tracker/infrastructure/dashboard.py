@@ -152,7 +152,9 @@ def _deal_first(listing: dict) -> tuple:
     return (rating, delta is None, delta or 0, listing["price"] or float("inf"))
 
 
-def _listing_row(listing: dict, models: list[str] | None = None, attrs: str = "") -> str:
+def _listing_row(
+    listing: dict, models: list[str] | None = None, attrs: str = "", fit: bool = True
+) -> str:
     rating = listing["rating"]
     delta = listing["delta_pct"]
     delta_str = f"{delta:+.0f}%" if delta is not None else "—"
@@ -175,6 +177,12 @@ def _listing_row(listing: dict, models: list[str] | None = None, attrs: str = ""
             f'<img class="thumb" src="{_esc(listing["image_url"])}" alt="" loading="lazy"></a>'
         )
     contacted = _title_tags(listing)
+    fit_cell = (
+        f'<td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">'
+        f"{listing['fit']}</td>"
+        if fit
+        else ""
+    )
     model_cell = (
         f'<td class="muted">{_esc(", ".join(m.upper() for m in models))}</td>' if models else ""
     )
@@ -186,8 +194,7 @@ def _listing_row(listing: dict, models: list[str] | None = None, attrs: str = ""
                 <td class="num muted" data-v="{_sort_key(listing.get("km"))}">{f"{listing['km']:,}" if listing.get("km") else "—"}</td>
                 <td class="num muted" data-v="{_sort_key(per_year)}">{f"${per_year:,}" if per_year else "—"}</td>
                 <td class="num muted" data-v="{_sort_key(delta)}" title="{_esc(vs)}">{_esc(delta_str)}</td>
-                <td class="num" title="{_esc(", ".join(listing["fit_flags"]) or "no flags")}">{listing["fit"]}</td>
-                {_location_cell(listing)}
+                {fit_cell}{_location_cell(listing)}
                 <td>{thumb}<a href="{_esc(listing["url"])}" target="_blank" rel="noopener">{_esc(title)}</a>{contacted}</td>
                 {_note_cell(listing)}
               </tr>"""
@@ -218,11 +225,15 @@ def _sold_table(sold: list[dict]) -> str:
       </table>"""
 
 
-LISTING_HEADERS = (
-    '<th>Price</th><th>Year</th><th>km</th><th title="Price per year of age">$/yr</th><th>vs Med</th>'
-    '<th title="Project fit 0-10: red/green phrases in the ad">Fit</th><th>Location</th><th>Title</th>'
-    '<th title="Your notes: click a cell to edit">Notes</th>'
-)
+def _listing_headers(fit: bool) -> str:
+    """The listing table's columns. Fit only for ride models: on project bikes it was 5 for
+    93% of ads (no "needs work" phrases to find), so it stays only as the alert gate."""
+    return (
+        '<th>Price</th><th>Year</th><th>km</th><th title="Price per year of age">$/yr</th>'
+        "<th>vs Med</th>"
+        + ('<th title="Fit 0-10: red/green phrases in the ad">Fit</th>' if fit else "")
+        + '<th>Location</th><th>Title</th><th title="Your notes: click a cell to edit">Notes</th>'
+    )
 
 
 def _all_bikes_section(snaps: list[MarketSnapshot], tab: str) -> str:
@@ -237,8 +248,9 @@ def _all_bikes_section(snaps: list[MarketSnapshot], tab: str) -> str:
             rows.setdefault(listing["url"], (listing, []))[1].append(snap.slug)
     ordered = sorted(rows.values(), key=lambda r: _deal_first(r[0]))
     by_slug = {s.slug: s for s in snaps}
+    fit = any(s.goal == "ride" for s in snaps)
     body = "".join(
-        _listing_row(x, models, _filter_attr(by_slug[models[0]])) for x, models in ordered
+        _listing_row(x, models, _filter_attr(by_slug[models[0]]), fit) for x, models in ordered
     )
     return f"""
     <section class="model" id="all-{tab.lower()}">
@@ -246,7 +258,7 @@ def _all_bikes_section(snaps: list[MarketSnapshot], tab: str) -> str:
       <p class="muted">Click a column to sort.</p>
       <table class="sortable">
         <thead>
-          <tr><th>Rating</th><th>Model</th>{LISTING_HEADERS}</tr>
+          <tr><th>Rating</th><th>Model</th>{_listing_headers(fit)}</tr>
         </thead>
         <tbody>{body}</tbody>
       </table>
@@ -259,7 +271,7 @@ def _model_section(snap: MarketSnapshot) -> str:
     slug, listings, prices = snap.slug, snap.listings, snap.prices
     tiles = _tiles(snap.stats, snap.trend)
     rows_html = (
-        "".join(map(_listing_row, listings[:20]))
+        "".join(_listing_row(x, fit=snap.goal == "ride") for x in listings[:20])
         or '<tr><td colspan="6" class="muted">No active listings</td></tr>'
     )
     sold_html = _sold_table(snap.sold)
@@ -295,7 +307,7 @@ def _model_section(snap: MarketSnapshot) -> str:
       <div class="chart-wrap"><canvas id="{chart_id}" height="80"></canvas></div>
       <table class="sortable">
         <thead>
-          <tr><th>Rating</th>{LISTING_HEADERS}</tr>
+          <tr><th>Rating</th>{_listing_headers(snap.goal == "ride")}</tr>
         </thead>
         <tbody>{rows_html}</tbody>
       </table>{sold_html}

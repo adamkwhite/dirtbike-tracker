@@ -35,6 +35,7 @@ def snapshot(slug: str, store: ListingStore, goal: str = "project") -> MarketSna
     ]
     return MarketSnapshot(
         slug=slug,
+        goal=goal,
         stats=stats,
         listings=score_listings(listings, stats["median"], stats.get("project_median"), goal),
         trend=trend(

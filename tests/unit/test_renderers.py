@@ -121,9 +121,10 @@ def test_dashboard_shows_fit_with_flags_tooltip() -> None:
 
     html = _model_section(
         MarketSnapshot(
-            slug="crf150f", stats={"count": 0}, listings=[listing], trend=None, prices=[]
+            slug="crf150f", stats={"count": 0}, listings=[listing], trend=None, prices=[],
+            goal="ride",
         )
-    )
+    )  # fmt: skip
 
     assert '<td class="num" title="+project">7</td>' in html
 
@@ -347,6 +348,15 @@ def test_a_tab_filters_by_cc_alongside_make(snap: MarketSnapshot) -> None:
         .startswith(' data-make="honda" data-cc="250">')
     )
     assert 'button class="make' not in page  # one make: no make buttons, cc ones still
+
+
+def test_fit_column_only_for_ride_models(snap: MarketSnapshot) -> None:
+    dirt = render_dashboard({"Dirt": [snap]})
+    street = render_dashboard({"Street": [replace(snap, goal="ride")]})
+
+    assert ">Fit</th>" not in dirt
+    assert dirt.count("<th") == street.count("<th") - 2  # all-bikes and model tables
+    assert street.count(">Fit</th>") == 2
 
 
 def test_one_cc_gets_no_filter(snap: MarketSnapshot) -> None:
