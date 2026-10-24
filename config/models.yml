@@ -40,6 +40,7 @@ dealers:
 priority:
   - slug: crf150f
     make: Honda
+    cc: 157
     goal: project
     min_year: 2003
     max_year: 2017
@@ -49,6 +50,7 @@ priority:
 
   - slug: crf230f
     make: Honda
+    cc: 223
     goal: project
     min_year: 2003
     max_year: 2019
@@ -60,6 +62,7 @@ priority:
 secondary:
   - slug: crf125f
     make: Honda
+    cc: 124
     goal: project
     min_year: 2014
     sources: [kijiji, autotrader, facebook]
@@ -68,6 +71,7 @@ secondary:
 
   - slug: ttr125
     make: Yamaha
+    cc: 124
     goal: project
     min_year: 2000
     sources: [kijiji, autotrader, facebook]
@@ -76,6 +80,7 @@ secondary:
 
   - slug: klx140
     make: Kawasaki
+    cc: 144
     goal: project
     min_year: 2008
     sources: [kijiji, autotrader, facebook]
@@ -84,6 +89,7 @@ secondary:
 
   - slug: klx125
     make: Kawasaki
+    cc: 125
     goal: project
     min_year: 2003
     max_year: 2006
@@ -93,6 +99,7 @@ secondary:
 
   - slug: drz125
     make: Suzuki
+    cc: 124
     goal: project
     min_year: 2003
     sources: [kijiji, autotrader, facebook]
@@ -103,6 +110,7 @@ secondary:
 future:
   - slug: crf250f
     make: Honda
+    cc: 249
     goal: project
     min_year: 2019
     sources: [kijiji, autotrader, facebook]
@@ -110,6 +118,7 @@ future:
 
   - slug: klx230
     make: Kawasaki
+    cc: 233
     goal: project
     min_year: 2020
     sources: [kijiji, autotrader, facebook]
@@ -118,6 +127,7 @@ future:
 
   - slug: xr250
     make: Honda
+    cc: 249
     goal: project
     min_year: 1979
     max_year: 2004
@@ -128,6 +138,7 @@ future:
 street:
   - slug: rebel500
     make: Honda
+    cc: 471
     goal: ride             # fit favours runners/safetied; non-runners never alert
     min_year: 2017
     sources: [kijiji, autotrader, facebook]
@@ -136,6 +147,7 @@ street:
 
   - slug: cb500f
     make: Honda
+    cc: 471
     goal: ride
     min_year: 2013
     sources: [kijiji, autotrader, facebook]
@@ -146,6 +158,7 @@ street:
 middleweight:
   - slug: mt07
     make: Yamaha
+    cc: 689
     goal: ride
     min_year: 2015
     sources: [kijiji, autotrader, facebook]
@@ -154,6 +167,7 @@ middleweight:
 
   - slug: sv650
     make: Suzuki
+    cc: 645
     goal: ride
     min_year: 2003           # fuel injection from 2003
     sources: [kijiji, autotrader, facebook]
@@ -162,6 +176,7 @@ middleweight:
 
   - slug: nc750x
     make: Honda
+    cc: 745
     goal: ride
     min_year: 2014
     sources: [kijiji, autotrader, facebook]
@@ -170,6 +185,7 @@ middleweight:
 
   - slug: vstrom650
     make: Suzuki
+    cc: 645
     goal: ride
     min_year: 2004
     sources: [kijiji, autotrader, facebook]
@@ -178,6 +194,7 @@ middleweight:
 
   - slug: vulcans
     make: Kawasaki
+    cc: 649
     query: vulcan s          # Kijiji finds 3 for "vulcans", 11 for "vulcan s"
     goal: ride
     min_year: 2015
@@ -187,6 +204,7 @@ middleweight:
 
   - slug: versys650
     make: Kawasaki
+    cc: 649
     goal: ride
     min_year: 2008
     sources: [kijiji, autotrader, facebook]
@@ -195,6 +213,7 @@ middleweight:
 
   - slug: boulevard
     make: Suzuki
+    cc: 805
     goal: ride
     min_year: 2005
     require: ["C50|C50T|C50SE|M50|S50|805"]   # the 805 cc cruisers, not the S40, C90 or M109
@@ -206,6 +225,7 @@ middleweight:
 dualsport:
   - slug: crf300l
     make: Honda
+    cc: 286
     goal: ride
     min_year: 2021
     sources: [kijiji, autotrader, facebook]
@@ -213,6 +233,7 @@ dualsport:
 
   - slug: klx300
     make: Kawasaki
+    cc: 292
     goal: ride
     min_year: 1997
     sources: [kijiji, autotrader, facebook]
@@ -221,6 +242,7 @@ dualsport:
 
   - slug: xt250
     make: Yamaha
+    cc: 249
     goal: ride
     min_year: 2008
     sources: [kijiji, autotrader, facebook]
@@ -228,6 +250,7 @@ dualsport:
 
   - slug: cb500x
     make: Honda
+    cc: 471
     goal: ride
     min_year: 2013
     max_year: 2023
@@ -237,6 +260,7 @@ dualsport:
 
   - slug: nx500
     make: Honda
+    cc: 471
     goal: ride
     min_year: 2024
     sources: [kijiji, autotrader, facebook]

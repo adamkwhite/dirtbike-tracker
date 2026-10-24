@@ -65,6 +65,11 @@ def model_make(config: dict, slug: str) -> str:
     )
 
 
+def model_cc(config: dict, slug: str) -> int | None:
+    """The model's engine size in models.yml, or None when it isn't set."""
+    return next((e.get("cc") for g in config.values() for e in g or [] if e["slug"] == slug), None)
+
+
 def model_goal(config: dict, slug: str) -> str:
     """The model's goal in models.yml (project when it isn't configured). ValueError if unknown."""
     goal = next(
