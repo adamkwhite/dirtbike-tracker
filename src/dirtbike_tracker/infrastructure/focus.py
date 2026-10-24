@@ -160,8 +160,3 @@ def _inventory(base_url: str, timeout: int = 20) -> tuple[dict, ...]:
     response.raise_for_status()
     result = response.json()["results"][0]
     return tuple(hit["document"] for hit in result.get("hits", []))
-
-
-DEL_MASTRO = FocusSource(
-    "delmastro", "https://www.delmastro.ca", location="Cavan Monaghan, ON", dealer="Del Mastro"
-)

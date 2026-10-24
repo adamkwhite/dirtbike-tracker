@@ -276,8 +276,10 @@ sellers' names and phone numbers, and this repo is public. That's also why CI sk
 renders its list client-side from `/imglib/Inventory/cache/<site id>/UVehInv.js` (used;
 `VehInv.js` is everything), a `var Vehicles=[...]` literal with every unit. One plain GET per
 watch run (cached across models), no browser, no paging; each model filters it by title.
-Sturgess Cycle (Hamilton, site id 5620) is `dealerspike.STURGESS`; another Dealer Spike dealer
-is one more `DealerSpikeSource(name, base_url, site_id, location)` in `build_app()`.
+Sturgess Cycle (Hamilton, site id 5620) is defined in `config/models.yml` under `dealers:`.
+Every dealer lives there (platform, url, location, plus the platform's own settings), so a new
+dealer on a platform we already read (`dealerspike`, `escsite`, `focus`; `cli.PLATFORMS`) is a
+config block, no code. A dealer on another platform needs an adapter first.
 
 Every unit is dealer stock (`seller_type = dealer`, so it stays out of the private-sales
 median), and new units plus a dealer's current-model-year bikes are skipped unless a model sets

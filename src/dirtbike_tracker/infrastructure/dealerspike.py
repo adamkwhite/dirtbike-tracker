@@ -136,8 +136,3 @@ def _fetch(url: str, timeout: int = 20) -> str:
     response = requests.get(url, headers=headers, timeout=timeout)
     response.raise_for_status()
     return str(response.content.decode("utf-8-sig"))
-
-
-STURGESS = DealerSpikeSource(
-    "sturgess", "https://www.sturgesscycle.com", site_id=5620, location="Hamilton, ON"
-)

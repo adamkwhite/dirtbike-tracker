@@ -140,6 +140,9 @@ def web(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeWeb:
     config = tmp_path / "models.yml"
     config.write_text(
         "priority:\n  - slug: crf150f\n    goal: project\n    sources: [kijiji, autotrader]\n"
+        # new stock only: groups [] keeps its used inventory out of crf150f's sources
+        "dealers:\n  delmastro:\n    platform: focus\n    url: https://www.delmastro.ca\n"
+        "    location: Cavan Monaghan, ON\n    new_stock: true\n    groups: []\n"
     )
     monkeypatch.setattr(cli_module, "CONFIG_PATH", config)
     monkeypatch.setattr(notifier, "NTFY_TOPIC", "e2e-topic")

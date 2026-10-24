@@ -9,12 +9,32 @@
 # sources are the searches; dealers below are added to every model (or to the groups listed).
 
 # Whole-inventory dealers (one fetch is the dealer's whole used stock, filtered by title per
-# model): checked for every model, or only the listed groups' models.
+# model), checked for every model or only `groups`. `platform` picks the adapter (cli.PLATFORMS:
+# dealerspike, escsite, focus); location is the dealer's, for units that don't name a store.
+# A new dealer on one of those platforms is a block here, no code. new_stock: true also feeds
+# the new-bike markdown watch (focus only).
 dealers:
-  sturgess: all
-  cycleworld: [street, middleweight, dualsport]  # carries no dirt bikes
-  dewildt: all
-  delmastro: all
+  sturgess:
+    platform: dealerspike
+    url: https://www.sturgesscycle.com
+    site_id: 5620  # Dealer Spike's id for the dealer, in its inventory file's path
+    location: Hamilton, ON
+  cycleworld:
+    platform: escsite
+    url: https://cycleworldsuperstore.com
+    location: Scarborough, ON
+    groups: [street, middleweight, dualsport]  # carries no dirt bikes
+  dewildt:
+    platform: escsite
+    url: https://dewildtmarine.com
+    path: /Pre-Owned-Inventory/  # escsite's default is /Pre-Owned/
+    location: Hamilton, ON
+  delmastro:
+    platform: focus
+    url: https://www.delmastro.ca
+    location: Cavan Monaghan, ON
+    dealer: Del Mastro  # display name in markdown alerts
+    new_stock: true
 
 # Priority targets right now (dad-and-sons trail bikes)
 priority:

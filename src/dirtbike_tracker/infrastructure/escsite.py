@@ -175,11 +175,3 @@ def _inventory(url: str) -> tuple[dict, ...]:
     for n in range(2, page_count(first) + 1):
         units += parse_cards(fetch_page(f"{url}page/{n}/"))
     return tuple(units)
-
-
-CYCLE_WORLD = EscSource(
-    "cycleworld", "https://cycleworldsuperstore.com", location="Scarborough, ON"
-)
-DEWILDT = EscSource(
-    "dewildt", "https://dewildtmarine.com", location="Hamilton, ON", path="/Pre-Owned-Inventory/"
-)

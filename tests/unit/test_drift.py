@@ -7,6 +7,7 @@ import pytest
 import requests
 from click.testing import CliRunner
 
+from dirtbike_tracker.application import cli as cli_module
 from dirtbike_tracker.application.cli import cli
 from dirtbike_tracker.application.ports import App
 from dirtbike_tracker.infrastructure.drift import problems, run
@@ -15,6 +16,8 @@ from .conftest import PushSpy
 from .test_escsite import card as esc_card
 from .test_escsite import page as esc_page
 from .test_focus import doc as focus_doc
+
+DEALERS = cli_module.build_dealers(cli_module.load_dealers())  # models.yml's real definitions
 
 
 def _kijiji_search(fields: list[dict], title: str = "2019 Honda Rebel 500") -> str:
@@ -171,7 +174,7 @@ def _fake_web(monkeypatch: pytest.MonkeyPatch, sites: FakeSites) -> None:
 def test_record_then_check_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _fake_web(monkeypatch, FakeSites())
 
-    assert run(tmp_path / "rec") == []
+    assert run(tmp_path / "rec", sources=DEALERS) == []
     manifest = json.loads((tmp_path / "rec" / "manifest.json").read_text())
     assert sorted(manifest["pages"]) == [
         "autotrader_search.html",
@@ -189,7 +192,7 @@ def test_reports_a_reshaped_dealer_inventory(
 ) -> None:
     _fake_web(monkeypatch, FakeSites())
     out = tmp_path / "rec"
-    run(out)
+    run(out, sources=DEALERS)
     (out / "sturgess_inventory.js").write_text("var Inventory={};")
 
     assert run(out, replay=True) == ["sturgess_inventory.js: no `var Vehicles=[...]` units parsed"]
@@ -198,7 +201,7 @@ def test_reports_a_reshaped_dealer_inventory(
 def test_reports_ad_page_description_gone(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _fake_web(monkeypatch, FakeSites(ad_body=None))
 
-    assert run(tmp_path / "rec") == [
+    assert run(tmp_path / "rec", sources=DEALERS) == [
         "kijiji_ad.html: __APOLLO_STATE__ description stopped parsing (#71)"
     ]
 
@@ -206,7 +209,7 @@ def test_reports_ad_page_description_gone(monkeypatch: pytest.MonkeyPatch, tmp_p
 def test_reports_autotrader_page_data_gone(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _fake_web(monkeypatch, FakeSites())
     out = tmp_path / "rec"
-    run(out)
+    run(out, sources=DEALERS)
     (out / "autotrader_search.html").write_text("<html>redesign</html>")
 
     assert run(out, replay=True) == ["autotrader_search.html: __NEXT_DATA__ listings not found"]
@@ -221,7 +224,7 @@ def test_failed_fetch_is_reported_not_raised(
     monkeypatch.setattr(requests, "get", down)
     monkeypatch.setattr("time.sleep", lambda _: None)
 
-    assert run(tmp_path / "rec") == ["recording failed: kijiji is down"]
+    assert run(tmp_path / "rec", sources=DEALERS) == ["recording failed: kijiji is down"]
 
 
 def test_missing_recordings_are_a_problem(tmp_path: Path) -> None:
@@ -233,7 +236,7 @@ def test_reports_a_focus_index_with_no_used_units(
 ) -> None:
     _fake_web(monkeypatch, FakeSites())
     out = tmp_path / "rec"
-    run(out)
+    run(out, sources=DEALERS)
     (out / "delmastro_inventory.json").write_text(
         json.dumps([focus_doc("1", "2026 HONDA REBEL 500", condition="New")])
     )

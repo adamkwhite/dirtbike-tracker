@@ -30,9 +30,9 @@ from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrade
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
 from ..infrastructure.dashboard_server import make_server
-from ..infrastructure.dealerspike import STURGESS
-from ..infrastructure.escsite import CYCLE_WORLD, DEWILDT
-from ..infrastructure.focus import DEL_MASTRO
+from ..infrastructure.dealerspike import DealerSpikeSource
+from ..infrastructure.escsite import EscSource
+from ..infrastructure.focus import FocusSource
 from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_description
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
@@ -84,10 +84,44 @@ def load_config(path: Path | None = None) -> dict:
             searches = entry.get("sources", ["kijiji"])
             entry["sources"] = searches + [
                 d
-                for d, groups in dealers.items()
-                if (groups == "all" or group in groups) and d not in searches
+                for d, spec in dealers.items()
+                if (spec.get("groups", "all") == "all" or group in spec["groups"])
+                and d not in searches
             ]
     return config
+
+
+def load_dealers(path: Path | None = None) -> dict[str, dict]:
+    """models.yml's `dealers:` definitions (name -> platform, url, ...). Every watchlist uses
+    these: another one (friend.yml) names them in its sources."""
+    path = path or CONFIG_PATH
+    if not path.exists():
+        return {}
+    return dict((yaml.safe_load(path.read_text()) or {}).get("dealers") or {})
+
+
+# The dealer website platforms we have an adapter for; a dealer on another needs one first.
+PLATFORMS: dict[str, type[DealerSpikeSource | EscSource | FocusSource]] = {
+    "dealerspike": DealerSpikeSource,  # one static inventory file (#99)
+    "escsite": EscSource,  # EquipmentSearch: server-rendered .../page/N/ cards
+    "focus": FocusSource,  # a Typesense index, one query
+}
+# dealer keys that aren't the adapter's own settings
+_NOT_SETTINGS = {"platform", "url", "groups", "new_stock"}
+
+
+def build_dealers(specs: dict[str, dict]) -> dict[str, DealerSpikeSource | EscSource | FocusSource]:
+    """A ListingSource per dealer definition; its other keys (location, site_id, path, dealer)
+    are the platform adapter's settings, so a wrong one fails at startup."""
+    dealers = {}
+    for name, spec in specs.items():
+        if spec.get("platform") not in PLATFORMS:
+            raise click.ClickException(
+                f"dealer {name!r}: platform {spec.get('platform')!r} isn't one of {sorted(PLATFORMS)}"
+            )
+        settings = {k: v for k, v in spec.items() if k not in _NOT_SETTINGS}
+        dealers[name] = PLATFORMS[spec["platform"]](name, spec["url"], **settings)
+    return dealers
 
 
 def _autotrader_source(
@@ -127,6 +161,8 @@ def build_app(config_path: Path | None = None) -> App:
     own alert state and dashboard, so its alerts go only to its own ntfy topic.
     """
     init_db()
+    specs = load_dealers()
+    dealers = build_dealers(specs)
     tabs: dict[str, dict] = {}
     if config_path is None:
         state_dir, dashboard_path = STATE_DIR, DASHBOARD_PATH
@@ -141,11 +177,8 @@ def build_app(config_path: Path | None = None) -> App:
             "autotrader": _autotrader_source,
             # opt-in per model (models.yml sources); throttled to a few searches a day
             "facebook": fb_scraper.FacebookSource(state_dir / "fb_searches.json"),
-            # a dealer's whole used inventory in one cached fetch (#99)
-            "sturgess": STURGESS,
-            "cycleworld": CYCLE_WORLD,  # same idea on the EquipmentSearch platform
-            "dewildt": DEWILDT,
-            "delmastro": DEL_MASTRO,  # Focus platform: a Typesense index, one query
+            # each dealer's whole used inventory in one cached fetch (models.yml dealers:)
+            **dealers,
         },
         # AutoTrader's search page already carries the description, so it has no fetcher
         detail_fetchers={"kijiji": kijiji_ad_description},
@@ -159,7 +192,11 @@ def build_app(config_path: Path | None = None) -> App:
         reports_dir=REPORTS_DIR,
         ping=notifier.ping_healthcheck,
         # dealers' new stock, for the markdown watch (markdowns.py)
-        new_stock={"delmastro": DEL_MASTRO.new_units},
+        new_stock={
+            name: d.new_units
+            for name, d in dealers.items()
+            if specs[name].get("new_stock") and isinstance(d, FocusSource)
+        },
         post_dates={"facebook": fb_scraper.ad_post_date},  # FB's search cards carry no date
         dashboard_tabs=tabs,
     )
@@ -488,9 +525,9 @@ def backup(app: App, slot: str):
 @click.option("--notify/--no-notify", default=True, help="Push an ntfy alert on problems")
 @click.pass_obj
 def drift(app: App, out_dir: Path | None, replay: bool, notify: bool):
-    """Site-drift check: record live Kijiji/AutoTrader pages and the Sturgess inventory file, verify our parsers still read them."""
+    """Site-drift check: record live Kijiji/AutoTrader pages and one dealer per platform, verify our parsers still read them."""
     out = out_dir or RECORDED_DIR
-    found = drift_check.run(out, replay=replay)
+    found = drift_check.run(out, replay=replay, sources=app.sources)
     if not found:
         click.echo(f"Drift check OK ({out})")
         return
