@@ -14,7 +14,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ..domain.listing import Listing
-from . import ari, autotrader_scraper, dealerspike, escsite, focus, kijiji_scraper
+from . import autotrader_scraper, dealerspike, escsite, focus, kijiji_scraper
 
 # A kid dirt bike (cards, snippets) and a street bike (year/km form fields, dealer stock)
 KIJIJI_SLUGS = ("crf150f", "rebel500")
@@ -25,17 +25,6 @@ AUTOTRADER_PAGE = "autotrader_search.html"
 STURGESS_PAGE = "sturgess_inventory.js"
 CYCLE_WORLD_PAGE = "cycleworld_preowned.html"
 DEL_MASTRO_PAGE = "delmastro_inventory.json"
-BURLINGTON_PAGE = "burlington_new_stock.html"
-# Card JSON fields the ARI adapter reads (the markdown watch); each must be on at least one unit
-ARI_KEYS = (
-    "productId",
-    "itemYear",
-    "itemModel",
-    "itemPrice",
-    "unitPrice",
-    "usageStatus",
-    "itemUrl",
-)
 # Typesense fields the Focus adapter reads; each must be on at least one unit
 FOCUS_KEYS = ("id", "name", "condition", "model_year", "price", "slug", "dealer_id", "image")
 # Fields the Dealer Spike adapter reads (#99); each must be on at least one unit
@@ -75,12 +64,6 @@ def record(out: Path) -> None:
     docs = focus._inventory(focus.DEL_MASTRO.base_url)
     (out / DEL_MASTRO_PAGE).write_text(json.dumps(list(docs)))
     pages[DEL_MASTRO_PAGE] = {"url": focus.DEL_MASTRO.base_url}
-
-    url = ari.BURLINGTON.base_url + ari.NEW_STOCK
-    response = requests.get(url, headers=ari.HEADERS, timeout=30)
-    response.raise_for_status()
-    (out / BURLINGTON_PAGE).write_text(response.text)
-    pages[BURLINGTON_PAGE] = {"url": url}
 
     manifest = {"recorded_at": datetime.now(UTC).isoformat(timespec="seconds"), "pages": pages}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
@@ -185,15 +168,6 @@ def _focus_problems(name: str, text: str) -> list[str]:
     return found
 
 
-def _ari_problems(name: str, html: str) -> list[str]:
-    units = ari.parse_units(html)
-    if not units:
-        return [f"{name}: no span.datasource unit JSON parsed"]
-    return [
-        f"{name}: no unit has {key!r}" for key in ARI_KEYS if not any(u.get(key) for u in units)
-    ]
-
-
 def problems(out: Path) -> list[str]:
     """Everything our parsers no longer read from the recordings in `out`. [] = no drift."""
     manifest_path = out / "manifest.json"
@@ -216,8 +190,6 @@ def problems(out: Path) -> list[str]:
             found += _escsite_problems(name, html)
         elif name == DEL_MASTRO_PAGE:
             found += _focus_problems(name, html)
-        elif name == BURLINGTON_PAGE:
-            found += _ari_problems(name, html)
     return found
 
 

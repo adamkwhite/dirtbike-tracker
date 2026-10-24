@@ -63,14 +63,12 @@ def _autotrader_search() -> str:
     return f'<script id="__NEXT_DATA__" type="application/json">{payload}</script>'
 
 
-def _burlington_new_stock(price: float) -> str:
-    """One new CRF150F card, its unit as hidden JSON (ARI site builder)."""
-    unit = {
-        "productId": 13847005, "itemYear": 2026, "itemMake": "Honda", "itemModel": "CRF® 150F",
-        "itemPrice": price, "unitPrice": 5000, "itemOnSale": price < 5000, "usageStatus": "New",
-        "itemUrl": "//www.burlington-cycle.com/new-models/13847005i",
+def _delmastro_new_unit(price: float) -> dict:
+    """One new CRF150F in Del Mastro's Typesense index, MSRP 5000."""
+    return {
+        "id": "13847005", "name": "2026 Honda CRF150F", "condition": "New", "sold": 0,
+        "price": price, "msrp": 5000, "slug": "new/dirt-bike/2026-honda-crf150f/13847005/",
     }  # fmt: skip
-    return f'<span class="datasource hidden">{json.dumps(unit)}</span>'
 
 
 @dataclass
@@ -96,7 +94,7 @@ class FakeWeb:
     )
     ad_body: str = "Runs well, ownership in hand. Selling because the kids outgrew it."
     ntfy_status: int = 200
-    new_unit_price: float = 5000  # Burlington's new CRF150F
+    new_unit_price: float = 5000  # Del Mastro's new CRF150F
     fetched: list[str] = field(default_factory=list)
     pushes: list[dict] = field(default_factory=list)
 
@@ -108,10 +106,6 @@ class FakeWeb:
             return FakeResponse(_kijiji_ad(url.rsplit("/", 1)[-1], self.ad_body))
         if "autotrader.ca/motorcycles-atvs/lst" in url:
             return FakeResponse(_autotrader_search())
-        if "burlington-cycle.com" in url:  # one page of new stock, then past the end
-            if "/page/" in url:
-                return FakeResponse(status_code=404)
-            return FakeResponse(_burlington_new_stock(self.new_unit_price))
         if "delmastro.ca/inventory/" in url:  # the page that carries the search key
             return FakeResponse("apiKey: 'k3y'")
         raise AssertionError(f"unexpected GET {url}")
@@ -119,8 +113,9 @@ class FakeWeb:
     def post(
         self, url: str, data: bytes = b"", headers: dict | None = None, **_: object
     ) -> FakeResponse:
-        if url.startswith("https://www.delmastro.ca/ts/"):  # its index: no new units
-            return FakeResponse(payload={"results": [{"hits": []}]})
+        if url.startswith("https://www.delmastro.ca/ts/"):  # its index: one new unit
+            hit = {"document": _delmastro_new_unit(self.new_unit_price)}
+            return FakeResponse(payload={"results": [{"hits": [hit]}]})
         assert url == "https://ntfy.sh/e2e-topic", url
         headers = headers or {}
         if self.ntfy_status == 200:
@@ -153,6 +148,7 @@ def web(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeWeb:
 
 
 def _watch() -> str:
+    focus._inventory.cache_clear()  # each cron run is a new process
     result = CliRunner().invoke(cli_module.cli, ["watch"])
     assert result.exit_code == 0, result.output
     return str(result.output)
