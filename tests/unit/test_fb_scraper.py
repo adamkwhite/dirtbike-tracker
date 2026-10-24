@@ -272,6 +272,15 @@ def test_crf125f_takes_both_wheel_sizes(title: str) -> None:
     assert listing.model_slugs == ["crf125f"]
 
 
+@pytest.mark.parametrize(
+    "title", ["2023 Kawasaki KLX 230 RS", "2021 klx230r s", "Kawasaki KLX-230S dual sport"]
+)
+def test_klx230_takes_every_variant(title: str) -> None:
+    (listing,) = parse_listings(_card("1", "CA$4,500", title, "Barrie, ON"), "klx230")
+
+    assert listing.model_slugs == ["klx230"]
+
+
 def test_post_time_is_the_ads_not_a_seller_reviews() -> None:
     page = (
         '{"seller_review_snippets":[{"creation_time":1786492036,"review_text":"Bad attitude"}],'
