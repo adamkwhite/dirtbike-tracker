@@ -7,6 +7,7 @@ gitignored directory and must never be committed (the repo is public).
 
 import json
 import re
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,17 +23,21 @@ AUTOTRADER_SLUG = "rebel500"  # its results include new dealer stock (offerType 
 PRICE_STATES = {"numeric", "please_contact", "swap_trade", "unknown"}
 AD_PAGE = "kijiji_ad.html"
 AUTOTRADER_PAGE = "autotrader_search.html"
-STURGESS_PAGE = "sturgess_inventory.js"
-CYCLE_WORLD_PAGE = "cycleworld_preowned.html"
-DEL_MASTRO_PAGE = "delmastro_inventory.json"
 # Typesense fields the Focus adapter reads; each must be on at least one unit
 FOCUS_KEYS = ("id", "name", "condition", "model_year", "price", "slug", "dealer_id", "image")
 # Fields the Dealer Spike adapter reads (#99); each must be on at least one unit
 DEALERSPIKE_KEYS = ("id", "bike_year", "manuf", "model", "price", "type", "miles", "bike_image")
 
 
-def record(out: Path) -> None:
-    """Fetch the pages and write them, plus manifest.json, to `out`. Raises on a failed fetch."""
+def _first[T](sources: Mapping[str, object], kind: type[T]) -> T | None:
+    return next((s for s in sources.values() if isinstance(s, kind)), None)
+
+
+def record(out: Path, sources: Mapping[str, object]) -> None:
+    """Fetch the pages and write them, plus manifest.json, to `out`. Raises on a failed fetch.
+
+    Dealer platforms are recorded from the first configured dealer on each (models.yml
+    `dealers:`); a platform no dealer uses isn't recorded."""
     out.mkdir(parents=True, exist_ok=True)
     pages: dict[str, dict] = {}
     for slug in KIJIJI_SLUGS:
@@ -51,19 +56,22 @@ def record(out: Path) -> None:
     (out / AUTOTRADER_PAGE).write_text(autotrader_scraper.fetch_page(url))
     pages[AUTOTRADER_PAGE] = {"url": url, "slug": AUTOTRADER_SLUG}
 
-    url = dealerspike.STURGESS.inventory_url()
-    dealerspike._fetch.cache_clear()  # a fresh recording, not this process's cached copy
-    (out / STURGESS_PAGE).write_text(dealerspike._fetch(url))
-    pages[STURGESS_PAGE] = {"url": url}
+    if spike := _first(sources, dealerspike.DealerSpikeSource):
+        url, name = spike.inventory_url(), f"{spike.name}_inventory.js"
+        dealerspike._fetch.cache_clear()  # a fresh recording, not this process's cached copy
+        (out / name).write_text(dealerspike._fetch(url))
+        pages[name] = {"url": url, "platform": "dealerspike"}
 
-    url = escsite.CYCLE_WORLD.base_url + escsite.CYCLE_WORLD.path
-    (out / CYCLE_WORLD_PAGE).write_text(escsite.fetch_page(url))
-    pages[CYCLE_WORLD_PAGE] = {"url": url}
+    if esc := _first(sources, escsite.EscSource):
+        url, name = esc.base_url + esc.path, f"{esc.name}_preowned.html"
+        (out / name).write_text(escsite.fetch_page(url))
+        pages[name] = {"url": url, "platform": "escsite"}
 
-    focus._inventory.cache_clear()  # a fresh query, not this process's cached result
-    docs = focus._inventory(focus.DEL_MASTRO.base_url)
-    (out / DEL_MASTRO_PAGE).write_text(json.dumps(list(docs)))
-    pages[DEL_MASTRO_PAGE] = {"url": focus.DEL_MASTRO.base_url}
+    if foc := _first(sources, focus.FocusSource):
+        name = f"{foc.name}_inventory.json"
+        focus._inventory.cache_clear()  # a fresh query, not this process's cached result
+        (out / name).write_text(json.dumps(list(focus._inventory(foc.base_url))))
+        pages[name] = {"url": foc.base_url, "platform": "focus"}
 
     manifest = {"recorded_at": datetime.now(UTC).isoformat(timespec="seconds"), "pages": pages}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
@@ -184,20 +192,21 @@ def problems(out: Path) -> list[str]:
                 found.append(f"{name}: __APOLLO_STATE__ description stopped parsing (#71)")
         elif name == AUTOTRADER_PAGE:
             found += _autotrader_problems(name, html, info["slug"])
-        elif name == STURGESS_PAGE:
+        elif info.get("platform") == "dealerspike":
             found += _dealerspike_problems(name, html)
-        elif name == CYCLE_WORLD_PAGE:
+        elif info.get("platform") == "escsite":
             found += _escsite_problems(name, html)
-        elif name == DEL_MASTRO_PAGE:
+        elif info.get("platform") == "focus":
             found += _focus_problems(name, html)
     return found
 
 
-def run(out: Path, replay: bool = False) -> list[str]:
-    """Record (unless `replay`) and check. A failed fetch is reported, not raised."""
+def run(out: Path, replay: bool = False, sources: Mapping[str, object] | None = None) -> list[str]:
+    """Record (unless `replay`) and check. A failed fetch is reported, not raised.
+    `sources`: the app's, for the dealers to record."""
     if not replay:
         try:
-            record(out)
+            record(out, sources or {})
         except (requests.RequestException, ValueError) as exc:  # ValueError: Focus key/JSON
             return [f"recording failed: {exc}"]
     return problems(out)

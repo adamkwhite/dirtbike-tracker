@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
+import click
 import pytest
 import yaml
 from click.testing import CliRunner
@@ -329,7 +330,8 @@ def test_unknown_goal_is_a_clear_error(app: App) -> None:
 def test_dealers_join_every_model_or_only_their_groups(tmp_path: Path) -> None:
     path = tmp_path / "models.yml"
     path.write_text(
-        "dealers:\n  sturgess: all\n  cycleworld: [street]\n"
+        "dealers:\n  sturgess: {platform: dealerspike}\n"
+        "  cycleworld: {platform: escsite, groups: [street]}\n"
         "priority:\n  - slug: crf150f\n    sources: [kijiji, sturgess]\n"
         "street:\n  - slug: rebel500\n"
     )
@@ -360,6 +362,14 @@ def test_models_yml_entries_are_valid() -> None:
             "delmastro",
         }, e
     raw = yaml.safe_load(cli_module.CONFIG_PATH.read_text())
-    for dealer, groups in raw["dealers"].items():
-        assert dealer in {"sturgess", "cycleworld", "dewildt", "delmastro"}, dealer
+    for dealer, spec in raw["dealers"].items():
+        groups = spec.get("groups", "all")
         assert groups == "all" or set(groups) <= raw.keys() - {"dealers"}, (dealer, groups)
+    # every definition builds: a known platform, and settings its adapter takes
+    dealers = cli_module.build_dealers(raw["dealers"])
+    assert {d.base_url for d in dealers.values()} >= {"https://www.sturgesscycle.com"}
+
+
+def test_a_dealer_on_an_unknown_platform_fails_at_startup() -> None:
+    with pytest.raises(click.ClickException, match="platform 'autobunny'"):
+        cli_module.build_dealers({"burlington": {"platform": "autobunny", "url": "u"}})
