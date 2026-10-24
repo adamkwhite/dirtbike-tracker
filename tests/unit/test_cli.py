@@ -13,7 +13,7 @@ from click.testing import CliRunner
 
 from dirtbike_tracker.application import cli as cli_module
 from dirtbike_tracker.application.cli import cli, skip_unconfigured
-from dirtbike_tracker.application.market import model_goal, model_make
+from dirtbike_tracker.application.market import model_cc, model_goal, model_make
 from dirtbike_tracker.application.ports import App
 from dirtbike_tracker.application.watch import alert_for
 from dirtbike_tracker.domain.listing import Listing
@@ -316,6 +316,13 @@ def test_model_make_from_config() -> None:
 
     assert model_make(config, "rebel500") == "Honda"
     assert model_make(config, "mt07") == ""  # unset: the dashboard filter shows it always
+
+
+def test_model_cc_from_config() -> None:
+    config = {"street": [{"slug": "mt07", "cc": 689}, {"slug": "sv650"}], "x": None}
+
+    assert model_cc(config, "mt07") == 689
+    assert model_cc(config, "sv650") is None
 
 
 def test_unknown_goal_is_a_clear_error(app: App) -> None:

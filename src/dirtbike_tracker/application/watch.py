@@ -20,7 +20,7 @@ from ..domain.scoring import (
 )
 from .alerts import notify_deal, notify_good, notify_match
 from .details import fetch_details
-from .market import model_goal, model_make, snapshot
+from .market import model_cc, model_goal, model_make, snapshot
 from .ports import App, Notifier, WholeInventorySource
 
 Alert = Callable[[Notifier, dict], bool]
@@ -31,9 +31,9 @@ STREET_GROUPS = frozenset({"street", "middleweight", "dualsport"})
 
 
 def model_snapshot(app: App, slug: str) -> MarketSnapshot:
-    """snapshot() scored for the model's goal in models.yml, with its make."""
+    """snapshot() scored for the model's goal in models.yml, with its make and cc."""
     snap = snapshot(slug, app.store, model_goal(app.config, slug))
-    return replace(snap, make=model_make(app.config, slug))
+    return replace(snap, make=model_make(app.config, slug), cc=model_cc(app.config, slug))
 
 
 def alert_for(

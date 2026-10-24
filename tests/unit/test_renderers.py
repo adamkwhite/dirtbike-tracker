@@ -328,6 +328,13 @@ def test_a_tab_filters_by_make(snap: MarketSnapshot) -> None:
     assert '<tr data-make="yamaha">' in page.split('id="hidden-dirt"')[1]
 
 
+def test_model_heading_shows_cc_when_set(snap: MarketSnapshot) -> None:
+    assert '<h2>CRF150F <span class="cc">157 cc</span></h2>' in render_dashboard(
+        {"Dirt": [replace(snap, cc=157)]}
+    )
+    assert "<h2>CRF150F</h2>" in render_dashboard({"Dirt": [snap]})
+
+
 def test_one_make_gets_no_filter(snap: MarketSnapshot) -> None:
     assert 'button class="make' not in render_dashboard({"Dirt": [replace(snap, make="Honda")]})
 

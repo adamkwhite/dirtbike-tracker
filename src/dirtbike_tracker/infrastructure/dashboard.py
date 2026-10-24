@@ -282,7 +282,7 @@ def _model_section(snap: MarketSnapshot) -> str:
 
     return f"""
     <section class="model" id="{slug}"{_make_attr(snap.make)}>
-      <h2>{slug.upper()}</h2>
+      <h2>{slug.upper()}{f' <span class="cc">{snap.cc} cc</span>' if snap.cc else ""}</h2>
       <div class="tiles">{tiles}</div>
       <h3>Median by week</h3>
       {weekly_html}
@@ -634,6 +634,7 @@ def render_dashboard(
     }}
     table.sortable th {{ cursor: pointer; user-select: none; }}
     [hidden] {{ display: none !important; }}
+    h2 .cc {{ color: var(--muted); font-size: 0.6em; font-weight: normal; }}
     .makes {{ display: flex; gap: 6px; flex-wrap: wrap; }}
     button.make {{
       background: none;
