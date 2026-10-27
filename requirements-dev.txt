@@ -3,7 +3,7 @@
 # CI installs this file directly; do not duplicate these pins in workflows.
 pytest>=8.0.0
 pytest-cov>=6.0.0
-pytest-mock>=3.16.0
+pytest-mock>=3.17.0
 pytest-html>=4.2.0
 ruff>=0.3.0
 mypy>=1.5.0
