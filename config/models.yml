@@ -11,7 +11,7 @@
 
 # Whole-inventory dealers (one fetch is the dealer's whole used stock, filtered by title per
 # model), checked for every model or only `groups`. `platform` picks the adapter (cli.PLATFORMS:
-# dealerspike, escsite, focus); location is the dealer's, for units that don't name a store.
+# dealerspike, escsite, focus, shoparide); location is the dealer's, for units that don't name a store.
 # A new dealer on one of those platforms is a block here, no code. new_stock: true also feeds
 # the new-bike markdown watch (focus only).
 dealers:
@@ -36,6 +36,10 @@ dealers:
     location: Cavan Monaghan, ON
     dealer: Del Mastro  # display name in markdown alerts
     new_stock: true
+  shoparide:  # Power Go's marketplace: ~120 Ontario dealers' stock, located per unit (#145)
+    platform: shoparide
+    url: https://www.shoparide.ca
+    province: Ontario
 
 # Priority targets right now (dad-and-sons trail bikes)
 priority:

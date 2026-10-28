@@ -367,6 +367,7 @@ def test_models_yml_entries_are_valid() -> None:
             "cycleworld",
             "dewildt",
             "delmastro",
+            "shoparide",
         }, e
     raw = yaml.safe_load(cli_module.CONFIG_PATH.read_text())
     for dealer, spec in raw["dealers"].items():

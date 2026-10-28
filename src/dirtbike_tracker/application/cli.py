@@ -36,6 +36,7 @@ from ..infrastructure.focus import FocusSource
 from ..infrastructure.kijiji_scraper import fetch_ad_description as kijiji_ad_description
 from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
+from ..infrastructure.shoparide import ShopARideSource
 from ..infrastructure.storage import SqliteStore, init_db
 from .details import fetch_post_dates
 from .markdowns import check_markdowns, markdown_rows
@@ -101,16 +102,19 @@ def load_dealers(path: Path | None = None) -> dict[str, dict]:
 
 
 # The dealer website platforms we have an adapter for; a dealer on another needs one first.
-PLATFORMS: dict[str, type[DealerSpikeSource | EscSource | FocusSource]] = {
+PLATFORMS: dict[str, type[DealerSpikeSource | EscSource | FocusSource | ShopARideSource]] = {
     "dealerspike": DealerSpikeSource,  # one static inventory file (#99)
     "escsite": EscSource,  # EquipmentSearch: server-rendered .../page/N/ cards
     "focus": FocusSource,  # a Typesense index, one query
+    "shoparide": ShopARideSource,  # Power Go's marketplace: many dealers, one data chunk a type
 }
 # dealer keys that aren't the adapter's own settings
 _NOT_SETTINGS = {"platform", "url", "groups", "new_stock"}
 
 
-def build_dealers(specs: dict[str, dict]) -> dict[str, DealerSpikeSource | EscSource | FocusSource]:
+def build_dealers(
+    specs: dict[str, dict],
+) -> dict[str, DealerSpikeSource | EscSource | FocusSource | ShopARideSource]:
     """A ListingSource per dealer definition; its other keys (location, site_id, path, dealer)
     are the platform adapter's settings, so a wrong one fails at startup."""
     dealers = {}
