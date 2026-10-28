@@ -128,6 +128,20 @@ def test_mark_stale_tags_likely_sold_only_for_sources_that_scraped(tmp_path: Pat
     assert mark_stale([], ["crf150f"], db_path=db) == 0
 
 
+def test_facebook_ads_age_out_after_a_week_not_two_days(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "fb-4d", 2500, days_ago=4, source="facebook")  # out of a few ~12-card searches
+    _add(db, "fb-7d", 2600, days_ago=7, source="facebook")
+    _add(db, "fb-9d", 2700, days_ago=9, source="facebook")
+
+    assert mark_stale(["facebook"], ["crf150f"], db_path=db) == 2
+
+    assert _row(db, "fb-4d") == (1, None)
+    assert _row(db, "fb-7d") == (0, None)  # inactive, not yet "sold"
+    assert _row(db, "fb-9d")[1] is not None
+
+
 def test_mark_stale_leaves_models_another_watchlist_scrapes(tmp_path: Path) -> None:
     db = tmp_path / "listings.db"
     init_db(db)

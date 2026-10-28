@@ -66,6 +66,13 @@ _POSTED_RE = re.compile(
 )
 
 
+def search_queries(model_slug: str) -> list[str]:
+    """The model's search terms, taken in turn: logged out, FB returns ~12 cards a search
+    (scrolling loads no more), and "klx140" and "klx 140" overlapped on only 7 of 12."""
+    spaced = re.sub(r"(?<=[a-z])(?=\d)", " ", model_slug)
+    return [model_slug] if spaced == model_slug else [model_slug, spaced]
+
+
 def build_search_url(model_slug: str, city: str = CITY) -> str:
     return f"{BASE_URL}/marketplace/{city}/search/?query={quote(model_slug)}"
 
@@ -225,8 +232,10 @@ class FacebookSource:
         last = state.get(model_slug)
         if last and now - datetime.fromisoformat(last) < self.min_interval:
             return []
+        queries = [query] if query else search_queries(model_slug)
+        turn = int(state.get(f"{model_slug}#turn", 0))
         try:
-            html = self.fetch(build_search_url(query or model_slug))
+            html = self.fetch(build_search_url(queries[turn % len(queries)]))
         except ImportError:
             print("facebook: Playwright not installed (pip install -e '.[fb]'), skipping")  # noqa: T201
             return []
@@ -235,6 +244,7 @@ class FacebookSource:
             print(f"facebook: {model_slug} search failed: {exc}")  # noqa: T201
             return []
         state[model_slug] = now.isoformat()
+        state[f"{model_slug}#turn"] = turn + 1
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(state, indent=1))
         listings = parse_listings(html, model_slug)

@@ -319,6 +319,11 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
     return stats
 
 
+# Sources whose search shows only a sample of what's listed: Facebook logged out returns ~12
+# cards, so an ad missing from a few searches is still for sale. Hours unseen before inactive.
+SAMPLED_SOURCE_HOURS = {"facebook": 7 * 24}
+
+
 def mark_stale(
     sources: Iterable[str],
     models: Iterable[str],
@@ -331,7 +336,8 @@ def mark_stale(
     the main watch would otherwise age its bikes out (and mark them sold) between runs.
 
     Unseen for `cutoff_hours` -> inactive; for `sold_after_hours` -> likely sold
-    (sold_at = last_seen, the best estimate of when it went). Pass only sources
+    (sold_at = last_seen, the best estimate of when it went). A SAMPLED_SOURCE_HOURS
+    source waits its own hours instead, with the same gap before sold. Pass only sources
     that returned results this run: a broken scraper sees nothing, and would
     otherwise tag its whole inventory as sold.
     """
@@ -340,29 +346,33 @@ def mark_stale(
     sources, models = list(sources), list(models)
     if not sources or not models:
         return 0
-    marks = ",".join("?" * len(sources))
     of_models = (
         "AND id IN (SELECT listing_id FROM listing_models WHERE model_slug IN "
         f"({','.join('?' * len(models))}))"
     )
+    marked = 0
     with connect(db_path) as conn:
-        cursor = conn.execute(
-            f"""
-            UPDATE listings SET is_active=0
-            WHERE is_active=1 AND source IN ({marks}) {of_models}
-              AND julianday('now') - julianday(last_seen) > ?
-            """,  # only "?" placeholders are interpolated
-            (*sources, *models, cutoff_hours / 24.0),
-        )
-        conn.execute(
-            f"""
-            UPDATE listings SET sold_at=last_seen
-            WHERE sold_at IS NULL AND source IN ({marks}) {of_models}
-              AND julianday('now') - julianday(last_seen) > ?
-            """,  # only "?" placeholders are interpolated
-            (*sources, *models, sold_after_hours / 24.0),
-        )
-        return int(cursor.rowcount)
+        for source in sources:
+            inactive = SAMPLED_SOURCE_HOURS.get(source, cutoff_hours)
+            sold = inactive + sold_after_hours - cutoff_hours
+            cursor = conn.execute(
+                f"""
+                UPDATE listings SET is_active=0
+                WHERE is_active=1 AND source=? {of_models}
+                  AND julianday('now') - julianday(last_seen) > ?
+                """,  # only "?" placeholders are interpolated
+                (source, *models, inactive / 24.0),
+            )
+            marked += cursor.rowcount
+            conn.execute(
+                f"""
+                UPDATE listings SET sold_at=last_seen
+                WHERE sold_at IS NULL AND source=? {of_models}
+                  AND julianday('now') - julianday(last_seen) > ?
+                """,  # only "?" placeholders are interpolated
+                (source, *models, sold / 24.0),
+            )
+    return marked
 
 
 def active_listings(

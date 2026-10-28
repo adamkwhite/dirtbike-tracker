@@ -15,6 +15,7 @@ from dirtbike_tracker.infrastructure.fb_scraper import (
     FacebookSource,
     build_search_url,
     parse_listings,
+    search_queries,
 )
 
 
@@ -101,6 +102,23 @@ def test_source_searches_each_model_at_most_once_per_interval(tmp_path: Path) ->
     assert FacebookSource(tmp_path / "fb.json", fetch=fetch, min_interval=timedelta(0))(
         "crf150f", "ontario", 3
     )
+
+
+def test_searches_take_the_spaced_query_in_turn(tmp_path: Path) -> None:
+    fetched: list[str] = []
+
+    def fetch(url: str) -> str:
+        fetched.append(url.split("query=")[1])
+        return PAGE
+
+    source = FacebookSource(tmp_path / "fb.json", fetch=fetch, min_interval=timedelta(0))
+    for _ in range(3):
+        source("klx140", "ontario", 3)
+    source("vulcans", "ontario", 3)  # no number to space out
+    source("ttr125le", "ontario", 3, query="ttr125")  # a configured query is used as is
+
+    assert fetched == ["klx140", "klx%20140", "klx140", "vulcans", "ttr125"]
+    assert search_queries("crf150f") == ["crf150f", "crf 150f"]
 
 
 def test_failed_search_returns_nothing_and_retries_next_run(tmp_path: Path) -> None:
