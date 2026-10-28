@@ -288,6 +288,20 @@ median), and new units plus a dealer's current-model-year bikes are skipped unle
 so unmatched listings age out as sold and source health only alerts if the fetch itself keeps
 failing. The drift check records the file daily.
 
+### Shop a Ride (many dealers at once)
+
+`infrastructure/shoparide.py` (#145) reads [Shop a Ride](https://www.shoparide.ca), Power Go's
+marketplace of its client dealers' stock (~120 Ontario dealers). The site is a static Next.js
+export: each vehicle type's whole national inventory is one lazy webpack chunk
+(`JSON.parse('[...]')`; motorcycle ~13 MB, motocross ~3 MB). Chunk ids and hashes change with
+each build, so a run finds them by name: a page script maps
+`./vehicles-data-<type>-<uuid>-en.json` to a chunk id, the webpack runtime maps the id to its
+file. A missing name fails the fetch loudly (never a guessed chunk). The province's units are
+cached in `~/.cache/dirtbike-tracker/shoparide/` (`SHOPARIDE_CACHE_DIR`) keyed by the runtime's
+file name, which changes with each rebuild (about daily), so most runs download only the page.
+Defined like a dealer (`platform: shoparide`, optional `province`, `types`); location is each
+unit's dealer city and the dealer's name is in the description.
+
 ### Facebook Marketplace
 
 An optional third source (#9). Marketplace is a React app, so a real browser (Playwright +
