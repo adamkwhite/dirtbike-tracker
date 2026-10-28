@@ -1,6 +1,6 @@
 # dirtbike-tracker
 
-Personal dirt bike price tracker. Scrapes Kijiji + AutoTrader, scores vs market median, pushes alerts via ntfy.
+Personal dirt bike price tracker. Scrapes Kijiji, AutoTrader, Facebook Marketplace and dealer sites (models.yml `dealers:`), scores vs market median, pushes alerts via ntfy.
 
 ## Architecture
 Hexagonal: `src/dirtbike_tracker/{application,domain,infrastructure}/`
