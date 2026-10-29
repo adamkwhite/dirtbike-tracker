@@ -1,10 +1,11 @@
 # dirtbike-tracker
 
 Finds a **project bike** to wrench on with the kids: a used dirt bike that needs work, priced
-right, with ownership. Scrapes Kijiji, AutoTrader, Facebook Marketplace and a dealer's used
-inventory (Sturgess Cycle) for the models in `config/models.yml`,
-stores listings in SQLite, rates each one against the model's 90-day market median, scores its
-project fit, and pushes alerts to your phone via [ntfy](https://ntfy.sh).
+right, with ownership. Scrapes Kijiji, AutoTrader, Facebook Marketplace and dealers' used
+inventory (Sturgess Cycle, Cycle World, DeWildt, Del Mastro: `dealers:` in `config/models.yml`)
+for the models in `config/models.yml`, stores listings in SQLite, rates each one against the
+model's 90-day market median, scores its project fit, and pushes alerts to your phone via
+[ntfy](https://ntfy.sh). It also watches dealers' new stock of those models for markdowns.
 
 ## How it works
 
@@ -14,11 +15,14 @@ flowchart TB
     config[/"config/models.yml"/] --> cli
 
     subgraph application
-        cli["cli.py: commands + composition root<br/>watch · list · stats · report · dashboard<br/>dismiss · contact · backup"]
+        cli["cli.py: commands + composition root<br/>watch · list · stats · report · dashboard · serve<br/>dismiss · contact · backup · drift"]
         watch["watch.py<br/>scrape → store → score → alert"]
         market["market.py<br/>snapshot(slug, store)"]
+        details["details.py<br/>full ad text, FB post dates"]
+        markdowns["markdowns.py<br/>new-stock price cuts"]
         ports["ports.py<br/>ListingStore · ListingSource<br/>AdDetailFetcher · Notifier"]
         cli --> watch --> market
+        watch --> details & markdowns
         cli -.->|wires adapters into| ports
     end
 
@@ -30,9 +34,9 @@ flowchart TB
         kij["kijiji_scraper.py"]
         at["autotrader_scraper.py"]
         fb["fb_scraper.py<br/>Playwright, opt-in"]
-        ds["dealerspike.py<br/>dealer inventory file"]
+        dealers["dealerspike.py · escsite.py · focus.py<br/>dealer inventory, once per run"]
         storage[("storage.py<br/>SQLite")]
-        render["dashboard.py<br/>reporter.py"]
+        render["dashboard.py · reporter.py<br/>dashboard_server.py"]
         notifier["notifier.py"]
         backup["backup.py"]
         drift["drift.py"]
@@ -40,15 +44,16 @@ flowchart TB
 
     market -->|score| scoring
     market -->|read via ListingStore| storage
-    watch -->|ListingSource| kij & at & fb & ds
+    watch -->|ListingSource| kij & at & fb & dealers
+    markdowns -->|new units| dealers
     watch -->|upsert via ListingStore| storage
     cli -->|render snapshot| render
-    watch -->|DEAL / GOOD / target / price drop via Notifier| notifier
+    watch -->|DEAL / GOOD / target / price drop / MARKDOWN via Notifier| notifier
 
     kijiji{{Kijiji}} --> kij
     autotrader{{AutoTrader}} --> at
     facebook{{"Facebook Marketplace"}} --> fb
-    sturgess{{"Sturgess Cycle (Dealer Spike)"}} --> ds
+    dealersites{{"Sturgess (Dealer Spike) · Cycle World, DeWildt (EquipmentSearch) · Del Mastro (Focus)"}} --> dealers
     notifier --> ntfy{{"ntfy.sh → phone"}}
     notifier --> hc{{healthchecks.io}}
     cli -->|nightly| backup
@@ -250,7 +255,8 @@ once a scraper has returned **nothing** for 24h; a field that quietly stops pars
 km, the new-stock filter) would go unnoticed. `dirtbike drift` catches that:
 
 1. It records a few live pages into `tests/recorded/`: Kijiji searches for `crf150f` and
-   `rebel500`, one Kijiji ad page, and an AutoTrader `rebel500` search (which has dealer stock).
+   `rebel500`, one Kijiji ad page, an AutoTrader `rebel500` search (which has dealer stock),
+   and the inventory of the first configured dealer on each platform.
 2. It runs our real parsers over them and checks that listings parse with id, link, title and
    price state; that snippets, post dates, photos, year and km are read; that new dealer stock
    is skipped; and that the ad page's description reads. Logic: `infrastructure/drift.py`.
@@ -271,22 +277,38 @@ with `dirtbike drift --replay --no-notify`. Locally, `make drift` re-records and
 sellers' names and phone numbers, and this repo is public. That's also why CI skips
 `tests/drift`: there are no recordings there.
 
-### Dealer inventory (Sturgess Cycle)
+### Dealer inventory
+
+Every dealer is a `dealers:` block in `config/models.yml` (platform, url, location, plus the
+platform's own settings; optional `groups` limits it to some models). One fetch per watch run
+is the dealer's whole used stock, shared across models (`run_cache.OncePerRun`, a failure
+included: retrying a 403 per model kept a host blocking us). Three platforms:
+
+- **Dealer Spike** (Sturgess Cycle, Hamilton): one static inventory file, below.
+- **EquipmentSearch** (`escsite.py`; Cycle World Superstore, DeWildt's 3 stores): crawls the
+  server-rendered `.../page/N/` used cards. Cycle World has `groups` set: it carries no dirt bikes.
+- **Focus** (`focus.py`; Del Mastro): no server-rendered cards. Each run reads the search-only
+  Typesense key from the inventory page and queries `<base>/ts/multi_search` for used
+  motorcycles and powersports in one request.
+
+**New-bike markdowns:** a dealer with `new_stock: true` (Del Mastro) also reports its new units
+of the tracked models. Each watch compares their prices with `data/state/new_stock.json` and
+pushes MARKDOWN on a price cut, or for a unit first seen under its regular price/MSRP (the
+first run only records). New units never enter the listings table, since MSRP would skew the
+used medians; the dashboard shows them as NEW AT DEALERS.
 
 `infrastructure/dealerspike.py` (#99) reads a Dealer Spike dealer's inventory file: the site
 renders its list client-side from `/imglib/Inventory/cache/<site id>/UVehInv.js` (used;
 `VehInv.js` is everything), a `var Vehicles=[...]` literal with every unit. One plain GET per
 watch run (cached across models), no browser, no paging; each model filters it by title.
-Sturgess Cycle (Hamilton, site id 5620) is defined in `config/models.yml` under `dealers:`.
-Every dealer lives there (platform, url, location, plus the platform's own settings), so a new
-dealer on a platform we already read (`dealerspike`, `escsite`, `focus`; `cli.PLATFORMS`) is a
-config block, no code. A dealer on another platform needs an adapter first.
+A new dealer on a platform we already read (`dealerspike`, `escsite`, `focus`; `cli.PLATFORMS`)
+is a config block, no code. A dealer on another platform needs an adapter first.
 
 Every unit is dealer stock (`seller_type = dealer`, so it stays out of the private-sales
 median), and new units plus a dealer's current-model-year bikes are skipped unless a model sets
 `include_new`. A model with none at the dealer is normal: a fetch that worked counts as "seen",
 so unmatched listings age out as sold and source health only alerts if the fetch itself keeps
-failing. The drift check records the file daily.
+failing. The drift check records the first dealer on each platform daily.
 
 ### Facebook Marketplace
 
@@ -328,7 +350,8 @@ never copy it into the repo.
 - FB titles are often vague ("2003 Honda crf"). They're kept, since FB's search matched them on
   the model; titles naming a different known model (e.g. CRF150R) are dropped.
 - No full ad text yet (fit scores on the title only), and FB cross-posts of Kijiji ads aren't
-  merged (titles and locations differ).
+  merged (titles and locations differ). Search cards carry no post date, so each watch opens
+  at most 3 undated FB ads, newest first, just for the date (`details.POST_DATE_BUDGET`).
 - Not in the Docker image (no browser there).
 
 ## Requirements
