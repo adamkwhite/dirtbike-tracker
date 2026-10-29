@@ -10,22 +10,27 @@ one copy to keep current. Dependency rule: `application` → {`domain`, `infrast
 
 | Layer | Module | Responsibility |
 |---|---|---|
-| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `models`, `dismiss`, `undismiss`, `contact`, `backup`, `drift`). **Composition root** (#74): `build_app()` wires the real adapters into an `App` on `ctx.obj`; the only application module that imports infrastructure |
+| application | `cli.py` | click CLI (`watch`, `scrape`, `list`, `stats`, `report`, `dashboard`, `serve`, `models`, `dismiss`, `undismiss`, `contact`, `backup`, `drift`, `fb-login`). **Composition root** (#74): `build_app()` wires the real adapters into an `App` on `ctx.obj`; the only application module that imports infrastructure |
 | application | `ports.py` | Ports: `ListingStore` (Protocol; `SqliteStore` adapts it), `ListingSource` (`(slug, region, pages) -> list[Listing]`), `AdDetailFetcher` (`url -> description \| None`), `Notifier` (one push → bool); `App` bundles them with config, paths and the healthcheck ping |
 | application | `watch.py` | `watch_model()`: scrape → upsert → score → read full ads → re-score → alert; `alert_for`, notified-id state, source health |
 | application | `market.py` | `snapshot(slug, store, goal)`: reads market + active listings from the store, scores them (full ad text when fetched, else the snippet), returns a `MarketSnapshot`; `model_goal` |
-| application | `details.py` | `fetch_details()`: reads the full ad of up to `DETAIL_BUDGET` listings per model that could alert (#71) |
+| application | `details.py` | `fetch_details()`: reads the full ad of up to `DETAIL_BUDGET` listings per model that could alert (#71); opens up to `POST_DATE_BUDGET` undated FB ads per watch for their post date (#140) |
 | application | `alerts.py` | DEAL / GOOD / target / price-drop push text, sent through the `Notifier` port |
-| domain | `listing.py` | `Listing`, the record every source adapter returns |
+| application | `markdowns.py` | New-bike markdown watch: `new_stock` dealers' new units of the tracked models, compared with `new_stock.json`; MARKDOWN on a price cut or a unit first seen under its regular price. Never stored as listings |
+| domain | `listing.py` | `Listing`, the record every source adapter returns; `NewUnit`, a dealer's new bike |
 | domain | `scoring.py` | Pure: `market_stats`, `project_stats` (project-bike median, #72), `project_fit(text, goal)` (`project` or `ride` flag sets), `private_market` / `is_dealer_new` (#81), `rate_listing`, `score_listings` (`basis`: project / fallback), `project_fit`, `urgency`, `under_target`, `needs_detail`, `trend`, `weekly_medians`, `MarketSnapshot` |
 | infrastructure | `kijiji_scraper.py` | Kijiji search fetch, HTML card parsing, model detection; reads `vehicletype` (skips `new`), `activationDate` and the description snippet from `__NEXT_DATA__` (an uncut snippet is the full ad, #76); `fetch_ad_description` adapter reads the ad page's `__APOLLO_STATE__` |
-| infrastructure | `dealerspike.py` | Dealer Spike dealer inventory (#99): `DealerSpikeSource` fetches the dealer's `UVehInv.js` cache file once per run (`lru_cache`), parses `var Vehicles=[...]`, filters by title; `STURGESS` is Sturgess Cycle. Sets `last_fetch_ok`, which `watch.sources_seen` reads so a dealer with no matches still counts as seen |
-| infrastructure | `fb_scraper.py` | Facebook Marketplace (#9): `FacebookSource` renders a search page in Playwright with a persistent profile (logged-out works), parses the cards, and searches each model at most once per `MIN_INTERVAL` (6h). `login()` behind `dirtbike fb-login`. Optional extra `[fb]` |
+| infrastructure | `dealerspike.py` | Dealer Spike dealer inventory (#99): `DealerSpikeSource` fetches the dealer's `UVehInv.js` cache file once per run, parses `var Vehicles=[...]`, filters by title. Sets `last_fetch_ok`, which `watch.sources_seen` reads so a dealer with no matches still counts as seen |
+| infrastructure | `escsite.py` | EquipmentSearch dealer inventory (Cycle World, DeWildt): `EscSource` crawls the server-rendered `.../page/N/` used cards once per run. Sets `last_fetch_ok` |
+| infrastructure | `focus.py` | Focus dealer inventory (Del Mastro): `FocusSource` reads the search-only Typesense key from the inventory page and queries `<base>/ts/multi_search` once per run; `new_units()` feeds `markdowns.py`. Sets `last_fetch_ok` |
+| infrastructure | `run_cache.py` | `OncePerRun`: caches a dealer fetch for the run, a failure included, so a 403 isn't retried per model (#141) |
+| infrastructure | `fb_scraper.py` | Facebook Marketplace (#9): `FacebookSource` renders a search page in Playwright with a persistent profile (logged-out works), parses the cards, and searches each model at most once per `MIN_INTERVAL` (6h), alternating the slug and its spaced form (`search_queries`). `ad_post_date` reads an ad's post time. `login()` behind `dirtbike fb-login`. Optional extra `[fb]` |
 | infrastructure | `autotrader_scraper.py` | AutoTrader keyword search plus used-only model-family pages (`FAMILY_PATHS`, #17; rejects a make-page fallback by `pagePath`); parses `__NEXT_DATA__` listings (description included), skips `offerType=N` |
 | infrastructure | `storage.py` | SQLite schema + in-place migrations (columns by presence; one-time data fixes by `PRAGMA user_version`), upsert, fingerprint dedup, multi-model tagging, `market_prices` / `market_listings`, `price_drops`, likely-sold, dismiss, `set_contact`, `save_full_description` |
 | infrastructure | `notifier.py` | ntfy.sh transport (the `Notifier` adapter) and the healthchecks.io ping |
 | infrastructure | `dashboard.py`, `reporter.py` | Render a `MarketSnapshot` to HTML / markdown |
-| infrastructure | `drift.py` | Site-drift check (#28): records live search/ad pages into a gitignored dir and lists what our parsers no longer read (fields, photos, year/km, new-stock skip, ad description). `dirtbike drift`, daily cron |
+| infrastructure | `dashboard_server.py` | `dirtbike serve`: serves only the dashboard page plus POST /hide, /note, /year (need the `X-Dirtbike: 1` header) |
+| infrastructure | `drift.py` | Site-drift check (#28): records live search/ad pages and the first dealer on each platform into a gitignored dir and lists what our parsers no longer read (fields, photos, year/km, new-stock skip, ad description). `dirtbike drift`, daily cron |
 | infrastructure | `backup.py` | Nightly/weekly DB + state snapshot to Google Drive via rclone |
 
 ## Data model
@@ -35,11 +40,17 @@ listings:
   id | source | external_id | url | title | price | price_state
      | location | posted_text | description | fingerprint
      | first_seen | last_seen | is_active | is_primary
+     | year | km | image_url
+     | seller_type        -- private / dealer (#81); private-only median once there are enough
      | sold_at            -- likely sold: gone from a healthy source for 72h
      | dismissed_at       -- `dirtbike dismiss`; upsert never clears it
+     | hidden_at, hide_note -- dashboard ✕: out of alerts and active lists, still in the median
+     | notes              -- dashboard Notes column
+     | user_year          -- dashboard Year edit; upsert keeps it over the ad's year
      | contacted_at, contact_note -- `dirtbike contact` (#23); upsert never touches them
      | full_description   -- full ad body (#71), or an uncut search snippet (#76); never overwritten once set
      | detail_fetched_at
+     | posted_checked_at  -- FB ad opened for its post date; never opened twice
 
 listing_models:
   listing_id | model_slug          -- many-to-many; package listings get 2+ rows
@@ -75,15 +86,15 @@ Current design handles ~10K listings per model without issue. If you push past ~
 - Consider Postgres if you want to join across many metrics or run analytics queries
 - SQLite handles single-writer workloads fine; cron serializes writes naturally
 
-## Why not FB Marketplace?
+## Facebook Marketplace
 
-See `docs/fb_marketplace_notes.md`. Short version: requires authenticated session or Playwright, high maintenance cost, Facebook actively rate-limits scrapers. The ROI vs Kijiji+AutoTrader is low.
+A source since #9, opt-in per model: Playwright renders logged-out searches (~12 cards each), throttled to one search per model per 6h. Ads go inactive after 7 days unseen, not 2 (`storage.SAMPLED_SOURCE_HOURS`), since each search is a sample. README "Facebook Marketplace" has setup and limits; `docs/fb_marketplace_notes.md` is the pre-#9 research.
 
 ## Deployment
 
 Local Ubuntu/WSL under cron, running from a separate prod clone (`~/Code/dirtbike-tracker-prod`, always `main`) so a feature branch in the dev checkout never goes live. Deploy = `git pull --ff-only` in the prod clone. Setup steps: README "Cron".
 
-- The prod clone owns `data/` (SQLite DB `listings.db`, `state/notified_ids.txt`, `state/source_health.json`) and `dashboard.html`; the dev repo has its own `data/` copy, so dev commands and their migrations never reach prod
+- The prod clone owns `data/` (SQLite DB `listings.db`, `state/notified_ids.txt`, `state/source_health.json`, `state/fb_searches.json`, `state/new_stock.json`, `state/<config stem>/` per extra watchlist) and `dashboard.html`; the dev repo has its own `data/` copy, so dev commands and their migrations never reach prod
 - Logs: `logs/{watch,report,backup,drift}.log` in the prod clone
 - `NTFY_TOPIC` and `HEALTHCHECK_URL` are set only on the crontab line, never in the repo
 
