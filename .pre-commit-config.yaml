@@ -80,7 +80,7 @@ repos:
       - id: gitleaks
         name: Scan for committed secrets (gitleaks)
 default_language_version:
-  python: python3.12
+  python: python3.13
 
 # Skip hooks for specific commits
 # Usage: SKIP=mypy git commit -m "..."
