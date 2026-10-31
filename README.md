@@ -70,7 +70,7 @@ Ratings are price vs market median: **DEAL** ≤ -30%, **GOOD** ≤ -10%, **FAIR
 **HIGH** above that. A listing under a model's `target_price` alerts regardless of market.
 
 **Private vs dealer (#81):** each listing records its seller type (Kijiji's "for sale by", AutoTrader's
-seller). Once a model has 5 private sales in 90 days, its median is private sales only, shown as
+seller); Facebook doesn't say, so its ads count as private. Once a model has 5 private sales in 90 days, its median is private sales only, shown as
 "Median (private)": dealer asks run high, and a dealer posting on both sites counts twice. Dealer
 listings are still shown and rated against that median, tagged `dealer`. A dealer's
 current-model-year bike is treated as new/demo stock and skipped, like the sites' own "new" flags.

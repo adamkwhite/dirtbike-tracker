@@ -147,8 +147,13 @@ PRIVATE_MIN_SAMPLES = 5
 
 
 def private_market(market: list[dict]) -> tuple[list[dict], str]:
-    """(rows to rate against, "private" | "all"). Unknown seller type isn't counted as private."""
-    private = [x for x in market if x.get("seller_type") == "private"]
+    """(rows to rate against, "private" | "all"). An unknown seller type counts as private.
+
+    Facebook never says, and it's mostly private sellers: leaving it out rated KLX140s against
+    7 of 50 sales, so one near-new $4,000 ad moved the median $650 (2026-10-31). Every dealer
+    source sets "dealer".
+    """
+    private = [x for x in market if x.get("seller_type") != "dealer"]
     return (private, "private") if len(private) >= PRIVATE_MIN_SAMPLES else (market, "all")
 
 
