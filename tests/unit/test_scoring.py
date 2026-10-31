@@ -352,10 +352,17 @@ def _sales(*sellers: str | None) -> list[dict]:
 
 def test_private_market_needs_enough_private_sales() -> None:
     enough = _sales("private", "private", "private", "private", "private", "dealer")
-    short = _sales("private", "private", "private", "private", None, "dealer")  # None isn't private
+    short = _sales("private", "private", "private", "private", "dealer", "dealer")
 
     assert private_market(enough) == (enough[:5], "private")
     assert private_market(short) == (short, "all")
+
+
+def test_private_market_counts_unknown_seller_as_private() -> None:
+    # Facebook never says who's selling: its ads count as private, not dropped from the median
+    market = _sales("private", None, None, None, None, "dealer")
+
+    assert private_market(market) == (market[:5], "private")
 
 
 def test_dealer_current_model_year_is_new_stock() -> None:
