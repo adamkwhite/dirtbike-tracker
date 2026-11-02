@@ -281,6 +281,16 @@ def test_dismiss_and_undismiss(market_app: App) -> None:
     assert len(market_app.store.active_listings("crf150f")) == 4
 
 
+def test_dismissed_listing_leaves_the_median(market_app: App) -> None:
+    before = market_app.store.market_listings("crf150f")
+
+    _invoke(market_app, "dismiss", "a1400")
+
+    assert len(market_app.store.market_listings("crf150f")) == len(before) - 1
+    _invoke(market_app, "undismiss", "a1400")
+    assert len(market_app.store.market_listings("crf150f")) == len(before)
+
+
 def test_dismiss_unknown_listing_exits_nonzero(app: App) -> None:
     result = CliRunner().invoke(cli, ["dismiss", "nope"], obj=app)
 

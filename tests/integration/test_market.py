@@ -278,7 +278,7 @@ def _listing(source: str, ext_id: str, url: str, price: float) -> Listing:
         "https://www.kijiji.ca/v-sport-other/oakville/yamaha-plastics/1743797617?utm=x",
     ],
 )
-def test_dismiss_hides_listing_but_keeps_market_and_survives_rescrape(
+def test_dismiss_removes_listing_from_lists_and_market_and_survives_rescrape(
     tmp_path: Path, ref: str
 ) -> None:
     db = tmp_path / "listings.db"
@@ -297,7 +297,7 @@ def test_dismiss_hides_listing_but_keeps_market_and_survives_rescrape(
 
     snap = snapshot("crf150f", SqliteStore(db))
     assert [s["external_id"] for s in snap.listings] == ["1700000001"]
-    assert snap.stats["count"] == 2  # still market data
+    assert snap.stats["count"] == 1  # junk isn't market data (hidden bikes still are)
 
     assert set_dismissed(ref, False, db_path=db) == ["1743797617"]
     assert len(snapshot("crf150f", SqliteStore(db)).listings) == 2

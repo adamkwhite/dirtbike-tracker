@@ -43,7 +43,7 @@ listings:
      | year | km | image_url
      | seller_type        -- private / dealer (#81); private-only median once there are enough
      | sold_at            -- likely sold: gone from a healthy source for 72h
-     | dismissed_at       -- `dirtbike dismiss`; upsert never clears it
+     | dismissed_at       -- `dirtbike dismiss`: junk, out of lists and the median; upsert never clears it
      | hidden_at, hide_note -- dashboard ✕: out of alerts and active lists, still in the median
      | notes              -- dashboard Notes column
      | user_year          -- dashboard Year edit; upsert keeps it over the ad's year

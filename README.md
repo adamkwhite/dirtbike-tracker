@@ -117,7 +117,7 @@ dirtbike list --model crf150f        # stored listings with ratings
 dirtbike stats --model crf150f       # low / median / high / count
 dirtbike report --model crf150f --write   # markdown snapshot to reports/
 dirtbike dashboard --open
-dirtbike dismiss <url-or-id>         # hide a listing you've evaluated (survives re-scrapes)
+dirtbike dismiss <url-or-id>         # junk: out of lists and the median (survives re-scrapes)
 dirtbike undismiss <url-or-id>
 dirtbike serve [--port 8765]          # the dashboard on localhost with its ✕ hide buttons working
 dirtbike contact <url-or-id> --note "offered 750" [--on 2026-10-01]  # log messaging a seller (--clear to undo)
@@ -202,7 +202,7 @@ make buttons (Honda, Yamaha, ...; every `models.yml` entry sets `make`) show onl
 Each row has a ✕. It asks for an optional note ("too far", "parts ad"), then moves the
 listing to the **Hidden** section at the bottom of its tab, with an Unhide button. A hidden
 listing stops alerting and stays hidden across re-scrapes, but still counts toward the market
-median. `dismiss` is the stronger version for junk: never shown anywhere.
+median. `dismiss` is the stronger version for junk: never shown anywhere, and left out of the median.
 
 The **Notes** column holds your own notes on a bike ("asked for VIN", "Dad's friend knows him"):
 click a cell to edit, empty clears it. Click a **Year** to set it when the ad has none or
