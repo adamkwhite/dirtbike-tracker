@@ -162,6 +162,21 @@ def test_matches_spec_require_alternatives(title: str, wanted: bool) -> None:
 
 
 @pytest.mark.parametrize(
+    ("title", "wanted"),
+    [
+        ("2025 Honda nx", True),
+        ("2025 NX500 ABS", True),
+        ("2025 NX 500", True),
+        ("2025 Lexus nx", False),  # a $58,494 car, which took the median to $25,712
+        ("2026 Lexus NX NX 350", False),
+    ],
+)
+def test_nx500_entry_drops_lexus_cars(title: str, wanted: bool) -> None:
+    entry = next(e for e in cli_module.load_config()["dualsport"] if e["slug"] == "nx500")
+    assert matches_spec(_bike("1", title, 7000, 2025), 2024, entry["require"]) is wanted
+
+
+@pytest.mark.parametrize(
     ("title", "year", "wanted"),
     [
         ("2003 Honda crf", 2003, False),  # before the CRF250F (2019+)

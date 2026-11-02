@@ -264,6 +264,7 @@ dualsport:
     cc: 500
     goal: ride
     min_year: 2024
+    require: ["honda|nx500|nx 500"]  # Facebook's "nx500" search also returns Lexus NX cars
     sources: [kijiji, autotrader, facebook]
     target_price: 6500
     notes: "New for 2024, few used yet"
