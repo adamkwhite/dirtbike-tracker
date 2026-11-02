@@ -419,7 +419,8 @@ def active_listings(
 def market_prices(
     model_slug: str, days: int = 90, db_path: Path | None = None, older_than_days: int = 0
 ) -> list[float]:
-    """One price per primary listing first seen between `days` and `older_than_days` ago."""
+    """One price per primary, undismissed listing (dismiss is for junk: a camera isn't a market
+    price; hidden still counts) first seen between `days` and `older_than_days` ago."""
     return [x["price"] for x in market_listings(model_slug, days, db_path, older_than_days)]
 
 
@@ -444,6 +445,7 @@ def market_listings(
               AND l.first_seen >= ?
               AND l.first_seen <= ?
               AND l.is_primary = 1
+              AND l.dismissed_at IS NULL
             """,
             (model_slug, MIN_BIKE_PRICE, cutoff, newest),
         ).fetchall()
