@@ -292,7 +292,9 @@ included: retrying a 403 per model kept a host blocking us). Three platforms:
   motorcycles and powersports in one request.
 
 **New-bike markdowns:** a dealer with `new_stock: true` (Del Mastro) also reports its new units
-of the tracked models. Each watch compares their prices with `data/state/new_stock.json` and
+of the tracked models, and so does AutoTrader for the models in
+`autotrader_scraper.NEW_STOCK_CATEGORIES` (KLX140): one new-only search across every Ontario
+dealer. Each watch compares their prices with `data/state/new_stock.json` and
 pushes MARKDOWN on a price cut, or for a unit first seen under its regular price/MSRP (the
 first run only records). New units never enter the listings table, since MSRP would skew the
 used medians; the dashboard shows them as NEW AT DEALERS.
