@@ -26,6 +26,7 @@ from ..domain.listing import Listing
 from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
 from ..infrastructure import drift as drift_check
 from ..infrastructure import fb_scraper, notifier
+from ..infrastructure.autotrader_scraper import new_units as autotrader_new_units
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
@@ -196,7 +197,9 @@ def build_app(config_path: Path | None = None) -> App:
             name: d.new_units
             for name, d in dealers.items()
             if specs[name].get("new_stock") and isinstance(d, FocusSource)
-        },
+        }
+        # every Ontario dealer's new units of the models in NEW_STOCK_CATEGORIES
+        | {"autotrader": autotrader_new_units},
         post_dates={"facebook": fb_scraper.ad_post_date},  # FB's search cards carry no date
         dashboard_tabs=tabs,
     )

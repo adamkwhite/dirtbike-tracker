@@ -9,6 +9,7 @@ in FAMILY_PATHS also read that family's used-only pages.
 
 import json
 import random
+import re
 import time
 from datetime import UTC, datetime
 from functools import lru_cache, partial
@@ -17,8 +18,8 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-from ..domain.listing import Listing
-from ..domain.scoring import is_dealer_new, parse_km, parse_year
+from ..domain.listing import Listing, NewUnit
+from ..domain.scoring import RIDE_MIN_PRICE, is_dealer_new, parse_km, parse_year
 from .kijiji_scraper import (
     PRICE_STATE_NUMERIC,
     PRICE_STATE_UNKNOWN,
@@ -75,6 +76,13 @@ FAMILY_PATHS = {
     "drz125": ["suzuki/dr-z"],
 }
 MAX_FAMILY_PAGES = 3  # 20 ads a page; the used family pages are 1 page today
+
+# AutoTrader's category ids (make 50055 Kawasaki, model ids) for current models, so the markdown
+# watch reads every Ontario dealer's new stock of them in one search. Add a model by copying the
+# `cat=` from an AutoTrader search filtered to it.
+NEW_STOCK_CATEGORIES = {
+    "klx140": "ma50055mo78395,ma50055mo78396,ma50055mo78397",  # KLX140R, R L, R F
+}
 
 
 # listing.seller.type (#81)
@@ -187,6 +195,47 @@ def scrape_family(path: str, model_slug: str, region: str = "on") -> list[Listin
         if page >= int(props.get("numberOfPages") or 1):
             break
     return listings
+
+
+def new_units(slugs: list[str], region: str = "on") -> list[NewUnit]:
+    """Ontario dealers' new units of the tracked models in NEW_STOCK_CATEGORIES (the markdown
+    watch), with AutoTrader's struck-out price as `was`. Raises if AutoTrader is down."""
+    units = []
+    for slug in slugs:
+        if slug not in NEW_STOCK_CATEGORIES:
+            continue
+        # ponytail: one page of 100; paginate when a model has more new units than that
+        url = f"{BASE_URL}/motorcycles-atvs/lst/reg_{region}/ot_new?cat={NEW_STOCK_CATEGORIES[slug]}&size=100"
+        for ad in _page_props(fetch_page(url)).get("listings") or []:
+            unit = _ad_to_unit(ad, slug)
+            if unit:
+                units.append(unit)
+    return units
+
+
+def _ad_to_unit(ad: dict, slug: str) -> NewUnit | None:
+    """One new-stock ad -> NewUnit; None for a used ad or a placeholder price ("$1": call us)."""
+    vehicle = ad.get("vehicle") or {}
+    price = float((ad.get("price") or {}).get("priceRaw") or 0)
+    if vehicle.get("offerType") != "N" or price < RIDE_MIN_PRICE:
+        return None
+    old = re.sub(r"\D", "", str((ad.get("superDeal") or {}).get("oldPriceFormatted") or ""))
+    seller = ad.get("seller") or {}
+    city = (ad.get("location") or {}).get("city") or ""
+    return NewUnit(
+        dealer=", ".join(p for p in (seller.get("companyName"), city.title()) if p),
+        unit_id=str(ad["id"]),
+        model_slug=slug,
+        title=" ".join(
+            str(p)
+            for p in (vehicle.get("modelYear"), vehicle.get("make"), vehicle.get("model"))
+            if p
+        ),
+        price=price,
+        was=float(old) if old and float(old) > price else None,
+        url=ad["url"],
+        image_url=first_image(ad.get("images")),
+    )
 
 
 def scrape_model(
