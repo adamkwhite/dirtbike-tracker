@@ -74,6 +74,8 @@ FAMILY_PATHS = {
     "versys650": ["kawasaki/versys-650"],
     "boulevard": ["suzuki/boulevard"],
     "drz125": ["suzuki/dr-z"],
+    "drz250": ["suzuki/dr-z"],
+    "ttr230": ["yamaha/tt-r230"],  # TT-R225 has no family page
 }
 MAX_FAMILY_PAGES = 3  # 20 ads a page; the used family pages are 1 page today
 

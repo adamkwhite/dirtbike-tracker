@@ -7,6 +7,7 @@ import requests
 from dirtbike_tracker.infrastructure import kijiji_scraper
 from dirtbike_tracker.infrastructure.kijiji_scraper import (
     first_image,
+    model_slugs_for,
     parse_ad_description,
     parse_listings,
 )
@@ -240,3 +241,16 @@ def test_parse_listings_reads_seller_and_skips_dealer_new(
     listings = parse_listings(_attrs_page(caryear=year, forsaleby=forsaleby), "cb500x")
 
     assert [x.seller_type for x in listings] == ([seller] if kept else [])
+
+
+@pytest.mark.parametrize(
+    ("title", "slug", "found"),
+    [
+        ("2005 Suzuki DR-Z 250", "drz250", ["drz250"]),
+        ("2005 Suzuki DR-Z 250", "drz125", []),  # the DR-Z125 search finds the 250 too
+        ("2012 Yamaha TT-R 230", "ttr230", ["ttr230"]),
+        ("2003 Yamaha TTR225", "ttr225", ["ttr225"]),
+    ],
+)
+def test_titles_file_under_their_own_model(title: str, slug: str, found: list[str]) -> None:
+    assert model_slugs_for(title, slug) == found
