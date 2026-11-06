@@ -107,6 +107,35 @@ secondary:
     target_price: 1800
     notes: "The KLX125's twin, sold far longer. Air-cooled, carb, kick start. L = big wheel"
 
+  - slug: ttr230
+    make: Yamaha
+    cc: 230
+    goal: project
+    min_year: 2005
+    sources: [kijiji, autotrader, facebook]
+    target_price: 3000
+    notes: "The CRF230F's rival: air-cooled, carb, electric start"
+
+  - slug: ttr225
+    make: Yamaha
+    cc: 225
+    goal: project
+    min_year: 1999
+    max_year: 2004
+    sources: [kijiji, autotrader, facebook]
+    target_price: 2000
+    notes: "The TT-R230's predecessor, electric start"
+
+  - slug: drz250
+    make: Suzuki
+    cc: 250
+    goal: project
+    min_year: 2001
+    max_year: 2007
+    sources: [kijiji, autotrader, facebook]
+    target_price: 2500
+    notes: "Air/oil-cooled trail bike, electric start; a CRF230F alternative"
+
 # Future (15yo step-up when he outgrows the CRF230F)
 future:
   - slug: crf250f
