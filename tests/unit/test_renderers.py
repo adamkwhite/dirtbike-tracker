@@ -390,6 +390,7 @@ def test_a_reload_keeps_the_scroll_position(snap: MarketSnapshot) -> None:
 
     assert 'history.scrollRestoration = "manual"' in page
     assert 'sessionStorage.setItem("scrollY"' in page
+    assert 'sessionStorage.setItem("sorts"' in page  # a hide's reload keeps the column sort
 
 
 def test_location_links_to_a_maps_search_for_the_town() -> None:
