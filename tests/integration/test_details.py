@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from dirtbike_tracker.application import details
-from dirtbike_tracker.application.details import fetch_details, fetch_post_dates
+from dirtbike_tracker.application.details import check_sold, fetch_details, fetch_post_dates
 from dirtbike_tracker.application.market import snapshot
 from dirtbike_tracker.application.watch import alert_for
 from dirtbike_tracker.domain.listing import Listing
@@ -212,3 +212,41 @@ def test_a_failed_post_date_fetch_stops_and_retries_next_run(db: Path) -> None:
     assert fetch_post_dates({"facebook": blocked}, store) == 0
     assert fetch_post_dates({"facebook": lambda _: "2026-09-11T18:01:01.000Z"}, store) == 1
     assert fetch_post_dates({}, store) == 0
+
+
+def test_sold_check_reads_ads_missing_from_searches_and_drops_the_sold(db: Path) -> None:
+    store = SqliteStore(db)
+    upsert_listings(
+        [_listing(n, 2000, source="facebook") for n in ("fresh", "sold", "live")], db_path=db
+    )
+    with connect(db) as conn:  # "fresh" was in today's search; the others missed 2 days
+        conn.execute(
+            "UPDATE listings SET last_seen=datetime('now','-2 days') WHERE external_id!='fresh'"
+        )
+    fetched: list[str] = []
+
+    def fake(url: str) -> bool:
+        fetched.append(url.rsplit("/", 1)[-1])
+        return fetched[-1] == "sold"
+
+    assert check_sold({"facebook": fake}, store) == 1
+    assert check_sold({"facebook": fake}, store) == 0  # each checked once per recheck window
+    assert sorted(fetched) == ["live", "sold"]
+    rows = _by_id(db)
+    assert "sold" not in rows and {"fresh", "live"} <= rows.keys()  # sold leaves the lists
+    with connect(db) as conn:
+        assert conn.execute("SELECT sold_at FROM listings WHERE external_id='sold'").fetchone()[0]
+
+
+def test_a_failed_sold_check_stops_and_retries_next_run(db: Path) -> None:
+    store = SqliteStore(db)
+    upsert_listings([_listing("fb", 2000, source="facebook")], db_path=db)
+    with connect(db) as conn:
+        conn.execute("UPDATE listings SET last_seen=datetime('now','-2 days')")
+
+    def blocked(_: str) -> bool:
+        raise TimeoutError
+
+    assert check_sold({"facebook": blocked}, store) == 0
+    assert check_sold({"facebook": lambda _: True}, store) == 1
+    assert check_sold({}, store) == 0

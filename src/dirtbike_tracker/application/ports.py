@@ -43,6 +43,7 @@ AdDetailFetcher = Callable[[str], str | None]  # ad url -> description, None if 
 # ad url -> post time (UTC ISO, like Kijiji's activationDate), None if the ad shows none;
 # raises if the fetch failed
 PostDateFetcher = Callable[[str], str | None]
+SoldChecker = Callable[[str], bool]  # an ad URL -> does its page say sold
 
 
 # the tracked model slugs -> that dealer's new units of them. Raises if the dealer is down
@@ -84,6 +85,8 @@ class ListingStore(Protocol):
     def set_year(self, listing_id: int, year: int | None) -> list[str]: ...
     def undated_listings(self, sources: Iterable[str], limit: int) -> list[dict]: ...
     def set_posted(self, listing_id: int, posted: str | None) -> None: ...
+    def unseen_listings(self, sources: Iterable[str], limit: int) -> list[dict]: ...
+    def set_sold_checked(self, listing_id: int, sold: bool) -> None: ...
 
 
 @dataclass
@@ -106,3 +109,4 @@ class App:
     dashboard_tabs: Mapping[str, dict] = field(default_factory=dict)
     # sources whose search cards carry no post time: read it from the ad page (Facebook)
     post_dates: Mapping[str, PostDateFetcher] = field(default_factory=dict)
+    sold_checks: Mapping[str, SoldChecker] = field(default_factory=dict)
