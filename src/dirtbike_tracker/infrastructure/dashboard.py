@@ -835,12 +835,20 @@ def render_dashboard(
     }});
 
     // Click a header to sort its table: by each cell's data-v when set, else its text;
-    // empty values sort last.
-    document.querySelectorAll("table.sortable th").forEach((th, col) => {{
+    // empty values sort last. Each table's sort is kept for the session, so a hide's reload
+    // (or F5) re-sorts it. ponytail: keyed by table position; a rebuild adding a table can
+    // shift a saved sort onto its neighbour for one session.
+    let sorts = {{}};
+    try {{ sorts = JSON.parse(sessionStorage.getItem("sorts")) || {{}}; }} catch (e) {{}}
+    const tables = [...document.querySelectorAll("table.sortable")];
+    tables.forEach((table, t) => table.querySelectorAll("th").forEach((th, col) => {{
       th.addEventListener("click", () => {{
-        const body = th.closest("table").tBodies[0];
+        const body = table.tBodies[0];
         const asc = th.dataset.dir !== "asc";
+        table.querySelectorAll("th").forEach((x) => delete x.dataset.dir);
         th.dataset.dir = asc ? "asc" : "desc";
+        sorts[t] = [col, asc];
+        try {{ sessionStorage.setItem("sorts", JSON.stringify(sorts)); }} catch (e) {{}}
         const key = (row) => {{
           const cell = row.cells[col];
           const v = cell.dataset.v ?? cell.textContent.trim().toLowerCase();
@@ -854,6 +862,12 @@ def render_dashboard(
           }})
           .forEach((row) => body.appendChild(row));
       }});
+    }}));
+    Object.entries(sorts).forEach(([t, [col, asc]]) => {{
+      const th = tables[t]?.querySelectorAll("th")[col];
+      if (!th) return;
+      if (!asc) th.dataset.dir = "asc";  // a click flips asc to desc
+      th.click();
     }});
   </script>
 </body>
