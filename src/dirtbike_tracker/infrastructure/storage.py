@@ -183,6 +183,8 @@ def _migrate_old_schema(db_path: Path | None = None) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN user_year INTEGER")
         if "posted_checked_at" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN posted_checked_at TEXT")
+        if "sold_checked_at" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN sold_checked_at TEXT")
 
 
 def _compute_fingerprint(
@@ -322,6 +324,10 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
 # Sources whose search shows only a sample of what's listed: Facebook logged out returns ~12
 # cards, so an ad missing from a few searches is still for sale. Hours unseen before inactive.
 SAMPLED_SOURCE_HOURS = {"facebook": 7 * 24}
+# A sampled source's ad that missed a day of searches gets its ad page read for "sold" (#9's
+# 7-day wait left sold FB bikes on the dashboard for a week), at most once per recheck window
+UNSEEN_HOURS = 24
+SOLD_RECHECK_HOURS = 48
 
 
 def mark_stale(
@@ -618,6 +624,39 @@ def undated_listings(sources: Iterable[str], limit: int, db_path: Path | None = 
     return [dict(r) for r in rows]
 
 
+def unseen_listings(sources: Iterable[str], limit: int, db_path: Path | None = None) -> list[dict]:
+    """Shown listings from `sources` that missed the searches of the last UNSEEN_HOURS and
+    weren't sold-checked in SOLD_RECHECK_HOURS: never-checked first, then most recently seen."""
+    sources = list(sources)
+    if not sources:
+        return []
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, source, url FROM listings
+            WHERE is_active=1 AND is_primary=1 AND dismissed_at IS NULL AND hidden_at IS NULL
+              AND julianday('now') - julianday(last_seen) > ?
+              AND (sold_checked_at IS NULL OR julianday('now') - julianday(sold_checked_at) > ?)
+              AND source IN ({",".join("?" * len(sources))})
+            ORDER BY sold_checked_at IS NOT NULL, last_seen DESC LIMIT ?
+            """,  # only "?" placeholders are interpolated
+            (UNSEEN_HOURS / 24.0, SOLD_RECHECK_HOURS / 24.0, *sources, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_sold_checked(listing_id: int, sold: bool, db_path: Path | None = None) -> None:
+    """Record a sold check of a listing's ad page; a sold one leaves the active lists now."""
+    now = datetime.now(UTC).replace(tzinfo=None).isoformat()
+    with connect(db_path) as conn:
+        conn.execute("UPDATE listings SET sold_checked_at=? WHERE id=?", (now, listing_id))
+        if sold:
+            conn.execute(
+                "UPDATE listings SET is_active=0, sold_at=COALESCE(sold_at, ?) WHERE id=?",
+                (now, listing_id),
+            )
+
+
 def set_posted(listing_id: int, posted: str | None, db_path: Path | None = None) -> None:
     """Save the post time read from a listing's ad page, and mark the page read either way
     (None: it had none), so it isn't fetched again. upsert keeps a stored post time."""
@@ -714,3 +753,9 @@ class SqliteStore:
 
     def set_posted(self, listing_id: int, posted: str | None) -> None:
         set_posted(listing_id, posted, db_path=self.db_path)
+
+    def unseen_listings(self, sources: Iterable[str], limit: int) -> list[dict]:
+        return unseen_listings(sources, limit, db_path=self.db_path)
+
+    def set_sold_checked(self, listing_id: int, sold: bool) -> None:
+        set_sold_checked(listing_id, sold, db_path=self.db_path)

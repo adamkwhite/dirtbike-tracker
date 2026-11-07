@@ -309,3 +309,17 @@ def test_post_time_is_the_ads_not_a_seller_reviews() -> None:
     assert fb_scraper.parse_post_time(page) == "2026-09-11T18:01:01.000Z"
     assert fb_scraper.parse_post_time('{"creation_time":1786492036}') is None
     assert fb_scraper.ad_post_date("u", fetch=lambda _: page) == "2026-09-11T18:01:01.000Z"
+
+
+def test_sold_flag_is_the_ads_own_not_a_similar_items() -> None:
+    page = (
+        '{"id":"111"},"redacted_description":{"text":"runs"},"is_sold":true,'
+        '{"id":"222","is_sold":false}'
+    )
+
+    assert fb_scraper.parse_is_sold(page, "111")
+    assert not fb_scraper.parse_is_sold(page, "222")
+    assert not fb_scraper.parse_is_sold(page, "333")  # deleted ad: no flag
+    assert fb_scraper.ad_is_sold(
+        "https://www.facebook.com/marketplace/item/111/", fetch=lambda _: page
+    )

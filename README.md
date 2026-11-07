@@ -325,7 +325,9 @@ them not on Kijiji or AutoTrader.
 Logged out, a search returns only ~12 cards (scrolling loads no more), so each one is a sample.
 Searches alternate between the slug and its spaced form (`klx140`, then `klx 140`: they shared
 only 7 of 12 cards, 2026-10-27), and a Facebook ad counts as gone after 7 days unseen
-(`storage.SAMPLED_SOURCE_HOURS`), not the 2 days Kijiji and AutoTrader get.
+(`storage.SAMPLED_SOURCE_HOURS`), not the 2 days Kijiji and AutoTrader get. An ad that misses a
+day of searches gets its page opened (up to 3 a run, each every 48h): one marked sold leaves
+the dashboard then, not a week later.
 
 **Setup** (in the checkout that runs it; the prod clone for cron):
 
