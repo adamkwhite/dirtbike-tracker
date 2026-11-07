@@ -190,16 +190,19 @@ _SOLD_RE = re.compile(r'"is_sold":(true|false)')
 
 def parse_is_sold(html: str, ad_id: str) -> bool:
     """Does the ad page mark this ad sold? The page also embeds other ads (similar items),
-    each with its own is_sold, after it: the first flag after this ad's id is its own. A
-    deleted ad shows no flag and reads as not sold; the 7-day unseen wait still ages it out."""
+    each with its own is_sold, after it: the first flag after this ad's id is its own."""
     at = html.find(f'"id":"{ad_id}"')
     flag = _SOLD_RE.search(html, at) if at >= 0 else None
     return bool(flag and flag.group(1) == "true")
 
 
-def ad_is_sold(url: str, fetch: Fetch = fetch_search_page) -> bool:
-    """The SoldChecker for Facebook: render the ad page, read its sold flag."""
-    return parse_is_sold(fetch(url), url.rstrip("/").rsplit("/", 1)[-1])
+def ad_is_sold(url: str, fetch: Fetch = fetch_search_page) -> bool | None:
+    """The SoldChecker for Facebook: render the ad page, read its sold flag. None when the page
+    doesn't hold the ad: logged out, FB shows its login wall for a deleted ad, and also when it
+    blocks us, so details.check_sold decides which from the other ads in the batch."""
+    ad_id = url.rstrip("/").rsplit("/", 1)[-1]
+    html = fetch(url)
+    return parse_is_sold(html, ad_id) if f'"id":"{ad_id}"' in html else None
 
 
 def login(profile_dir: Path = PROFILE_DIR) -> None:
