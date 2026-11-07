@@ -323,3 +323,14 @@ def test_sold_flag_is_the_ads_own_not_a_similar_items() -> None:
     assert fb_scraper.ad_is_sold(
         "https://www.facebook.com/marketplace/item/111/", fetch=lambda _: page
     )
+
+
+def test_an_ad_page_without_the_ad_reads_as_unknown() -> None:
+    login_wall = '<link rel="canonical" href="https://www.facebook.com/login">'
+
+    assert (
+        fb_scraper.ad_is_sold(
+            "https://www.facebook.com/marketplace/item/9/", fetch=lambda _: login_wall
+        )
+        is None
+    )

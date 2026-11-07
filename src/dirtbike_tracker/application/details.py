@@ -56,15 +56,24 @@ def fetch_post_dates(fetchers: Mapping[str, PostDateFetcher], store: ListingStor
 
 def check_sold(checkers: Mapping[str, SoldChecker], store: ListingStore) -> int:
     """Open the ad page of shown listings that dropped out of their searches; a page saying
-    sold takes the bike off now instead of after the source's unseen wait. Returns how many
-    were sold. A fetch that raises stops the batch and marks nothing, as in fetch_post_dates.
+    sold, or gone, takes the bike off now instead of after the source's unseen wait. Returns
+    how many came off. A page without its ad (None) counts as gone only when another page in
+    the batch rendered: every page missing its ad means we're blocked, so nothing is marked.
+    A fetch that raises stops the batch, as in fetch_post_dates.
     """
-    sold = 0
+    # ponytail: a batch holding only gone ads reads as blocked; they wait for a mixed batch
+    # or the source's unseen wait
+    checked = []
     for listing in store.unseen_listings(checkers, SOLD_CHECK_BUDGET):
         try:
-            is_sold = checkers[listing["source"]](listing["url"])
+            checked.append((listing["id"], checkers[listing["source"]](listing["url"])))
         except Exception:  # noqa: BLE001  a browser crash, timeout or block; or no Playwright
             break
-        store.set_sold_checked(listing["id"], is_sold)
-        sold += is_sold
-    return sold
+    rendered = any(state is not None for _, state in checked)
+    off = 0
+    for listing_id, state in checked:
+        if state is None and not rendered:
+            continue
+        store.set_sold_checked(listing_id, state is not False)
+        off += state is not False
+    return off

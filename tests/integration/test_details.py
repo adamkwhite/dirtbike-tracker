@@ -250,3 +250,19 @@ def test_a_failed_sold_check_stops_and_retries_next_run(db: Path) -> None:
     assert check_sold({"facebook": blocked}, store) == 0
     assert check_sold({"facebook": lambda _: True}, store) == 1
     assert check_sold({}, store) == 0
+
+
+def test_an_ad_missing_from_its_page_is_gone_only_if_other_pages_rendered(db: Path) -> None:
+    store = SqliteStore(db)
+    upsert_listings([_listing(n, 2000, source="facebook") for n in ("deleted", "live")], db_path=db)
+    with connect(db) as conn:
+        conn.execute("UPDATE listings SET last_seen=datetime('now','-2 days')")
+
+    assert check_sold({"facebook": lambda _: None}, store) == 0  # all walled: blocked
+    assert {"deleted", "live"} <= _by_id(db).keys()
+
+    def mixed(url: str) -> bool | None:
+        return None if url.endswith("deleted") else False
+
+    assert check_sold({"facebook": mixed}, store) == 1
+    assert "deleted" not in _by_id(db) and "live" in _by_id(db)

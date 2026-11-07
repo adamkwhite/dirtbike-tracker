@@ -43,7 +43,7 @@ AdDetailFetcher = Callable[[str], str | None]  # ad url -> description, None if 
 # ad url -> post time (UTC ISO, like Kijiji's activationDate), None if the ad shows none;
 # raises if the fetch failed
 PostDateFetcher = Callable[[str], str | None]
-SoldChecker = Callable[[str], bool]  # an ad URL -> does its page say sold
+SoldChecker = Callable[[str], bool | None]  # ad URL -> sold?; None: the page lacks the ad
 
 
 # the tracked model slugs -> that dealer's new units of them. Raises if the dealer is down
