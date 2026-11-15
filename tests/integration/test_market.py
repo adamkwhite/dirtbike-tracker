@@ -142,6 +142,25 @@ def test_facebook_ads_age_out_after_a_week_not_two_days(tmp_path: Path) -> None:
     assert _row(db, "fb-9d") == (0, None)  # gone from samples isn't sold: its ad page says that
 
 
+def test_snapshot_links_a_repost_to_the_gone_ads_before_it(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "first", 2995, days_ago=12, is_active=0)
+    _add(db, "second", 2800, days_ago=6, is_active=0)
+    _add(db, "now", 2500, days_ago=1)
+    _add(db, "other-town", 2600, days_ago=1)
+    _add(db, "pricier-bike", 6000, days_ago=8, is_active=0)  # same town, not this bike
+    with connect(db) as conn:
+        conn.execute("UPDATE listings SET year=1997, location='Smiths Falls'")
+        conn.execute("UPDATE listings SET location='Ottawa' WHERE external_id='other-town'")
+
+    rows = {x["external_id"]: x for x in snapshot("crf150f", SqliteStore(db)).listings}
+
+    assert rows["now"]["repost"]["count"] == 2
+    assert rows["now"]["repost"]["first_price"] == 2995
+    assert rows["other-town"]["repost"] is None
+
+
 def test_migration_clears_facebook_sales_no_ad_page_confirmed(tmp_path: Path) -> None:
     db = tmp_path / "listings.db"
     init_db(db)

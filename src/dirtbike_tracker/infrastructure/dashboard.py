@@ -97,6 +97,13 @@ def _title_tags(listing: dict) -> str:
         tags = f' <span class="contacted" title="{_esc(label)}">{_esc(days)}</span>'
     if listing.get("seller_type") == "dealer":
         tags += ' <span class="tag-dealer">dealer</span>'
+    if repost := listing.get("repost"):
+        since = repost["since"][5:10]
+        tip = f"Reposted {repost['count']}×: first listed {repost['since'][:10]}"
+        if repost["first_price"]:
+            tip += f" at ${int(repost['first_price']):,}"
+            since += f", ${int(repost['first_price']):,}"
+        tags += f' <span class="tag-dealer" title="{_esc(tip)}">↻{repost["count"]} since {_esc(since)}</span>'
     if listing.get("id") is not None:
         tags += f' <button class="hide" data-id="{listing["id"]}" title="Hide">✕</button>'
     return tags

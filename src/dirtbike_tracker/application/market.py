@@ -25,11 +25,13 @@ def snapshot(slug: str, store: ListingStore, goal: str = "project") -> MarketSna
         stats |= project_stats(market)
     sellers = {"private"} if seller_basis == "private" else None
     drops = store.price_drops(slug)
+    reposts = store.reposts(slug)
     listings = [
         {
             **listing,
             "description": listing.get("full_description") or listing["description"],
             "price_drop_from": drops.get(listing["id"]),
+            "repost": reposts.get(listing["id"]),
         }
         for listing in store.active_listings(slug)
     ]
