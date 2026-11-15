@@ -258,6 +258,7 @@ data/listings.db
 data/listings.db-journal
 data/listings.db-wal
 data/listings.db-shm
+data/watch.lock
 
 # Notification state (per-user)
 data/state/
