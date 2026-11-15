@@ -42,7 +42,7 @@ listings:
      | first_seen | last_seen | is_active | is_primary
      | year | km | image_url
      | seller_type        -- private / dealer (#81); private-only median once there are enough
-     | sold_at            -- likely sold: gone from a healthy source for 72h
+     | sold_at            -- likely sold: gone from a healthy source for 72h; FB only when its ad page says sold
      | dismissed_at       -- `dirtbike dismiss`: junk, out of lists and the median; upsert never clears it
      | hidden_at, hide_note -- dashboard ✕: out of alerts and active lists, still in the median
      | notes              -- dashboard Notes column

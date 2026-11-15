@@ -56,8 +56,8 @@ def fetch_post_dates(fetchers: Mapping[str, PostDateFetcher], store: ListingStor
 
 def check_sold(checkers: Mapping[str, SoldChecker], store: ListingStore) -> int:
     """Open the ad page of shown listings that dropped out of their searches; a page saying
-    sold, or gone, takes the bike off now instead of after the source's unseen wait. Returns
-    how many came off. A page without its ad (None) counts as gone only when another page in
+    sold, or gone, takes the bike off now instead of after the source's unseen wait; only sold
+    counts as a sale. Returns how many came off. A page without its ad (None) counts as gone only when another page in
     the batch rendered: every page missing its ad means we're blocked, so nothing is marked.
     A fetch that raises stops the batch, as in fetch_post_dates.
     """
@@ -74,6 +74,6 @@ def check_sold(checkers: Mapping[str, SoldChecker], store: ListingStore) -> int:
     for listing_id, state in checked:
         if state is None and not rendered:
             continue
-        store.set_sold_checked(listing_id, state is not False)
+        store.set_sold_checked(listing_id, state)  # None here: deleted, off but not sold
         off += state is not False
     return off

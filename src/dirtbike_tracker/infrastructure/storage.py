@@ -114,6 +114,15 @@ def _migrate_data(db_path: Path | None = None) -> None:
         if version < 1:
             _refingerprint_dealers(conn)
             conn.execute("PRAGMA user_version = 1")
+        if version < 2:
+            # a sampled source's ad aged out unseen isn't a sale: half the FB ads it called
+            # sold were still listed (checked 2026-11-07); only an ad page says sold now
+            conn.execute(
+                f"UPDATE listings SET sold_at=NULL WHERE sold_checked_at IS NULL"
+                f" AND source IN ({','.join('?' * len(SAMPLED_SOURCE_HOURS))})",
+                tuple(SAMPLED_SOURCE_HOURS),
+            )
+            conn.execute("PRAGMA user_version = 2")
 
 
 def _refingerprint_dealers(conn: sqlite3.Connection) -> None:
@@ -343,7 +352,8 @@ def mark_stale(
 
     Unseen for `cutoff_hours` -> inactive; for `sold_after_hours` -> likely sold
     (sold_at = last_seen, the best estimate of when it went). A SAMPLED_SOURCE_HOURS
-    source waits its own hours instead, with the same gap before sold. Pass only sources
+    source waits its own hours, and is never called sold here: an ad missing from a sample
+    is often still listed, so only its ad page (set_sold_checked) says sold. Pass only sources
     that returned results this run: a broken scraper sees nothing, and would
     otherwise tag its whole inventory as sold.
     """
@@ -360,7 +370,7 @@ def mark_stale(
     with connect(db_path) as conn:
         for source in sources:
             inactive = SAMPLED_SOURCE_HOURS.get(source, cutoff_hours)
-            sold = inactive + sold_after_hours - cutoff_hours
+            sold = sold_after_hours
             cursor = conn.execute(
                 f"""
                 UPDATE listings SET is_active=0
@@ -370,6 +380,8 @@ def mark_stale(
                 (source, *models, inactive / 24.0),
             )
             marked += cursor.rowcount
+            if source in SAMPLED_SOURCE_HOURS:
+                continue
             conn.execute(
                 f"""
                 UPDATE listings SET sold_at=last_seen
@@ -645,15 +657,17 @@ def unseen_listings(sources: Iterable[str], limit: int, db_path: Path | None = N
     return [dict(r) for r in rows]
 
 
-def set_sold_checked(listing_id: int, sold: bool, db_path: Path | None = None) -> None:
-    """Record a sold check of a listing's ad page; a sold one leaves the active lists now."""
+def set_sold_checked(listing_id: int, sold: bool | None, db_path: Path | None = None) -> None:
+    """Record a sold check of a listing's ad page: True sold, None gone (deleted: off the
+    active lists, but not a sale), False still listed."""
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
     with connect(db_path) as conn:
         conn.execute("UPDATE listings SET sold_checked_at=? WHERE id=?", (now, listing_id))
+        if sold is not False:
+            conn.execute("UPDATE listings SET is_active=0 WHERE id=?", (listing_id,))
         if sold:
             conn.execute(
-                "UPDATE listings SET is_active=0, sold_at=COALESCE(sold_at, ?) WHERE id=?",
-                (now, listing_id),
+                "UPDATE listings SET sold_at=COALESCE(sold_at, ?) WHERE id=?", (now, listing_id)
             )
 
 
@@ -757,5 +771,5 @@ class SqliteStore:
     def unseen_listings(self, sources: Iterable[str], limit: int) -> list[dict]:
         return unseen_listings(sources, limit, db_path=self.db_path)
 
-    def set_sold_checked(self, listing_id: int, sold: bool) -> None:
+    def set_sold_checked(self, listing_id: int, sold: bool | None) -> None:
         set_sold_checked(listing_id, sold, db_path=self.db_path)

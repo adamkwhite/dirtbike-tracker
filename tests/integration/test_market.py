@@ -138,8 +138,25 @@ def test_facebook_ads_age_out_after_a_week_not_two_days(tmp_path: Path) -> None:
     assert mark_stale(["facebook"], ["crf150f"], db_path=db) == 2
 
     assert _row(db, "fb-4d") == (1, None)
-    assert _row(db, "fb-7d") == (0, None)  # inactive, not yet "sold"
-    assert _row(db, "fb-9d")[1] is not None
+    assert _row(db, "fb-7d") == (0, None)
+    assert _row(db, "fb-9d") == (0, None)  # gone from samples isn't sold: its ad page says that
+
+
+def test_migration_clears_facebook_sales_no_ad_page_confirmed(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    for ext_id, source in (("fb-aged", "facebook"), ("fb-checked", "facebook"), ("kj", "kijiji")):
+        _add(db, ext_id, 2500, days_ago=9, source=source)
+    with connect(db) as conn:
+        conn.execute("UPDATE listings SET is_active=0, sold_at=last_seen")
+        conn.execute("UPDATE listings SET sold_checked_at=last_seen WHERE external_id='fb-checked'")
+        conn.execute("PRAGMA user_version = 1")
+
+    init_db(db)
+
+    assert _row(db, "fb-aged") == (0, None)
+    assert _row(db, "fb-checked")[1] is not None
+    assert _row(db, "kj")[1] is not None
 
 
 def test_mark_stale_leaves_models_another_watchlist_scrapes(tmp_path: Path) -> None:

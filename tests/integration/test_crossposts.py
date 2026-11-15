@@ -85,8 +85,8 @@ def test_migration_demotes_dealer_cross_posts_already_stored(tmp_path: Path) -> 
         conn.execute("PRAGMA user_version = 0")
 
     init_db(db)
-    init_db(db)  # runs once: user_version is now 1
+    init_db(db)  # runs once
 
     assert [x["external_id"] for x in active_listings("speedtriple", db_path=db)] == ["1"]
     with closing(sqlite3.connect(db)) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
