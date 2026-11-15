@@ -50,6 +50,11 @@ BACKUP_LINE="55 23 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRT
 WEEKLY_BACKUP_LINE="58 23 * * 0 cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup --slot weekly 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"
 # Site-drift check (#28), daily before the first watch: alerts if a parser stopped reading a site
 DRIFT_LINE="0 5 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} drift 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/drift.log ${MARKER}"
+# The laptop sleeps through the nightly lines (2026-11-06, 11-12): retry hourly while awake, a
+# no-op once the last run is younger than --if-older (hours; weekly 8 days). Offset past :00/:20.
+BACKUP_CATCHUP_LINE="10 8-22 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup --if-older 26 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"
+WEEKLY_CATCHUP_LINE="12 8-22 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} backup --slot weekly --if-older 194 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/backup.log ${MARKER}"
+DRIFT_CATCHUP_LINE="14 8-22 * * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${NTFY_TOPIC:-} ${DIRTBIKE} drift --if-older 26 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/drift.log ${MARKER}"
 # A friend's watchlist (config/friend.yml) to his own ntfy topic, only when FRIEND_NTFY_TOPIC is
 # set. Every third day of the month at 9:10 (his short list rarely changes); offset 10 min so
 # it never overlaps the main watch on the shared DB.
@@ -58,7 +63,7 @@ if [[ -n "${FRIEND_NTFY_TOPIC:-}" ]]; then
   FRIEND_LINE="10 9 */3 * * cd ${PROJECT_ROOT} && NTFY_TOPIC=${FRIEND_NTFY_TOPIC} flock -w 900 ${LOCK} ${DIRTBIKE} --config config/friend.yml watch 2>&1 ${TS_PREFIX} >> ${LOG_DIR}/watch-friend.log ${MARKER}"
 fi
 
-(crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}"; echo "${BACKUP_LINE}"; echo "${WEEKLY_BACKUP_LINE}"; echo "${DRIFT_LINE}"; if [[ -n "${FRIEND_LINE}" ]]; then echo "${FRIEND_LINE}"; fi) | crontab -
+(crontab -l 2>/dev/null | grep -v "${MARKER}"; echo "${CRON_LINE}"; echo "${REPORT_LINE}"; echo "${BACKUP_LINE}"; echo "${WEEKLY_BACKUP_LINE}"; echo "${DRIFT_LINE}"; echo "${BACKUP_CATCHUP_LINE}"; echo "${WEEKLY_CATCHUP_LINE}"; echo "${DRIFT_CATCHUP_LINE}"; if [[ -n "${FRIEND_LINE}" ]]; then echo "${FRIEND_LINE}"; fi) | crontab -
 
 echo "Installed cron entries:"
 crontab -l | grep "${MARKER}"

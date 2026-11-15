@@ -12,6 +12,7 @@ Usage:
 
 import platform
 import subprocess  # nosec B404 - fixed argv, no shell
+import time
 import webbrowser
 from collections import Counter
 from dataclasses import replace
@@ -504,11 +505,37 @@ def serve(app: App, port: int):
     server.serve_forever()
 
 
+def _catch_up(app: App, job: str, hours: float | None) -> bool:
+    """True if `job` should run now. With --if-older, only when its last run (the mtime of a
+    dotfile in the state dir, so the backup bundle skips it) is older than `hours`: cron retries
+    hourly after a night the laptop slept through, and exits quietly once caught up."""
+    marker = app.state_dir / f".ran-{job}"
+    if hours is None or not marker.exists():
+        return True
+    return time.time() - marker.stat().st_mtime >= hours * 3600
+
+
+def _mark_ran(app: App, job: str) -> None:
+    app.state_dir.mkdir(parents=True, exist_ok=True)
+    (app.state_dir / f".ran-{job}").touch()
+
+
+IF_OLDER = click.option(
+    "--if-older",
+    type=float,
+    metavar="HOURS",
+    help="Skip unless the last run is older than HOURS (cron catch-up after a missed night)",
+)
+
+
 @cli.command()
 @click.option("--slot", type=click.Choice(["nightly", "weekly"]), default="nightly")
+@IF_OLDER
 @click.pass_obj
-def backup(app: App, slot: str):
+def backup(app: App, slot: str, if_older: float | None):
     """Upload a DB + state snapshot to Google Drive (rclone `jobbackup` remote)."""
+    if not _catch_up(app, f"backup-{slot}", if_older):
+        return
     try:
         rows, size = backup_offsite(slot, state_dir=app.state_dir)
     except BackupError as exc:
@@ -517,6 +544,7 @@ def backup(app: App, slot: str):
             title=f"dirtbike backup FAILED ({slot})", body=str(exc), priority=4, tags=["warning"]
         )
         raise SystemExit(1) from exc
+    _mark_ran(app, f"backup-{slot}")
     click.echo(f"Backup OK ({slot}): {rows} listings, {size} bytes")
 
 
@@ -529,11 +557,15 @@ def backup(app: App, slot: str):
 )
 @click.option("--replay", is_flag=True, help="Re-check the existing recordings, don't re-record")
 @click.option("--notify/--no-notify", default=True, help="Push an ntfy alert on problems")
+@IF_OLDER
 @click.pass_obj
-def drift(app: App, out_dir: Path | None, replay: bool, notify: bool):
+def drift(app: App, out_dir: Path | None, replay: bool, notify: bool, if_older: float | None):
     """Site-drift check: record live Kijiji/AutoTrader pages and one dealer per platform, verify our parsers still read them."""
+    if not _catch_up(app, "drift", if_older):
+        return
     out = out_dir or RECORDED_DIR
     found = drift_check.run(out, replay=replay, sources=app.sources)
+    _mark_ran(app, "drift")  # a found problem is a finished check: don't re-alert hourly
     if not found:
         click.echo(f"Drift check OK ({out})")
         return
