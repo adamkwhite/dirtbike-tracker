@@ -201,6 +201,10 @@ The main `dashboard.html` has a tab for each watchlist: **Dirt** (the `project` 
 whenever his watch runs). `dirtbike --config config/friend.yml dashboard --open` shows his bikes alone. Each tab's
 make buttons (Honda, Yamaha, ...; every `models.yml` entry sets `make`) show only that brand's bikes. Its cc buttons (125, 150, 250, ...; an entry's `cc` is its size class) do the same by engine size, together with the make.
 
+A private ad that looks like a repost (same source, model, year and town as ads now gone, at a
+similar price) is tagged `↻3 since 11-02, $2,800`: reposted 3 times, first listed 11-02 at
+$2,800. A seller deleting and reposting a bike that won't sell is a seller ready to deal.
+
 ### Hiding bikes on the dashboard
 
 Each row has a ✕. It asks for an optional note ("too far", "parts ad"), then moves the

@@ -554,6 +554,43 @@ def price_drops(model_slug: str, db_path: Path | None = None) -> dict[int, float
     return {r["listing_id"]: r["prev"] for r in rows}
 
 
+def reposts(model_slug: str, db_path: Path | None = None) -> dict[int, dict]:
+    """{active listing id: {"count", "since", "first_price"}} for private ads that look like a
+    repost of earlier ads now gone: same source, model, year and town, price within 0.6-1.67x,
+    the earlier ad last seen no later than a day after this one appeared (sellers delete and
+    repost to get back on top). `since`/`first_price` are the earliest ad's first sighting.
+    ponytail: a heuristic; two like bikes in one big town, one sold before the other was
+    listed, read as a repost. Cross-source reposts (Kijiji vs FB names the town differently)
+    aren't linked."""
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT a.id, e.first_seen,
+                   COALESCE((SELECT price FROM price_history WHERE listing_id=e.id
+                             ORDER BY observed_at LIMIT 1), e.price) AS first_price
+            FROM listings a
+            JOIN listing_models ma ON ma.listing_id=a.id AND ma.model_slug=?
+            JOIN listings e ON e.source=a.source AND e.year=a.year AND e.location=a.location
+                           AND e.id!=a.id AND e.is_active=0 AND e.is_primary=1
+                           AND e.dismissed_at IS NULL
+            JOIN listing_models me ON me.listing_id=e.id AND me.model_slug=ma.model_slug
+            WHERE a.is_active=1 AND a.is_primary=1 AND a.year IS NOT NULL AND a.price > 0
+              AND COALESCE(a.seller_type, '') != 'dealer'
+              AND e.price BETWEEN a.price * 0.6 AND a.price / 0.6
+              AND julianday(e.last_seen) <= julianday(a.first_seen) + 1
+            ORDER BY e.first_seen
+            """,
+            (model_slug,),
+        ).fetchall()
+    found: dict[int, dict] = {}
+    for r in rows:
+        if r["id"] in found:
+            found[r["id"]]["count"] += 1
+        else:
+            found[r["id"]] = {"count": 1, "since": r["first_seen"], "first_price": r["first_price"]}
+    return found
+
+
 def save_full_description(listing_id: int, text: str, db_path: Path | None = None) -> None:
     """Store the full ad text. upsert never touches it, so card snippets can't clobber it."""
     stamp = datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -734,6 +771,9 @@ class SqliteStore:
 
     def price_drops(self, model_slug: str) -> dict[int, float]:
         return price_drops(model_slug, db_path=self.db_path)
+
+    def reposts(self, model_slug: str) -> dict[int, dict]:
+        return reposts(model_slug, db_path=self.db_path)
 
     def price_timelines(self, model_slug: str) -> list[dict]:
         return price_timelines(model_slug, db_path=self.db_path)

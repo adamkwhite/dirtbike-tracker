@@ -411,3 +411,15 @@ def test_location_hover_shows_post_date_and_first_seen() -> None:
 
     assert 'title="Posted 2026-09-11, first seen 2026-10-13"' in both
     assert 'title="First seen 2026-10-13"' in seen_only
+
+
+def test_a_repost_shows_how_long_and_from_what_price(snap: MarketSnapshot) -> None:
+    row = {
+        **snap.listings[0],
+        "repost": {"count": 3, "since": "2026-11-02T18:04:54", "first_price": 2995.0},
+    }
+
+    page = render_dashboard({"Dirt": [replace(snap, listings=[row])]})
+
+    assert "↻3 since 11-02, $2,995" in page
+    assert "Reposted 3×: first listed 2026-11-02 at $2,995" in page
