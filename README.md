@@ -328,7 +328,8 @@ only 7 of 12 cards, 2026-10-27), and a Facebook ad counts as gone after 7 days u
 (`storage.SAMPLED_SOURCE_HOURS`), not the 2 days Kijiji and AutoTrader get. An ad that misses a
 day of searches gets its page opened (up to 3 a run, each every 48h): one marked sold, or
 deleted (logged out, FB shows its login wall instead of the ad, while the other ads in the run
-load), leaves the dashboard then, not a week later.
+load), leaves the dashboard then, not a week later. Only an ad marked sold lands in Recently
+sold: a deleted or aged-out Facebook ad may just have been reposted, or still be listed.
 
 **Setup** (in the checkout that runs it; the prod clone for cron):
 

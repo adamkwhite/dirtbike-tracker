@@ -266,3 +266,8 @@ def test_an_ad_missing_from_its_page_is_gone_only_if_other_pages_rendered(db: Pa
 
     assert check_sold({"facebook": mixed}, store) == 1
     assert "deleted" not in _by_id(db) and "live" in _by_id(db)
+    with connect(db) as conn:  # deleted isn't a sale
+        assert (
+            conn.execute("SELECT sold_at FROM listings WHERE external_id='deleted'").fetchone()[0]
+            is None
+        )
