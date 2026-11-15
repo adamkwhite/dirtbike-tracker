@@ -167,7 +167,7 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 ~/Code/dirtbike-tracker-prod/scripts/install_cron.sh --remove
 ```
 
-`install_cron.sh` installs five jobs (Ontario time):
+`install_cron.sh` installs the jobs (Ontario time):
 
 | When | Job | Log |
 |---|---|---|
@@ -175,6 +175,11 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 | 23:30 daily | `dirtbike report --model crf150f --write` | `logs/report.log` |
 | 23:55 daily, 23:58 Sundays | `dirtbike backup` (nightly / `--slot weekly`) | `logs/backup.log` |
 | 05:00 daily | `dirtbike drift` (see Site drift) | `logs/drift.log` |
+| :10, :12, :14 hourly, 8:00–22:00 | catch-up: `backup --if-older 26`, `backup --slot weekly --if-older 194`, `drift --if-older 26` | same logs |
+
+The catch-up lines cover a laptop asleep at the nightly times: `--if-older HOURS` exits quietly
+unless the job's last run (`data/state/.ran-<job>`, touched on success; for drift, on any
+completed check) is older than HOURS, so nothing runs twice when nothing was missed.
 
 Logs are in `~/Code/dirtbike-tracker-prod/logs/` (timestamped if `moreutils` is installed). After
 changing the schedule in `install_cron.sh`, re-run it from the prod clone with the same
