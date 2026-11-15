@@ -149,6 +149,10 @@ command run in dev (which runs `init_db()` and its schema migrations) never touc
 work on fresh data in dev, copy prod's over between cron ticks:
 `cp ~/Code/dirtbike-tracker-prod/data/listings.db ~/Code/dirtbike-tracker/data/`.
 
+Each watch runs under `flock` on `data/watch.lock`: a run frozen when the machine sleeps
+resumes on wake, and the next tick then skips instead of running beside it (the friend's
+watch waits up to 15 min for the lock).
+
 ```bash
 # one-time setup
 git clone https://github.com/adamkwhite/dirtbike-tracker.git ~/Code/dirtbike-tracker-prod
