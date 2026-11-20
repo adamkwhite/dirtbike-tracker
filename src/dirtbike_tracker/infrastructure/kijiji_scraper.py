@@ -19,10 +19,13 @@ from bs4 import BeautifulSoup, Tag
 from ..domain.listing import Listing
 from ..domain.scoring import is_dealer_new, parse_km, parse_year
 
+# ponytail: hardcoded current-browser strings, shared by every source. They age: a CDN bot rule
+# 403'd Chrome/120 by 2026-11 (Shop a Ride, #152). Bump the major to the current Chrome's when a
+# source starts 403ing; derive it at runtime only if this keeps recurring.
 USER_AGENTS = [
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
 ]
 
 BASE_URL = "https://www.kijiji.ca"
