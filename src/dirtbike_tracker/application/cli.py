@@ -12,6 +12,7 @@ Usage:
 
 import platform
 import subprocess  # nosec B404 - fixed argv, no shell
+import time
 import webbrowser
 from collections import Counter
 from dataclasses import replace
@@ -26,6 +27,7 @@ from ..domain.listing import Listing
 from ..domain.scoring import MarketSnapshot, project_line, specs_label, vs_label
 from ..infrastructure import drift as drift_check
 from ..infrastructure import fb_scraper, notifier
+from ..infrastructure.autotrader_scraper import new_units as autotrader_new_units
 from ..infrastructure.autotrader_scraper import scrape_model as scrape_autotrader
 from ..infrastructure.backup import BackupError, backup_offsite
 from ..infrastructure.dashboard import write_dashboard
@@ -38,7 +40,7 @@ from ..infrastructure.kijiji_scraper import scrape_model as scrape_kijiji
 from ..infrastructure.reporter import contact_label, render_report, write_report
 from ..infrastructure.shoparide import ShopARideSource
 from ..infrastructure.storage import SqliteStore, init_db
-from .details import fetch_post_dates
+from .details import check_sold, fetch_post_dates
 from .markdowns import check_markdowns, markdown_rows
 from .market import model_goal
 from .ports import App, Notifier
@@ -200,8 +202,11 @@ def build_app(config_path: Path | None = None) -> App:
             name: d.new_units
             for name, d in dealers.items()
             if specs[name].get("new_stock") and isinstance(d, FocusSource)
-        },
+        }
+        # every Ontario dealer's new units of the models in NEW_STOCK_CATEGORIES
+        | {"autotrader": autotrader_new_units},
         post_dates={"facebook": fb_scraper.ad_post_date},  # FB's search cards carry no date
+        sold_checks={"facebook": fb_scraper.ad_is_sold},  # FB ads otherwise wait 7 days unseen
         dashboard_tabs=tabs,
     )
 
@@ -414,6 +419,8 @@ def watch(app: App, region: str, notify: bool, group: str):
 
     if dated := fetch_post_dates(app.post_dates, app.store):
         click.echo(f"Post dates read: {dated}")
+    if sold := check_sold(app.sold_checks, app.store):
+        click.echo(f"Sold (ad page): {sold}")
     seen = sources_seen(app, source_counts)
     app.store.mark_stale([s for s, n in seen.items() if n], [t["slug"] for t in all_targets])
     record_notified(app, already_notified | newly_notified)
@@ -502,11 +509,37 @@ def serve(app: App, port: int):
     server.serve_forever()
 
 
+def _catch_up(app: App, job: str, hours: float | None) -> bool:
+    """True if `job` should run now. With --if-older, only when its last run (the mtime of a
+    dotfile in the state dir, so the backup bundle skips it) is older than `hours`: cron retries
+    hourly after a night the laptop slept through, and exits quietly once caught up."""
+    marker = app.state_dir / f".ran-{job}"
+    if hours is None or not marker.exists():
+        return True
+    return time.time() - marker.stat().st_mtime >= hours * 3600
+
+
+def _mark_ran(app: App, job: str) -> None:
+    app.state_dir.mkdir(parents=True, exist_ok=True)
+    (app.state_dir / f".ran-{job}").touch()
+
+
+IF_OLDER = click.option(
+    "--if-older",
+    type=float,
+    metavar="HOURS",
+    help="Skip unless the last run is older than HOURS (cron catch-up after a missed night)",
+)
+
+
 @cli.command()
 @click.option("--slot", type=click.Choice(["nightly", "weekly"]), default="nightly")
+@IF_OLDER
 @click.pass_obj
-def backup(app: App, slot: str):
+def backup(app: App, slot: str, if_older: float | None):
     """Upload a DB + state snapshot to Google Drive (rclone `jobbackup` remote)."""
+    if not _catch_up(app, f"backup-{slot}", if_older):
+        return
     try:
         rows, size = backup_offsite(slot, state_dir=app.state_dir)
     except BackupError as exc:
@@ -515,6 +548,7 @@ def backup(app: App, slot: str):
             title=f"dirtbike backup FAILED ({slot})", body=str(exc), priority=4, tags=["warning"]
         )
         raise SystemExit(1) from exc
+    _mark_ran(app, f"backup-{slot}")
     click.echo(f"Backup OK ({slot}): {rows} listings, {size} bytes")
 
 
@@ -527,11 +561,15 @@ def backup(app: App, slot: str):
 )
 @click.option("--replay", is_flag=True, help="Re-check the existing recordings, don't re-record")
 @click.option("--notify/--no-notify", default=True, help="Push an ntfy alert on problems")
+@IF_OLDER
 @click.pass_obj
-def drift(app: App, out_dir: Path | None, replay: bool, notify: bool):
+def drift(app: App, out_dir: Path | None, replay: bool, notify: bool, if_older: float | None):
     """Site-drift check: record live Kijiji/AutoTrader pages and one dealer per platform, verify our parsers still read them."""
+    if not _catch_up(app, "drift", if_older):
+        return
     out = out_dir or RECORDED_DIR
     found = drift_check.run(out, replay=replay, sources=app.sources)
+    _mark_ran(app, "drift")  # a found problem is a finished check: don't re-alert hourly
     if not found:
         click.echo(f"Drift check OK ({out})")
         return

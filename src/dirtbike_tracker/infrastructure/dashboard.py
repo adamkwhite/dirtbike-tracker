@@ -97,6 +97,13 @@ def _title_tags(listing: dict) -> str:
         tags = f' <span class="contacted" title="{_esc(label)}">{_esc(days)}</span>'
     if listing.get("seller_type") == "dealer":
         tags += ' <span class="tag-dealer">dealer</span>'
+    if repost := listing.get("repost"):
+        since = repost["since"][5:10]
+        tip = f"Reposted {repost['count']}×: first listed {repost['since'][:10]}"
+        if repost["first_price"]:
+            tip += f" at ${int(repost['first_price']):,}"
+            since += f", ${int(repost['first_price']):,}"
+        tags += f' <span class="tag-dealer" title="{_esc(tip)}">↻{repost["count"]} since {_esc(since)}</span>'
     if listing.get("id") is not None:
         tags += f' <button class="hide" data-id="{listing["id"]}" title="Hide">✕</button>'
     return tags
@@ -835,12 +842,20 @@ def render_dashboard(
     }});
 
     // Click a header to sort its table: by each cell's data-v when set, else its text;
-    // empty values sort last.
-    document.querySelectorAll("table.sortable th").forEach((th, col) => {{
+    // empty values sort last. Each table's sort is kept for the session, so a hide's reload
+    // (or F5) re-sorts it. ponytail: keyed by table position; a rebuild adding a table can
+    // shift a saved sort onto its neighbour for one session.
+    let sorts = {{}};
+    try {{ sorts = JSON.parse(sessionStorage.getItem("sorts")) || {{}}; }} catch (e) {{}}
+    const tables = [...document.querySelectorAll("table.sortable")];
+    tables.forEach((table, t) => table.querySelectorAll("th").forEach((th, col) => {{
       th.addEventListener("click", () => {{
-        const body = th.closest("table").tBodies[0];
+        const body = table.tBodies[0];
         const asc = th.dataset.dir !== "asc";
+        table.querySelectorAll("th").forEach((x) => delete x.dataset.dir);
         th.dataset.dir = asc ? "asc" : "desc";
+        sorts[t] = [col, asc];
+        try {{ sessionStorage.setItem("sorts", JSON.stringify(sorts)); }} catch (e) {{}}
         const key = (row) => {{
           const cell = row.cells[col];
           const v = cell.dataset.v ?? cell.textContent.trim().toLowerCase();
@@ -854,6 +869,12 @@ def render_dashboard(
           }})
           .forEach((row) => body.appendChild(row));
       }});
+    }}));
+    Object.entries(sorts).forEach(([t, [col, asc]]) => {{
+      const th = tables[t]?.querySelectorAll("th")[col];
+      if (!th) return;
+      if (!asc) th.dataset.dir = "asc";  // a click flips asc to desc
+      th.click();
     }});
   </script>
 </body>

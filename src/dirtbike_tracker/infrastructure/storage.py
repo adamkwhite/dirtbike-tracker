@@ -114,6 +114,15 @@ def _migrate_data(db_path: Path | None = None) -> None:
         if version < 1:
             _refingerprint_dealers(conn)
             conn.execute("PRAGMA user_version = 1")
+        if version < 2:
+            # a sampled source's ad aged out unseen isn't a sale: half the FB ads it called
+            # sold were still listed (checked 2026-11-07); only an ad page says sold now
+            conn.execute(
+                f"UPDATE listings SET sold_at=NULL WHERE sold_checked_at IS NULL"
+                f" AND source IN ({','.join('?' * len(SAMPLED_SOURCE_HOURS))})",
+                tuple(SAMPLED_SOURCE_HOURS),
+            )
+            conn.execute("PRAGMA user_version = 2")
 
 
 def _refingerprint_dealers(conn: sqlite3.Connection) -> None:
@@ -183,6 +192,8 @@ def _migrate_old_schema(db_path: Path | None = None) -> None:
             conn.execute("ALTER TABLE listings ADD COLUMN user_year INTEGER")
         if "posted_checked_at" not in cols:
             conn.execute("ALTER TABLE listings ADD COLUMN posted_checked_at TEXT")
+        if "sold_checked_at" not in cols:
+            conn.execute("ALTER TABLE listings ADD COLUMN sold_checked_at TEXT")
 
 
 def _compute_fingerprint(
@@ -322,6 +333,10 @@ def upsert_listings(listings: Iterable[Listing], db_path: Path | None = None) ->
 # Sources whose search shows only a sample of what's listed: Facebook logged out returns ~12
 # cards, so an ad missing from a few searches is still for sale. Hours unseen before inactive.
 SAMPLED_SOURCE_HOURS = {"facebook": 7 * 24}
+# A sampled source's ad that missed a day of searches gets its ad page read for "sold" (#9's
+# 7-day wait left sold FB bikes on the dashboard for a week), at most once per recheck window
+UNSEEN_HOURS = 24
+SOLD_RECHECK_HOURS = 48
 
 
 def mark_stale(
@@ -337,7 +352,8 @@ def mark_stale(
 
     Unseen for `cutoff_hours` -> inactive; for `sold_after_hours` -> likely sold
     (sold_at = last_seen, the best estimate of when it went). A SAMPLED_SOURCE_HOURS
-    source waits its own hours instead, with the same gap before sold. Pass only sources
+    source waits its own hours, and is never called sold here: an ad missing from a sample
+    is often still listed, so only its ad page (set_sold_checked) says sold. Pass only sources
     that returned results this run: a broken scraper sees nothing, and would
     otherwise tag its whole inventory as sold.
     """
@@ -354,7 +370,7 @@ def mark_stale(
     with connect(db_path) as conn:
         for source in sources:
             inactive = SAMPLED_SOURCE_HOURS.get(source, cutoff_hours)
-            sold = inactive + sold_after_hours - cutoff_hours
+            sold = sold_after_hours
             cursor = conn.execute(
                 f"""
                 UPDATE listings SET is_active=0
@@ -364,6 +380,8 @@ def mark_stale(
                 (source, *models, inactive / 24.0),
             )
             marked += cursor.rowcount
+            if source in SAMPLED_SOURCE_HOURS:
+                continue
             conn.execute(
                 f"""
                 UPDATE listings SET sold_at=last_seen
@@ -419,7 +437,8 @@ def active_listings(
 def market_prices(
     model_slug: str, days: int = 90, db_path: Path | None = None, older_than_days: int = 0
 ) -> list[float]:
-    """One price per primary listing first seen between `days` and `older_than_days` ago."""
+    """One price per primary, undismissed listing (dismiss is for junk: a camera isn't a market
+    price; hidden still counts) first seen between `days` and `older_than_days` ago."""
     return [x["price"] for x in market_listings(model_slug, days, db_path, older_than_days)]
 
 
@@ -444,6 +463,7 @@ def market_listings(
               AND l.first_seen >= ?
               AND l.first_seen <= ?
               AND l.is_primary = 1
+              AND l.dismissed_at IS NULL
             """,
             (model_slug, MIN_BIKE_PRICE, cutoff, newest),
         ).fetchall()
@@ -534,6 +554,43 @@ def price_drops(model_slug: str, db_path: Path | None = None) -> dict[int, float
     return {r["listing_id"]: r["prev"] for r in rows}
 
 
+def reposts(model_slug: str, db_path: Path | None = None) -> dict[int, dict]:
+    """{active listing id: {"count", "since", "first_price"}} for private ads that look like a
+    repost of earlier ads now gone: same source, model, year and town, price within 0.6-1.67x,
+    the earlier ad last seen no later than a day after this one appeared (sellers delete and
+    repost to get back on top). `since`/`first_price` are the earliest ad's first sighting.
+    ponytail: a heuristic; two like bikes in one big town, one sold before the other was
+    listed, read as a repost. Cross-source reposts (Kijiji vs FB names the town differently)
+    aren't linked."""
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT a.id, e.first_seen,
+                   COALESCE((SELECT price FROM price_history WHERE listing_id=e.id
+                             ORDER BY observed_at LIMIT 1), e.price) AS first_price
+            FROM listings a
+            JOIN listing_models ma ON ma.listing_id=a.id AND ma.model_slug=?
+            JOIN listings e ON e.source=a.source AND e.year=a.year AND e.location=a.location
+                           AND e.id!=a.id AND e.is_active=0 AND e.is_primary=1
+                           AND e.dismissed_at IS NULL
+            JOIN listing_models me ON me.listing_id=e.id AND me.model_slug=ma.model_slug
+            WHERE a.is_active=1 AND a.is_primary=1 AND a.year IS NOT NULL AND a.price > 0
+              AND COALESCE(a.seller_type, '') != 'dealer'
+              AND e.price BETWEEN a.price * 0.6 AND a.price / 0.6
+              AND julianday(e.last_seen) <= julianday(a.first_seen) + 1
+            ORDER BY e.first_seen
+            """,
+            (model_slug,),
+        ).fetchall()
+    found: dict[int, dict] = {}
+    for r in rows:
+        if r["id"] in found:
+            found[r["id"]]["count"] += 1
+        else:
+            found[r["id"]] = {"count": 1, "since": r["first_seen"], "first_price": r["first_price"]}
+    return found
+
+
 def save_full_description(listing_id: int, text: str, db_path: Path | None = None) -> None:
     """Store the full ad text. upsert never touches it, so card snippets can't clobber it."""
     stamp = datetime.now(UTC).replace(tzinfo=None).isoformat()
@@ -616,6 +673,41 @@ def undated_listings(sources: Iterable[str], limit: int, db_path: Path | None = 
     return [dict(r) for r in rows]
 
 
+def unseen_listings(sources: Iterable[str], limit: int, db_path: Path | None = None) -> list[dict]:
+    """Shown listings from `sources` that missed the searches of the last UNSEEN_HOURS and
+    weren't sold-checked in SOLD_RECHECK_HOURS: never-checked first, then most recently seen."""
+    sources = list(sources)
+    if not sources:
+        return []
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, source, url FROM listings
+            WHERE is_active=1 AND is_primary=1 AND dismissed_at IS NULL AND hidden_at IS NULL
+              AND julianday('now') - julianday(last_seen) > ?
+              AND (sold_checked_at IS NULL OR julianday('now') - julianday(sold_checked_at) > ?)
+              AND source IN ({",".join("?" * len(sources))})
+            ORDER BY sold_checked_at IS NOT NULL, last_seen DESC LIMIT ?
+            """,  # only "?" placeholders are interpolated
+            (UNSEEN_HOURS / 24.0, SOLD_RECHECK_HOURS / 24.0, *sources, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_sold_checked(listing_id: int, sold: bool | None, db_path: Path | None = None) -> None:
+    """Record a sold check of a listing's ad page: True sold, None gone (deleted: off the
+    active lists, but not a sale), False still listed."""
+    now = datetime.now(UTC).replace(tzinfo=None).isoformat()
+    with connect(db_path) as conn:
+        conn.execute("UPDATE listings SET sold_checked_at=? WHERE id=?", (now, listing_id))
+        if sold is not False:
+            conn.execute("UPDATE listings SET is_active=0 WHERE id=?", (listing_id,))
+        if sold:
+            conn.execute(
+                "UPDATE listings SET sold_at=COALESCE(sold_at, ?) WHERE id=?", (now, listing_id)
+            )
+
+
 def set_posted(listing_id: int, posted: str | None, db_path: Path | None = None) -> None:
     """Save the post time read from a listing's ad page, and mark the page read either way
     (None: it had none), so it isn't fetched again. upsert keeps a stored post time."""
@@ -680,6 +772,9 @@ class SqliteStore:
     def price_drops(self, model_slug: str) -> dict[int, float]:
         return price_drops(model_slug, db_path=self.db_path)
 
+    def reposts(self, model_slug: str) -> dict[int, dict]:
+        return reposts(model_slug, db_path=self.db_path)
+
     def price_timelines(self, model_slug: str) -> list[dict]:
         return price_timelines(model_slug, db_path=self.db_path)
 
@@ -712,3 +807,9 @@ class SqliteStore:
 
     def set_posted(self, listing_id: int, posted: str | None) -> None:
         set_posted(listing_id, posted, db_path=self.db_path)
+
+    def unseen_listings(self, sources: Iterable[str], limit: int) -> list[dict]:
+        return unseen_listings(sources, limit, db_path=self.db_path)
+
+    def set_sold_checked(self, listing_id: int, sold: bool | None) -> None:
+        set_sold_checked(listing_id, sold, db_path=self.db_path)

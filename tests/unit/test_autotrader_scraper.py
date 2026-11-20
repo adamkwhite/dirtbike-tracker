@@ -150,3 +150,31 @@ def test_family_pages_stop_at_the_cap(pages: dict) -> None:
     assert [u for u in pages["_fetched"] if "kawasaki/klx" in u] == [
         build_family_url("kawasaki/klx", page=n) for n in (1, 2, 3)
     ]
+
+
+def test_new_units_reads_dealer_stock_of_categorized_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sale = _ad("n1", "KLX140R L", "N", 5659, year=2027) | {
+        "seller": {"companyName": "Rockland Wheels"},
+        "location": {"city": "ROCKLAND"},
+        "superDeal": {"oldPriceFormatted": "$ 5,959"},
+    }
+    urls: list[str] = []
+
+    def fetch(url: str) -> str:
+        urls.append(url)
+        return _page(
+            sale,
+            _ad("n2", "KLX140R", "N", 1, year=2026),  # "$1": call for price
+            _ad("u1", "KLX 140", "U", 2000, year=2008),
+        )
+
+    monkeypatch.setattr(autotrader_scraper, "fetch_page", fetch)
+
+    units = autotrader_scraper.new_units(["klx140", "crf150f"])  # crf150f: no category, no fetch
+
+    assert len(urls) == 1 and "/ot_new?cat=ma50055mo78395" in urls[0]
+    assert [(u.unit_id, u.dealer, u.title, u.price, u.was) for u in units] == [
+        ("n1", "Rockland Wheels, Rockland", "2027 Honda KLX140R L", 5659.0, 5959.0)
+    ]

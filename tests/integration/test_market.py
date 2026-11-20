@@ -138,8 +138,44 @@ def test_facebook_ads_age_out_after_a_week_not_two_days(tmp_path: Path) -> None:
     assert mark_stale(["facebook"], ["crf150f"], db_path=db) == 2
 
     assert _row(db, "fb-4d") == (1, None)
-    assert _row(db, "fb-7d") == (0, None)  # inactive, not yet "sold"
-    assert _row(db, "fb-9d")[1] is not None
+    assert _row(db, "fb-7d") == (0, None)
+    assert _row(db, "fb-9d") == (0, None)  # gone from samples isn't sold: its ad page says that
+
+
+def test_snapshot_links_a_repost_to_the_gone_ads_before_it(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    _add(db, "first", 2995, days_ago=12, is_active=0)
+    _add(db, "second", 2800, days_ago=6, is_active=0)
+    _add(db, "now", 2500, days_ago=1)
+    _add(db, "other-town", 2600, days_ago=1)
+    _add(db, "pricier-bike", 6000, days_ago=8, is_active=0)  # same town, not this bike
+    with connect(db) as conn:
+        conn.execute("UPDATE listings SET year=1997, location='Smiths Falls'")
+        conn.execute("UPDATE listings SET location='Ottawa' WHERE external_id='other-town'")
+
+    rows = {x["external_id"]: x for x in snapshot("crf150f", SqliteStore(db)).listings}
+
+    assert rows["now"]["repost"]["count"] == 2
+    assert rows["now"]["repost"]["first_price"] == 2995
+    assert rows["other-town"]["repost"] is None
+
+
+def test_migration_clears_facebook_sales_no_ad_page_confirmed(tmp_path: Path) -> None:
+    db = tmp_path / "listings.db"
+    init_db(db)
+    for ext_id, source in (("fb-aged", "facebook"), ("fb-checked", "facebook"), ("kj", "kijiji")):
+        _add(db, ext_id, 2500, days_ago=9, source=source)
+    with connect(db) as conn:
+        conn.execute("UPDATE listings SET is_active=0, sold_at=last_seen")
+        conn.execute("UPDATE listings SET sold_checked_at=last_seen WHERE external_id='fb-checked'")
+        conn.execute("PRAGMA user_version = 1")
+
+    init_db(db)
+
+    assert _row(db, "fb-aged") == (0, None)
+    assert _row(db, "fb-checked")[1] is not None
+    assert _row(db, "kj")[1] is not None
 
 
 def test_mark_stale_leaves_models_another_watchlist_scrapes(tmp_path: Path) -> None:
@@ -278,7 +314,7 @@ def _listing(source: str, ext_id: str, url: str, price: float) -> Listing:
         "https://www.kijiji.ca/v-sport-other/oakville/yamaha-plastics/1743797617?utm=x",
     ],
 )
-def test_dismiss_hides_listing_but_keeps_market_and_survives_rescrape(
+def test_dismiss_removes_listing_from_lists_and_market_and_survives_rescrape(
     tmp_path: Path, ref: str
 ) -> None:
     db = tmp_path / "listings.db"
@@ -297,7 +333,7 @@ def test_dismiss_hides_listing_but_keeps_market_and_survives_rescrape(
 
     snap = snapshot("crf150f", SqliteStore(db))
     assert [s["external_id"] for s in snap.listings] == ["1700000001"]
-    assert snap.stats["count"] == 2  # still market data
+    assert snap.stats["count"] == 1  # junk isn't market data (hidden bikes still are)
 
     assert set_dismissed(ref, False, db_path=db) == ["1743797617"]
     assert len(snapshot("crf150f", SqliteStore(db)).listings) == 2

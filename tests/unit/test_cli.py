@@ -2,6 +2,7 @@
 fake sources and detail fetchers, a spy notifier. Nothing is patched except the OS
 edge in the open-in-browser tests."""
 
+import os
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -281,6 +282,16 @@ def test_dismiss_and_undismiss(market_app: App) -> None:
     assert len(market_app.store.active_listings("crf150f")) == 4
 
 
+def test_dismissed_listing_leaves_the_median(market_app: App) -> None:
+    before = market_app.store.market_listings("crf150f")
+
+    _invoke(market_app, "dismiss", "a1400")
+
+    assert len(market_app.store.market_listings("crf150f")) == len(before) - 1
+    _invoke(market_app, "undismiss", "a1400")
+    assert len(market_app.store.market_listings("crf150f")) == len(before)
+
+
 def test_dismiss_unknown_listing_exits_nonzero(app: App) -> None:
     result = CliRunner().invoke(cli, ["dismiss", "nope"], obj=app)
 
@@ -381,3 +392,48 @@ def test_models_yml_entries_are_valid() -> None:
 def test_a_dealer_on_an_unknown_platform_fails_at_startup() -> None:
     with pytest.raises(click.ClickException, match="platform 'autobunny'"):
         cli_module.build_dealers({"burlington": {"platform": "autobunny", "url": "u"}})
+
+
+def test_if_older_runs_missed_job_once_then_skips(app: App, monkeypatch: pytest.MonkeyPatch):
+    calls: list[str] = []
+
+    def fake_backup(slot: str, state_dir: Path):
+        calls.append(slot)
+        return 1, 2
+
+    monkeypatch.setattr(cli_module, "backup_offsite", fake_backup)
+    run = lambda *a: CliRunner().invoke(cli, ["backup", *a], obj=app)  # noqa: E731
+    assert run("--if-older", "26").exit_code == 0  # never ran: runs
+    assert run("--if-older", "26").exit_code == 0  # ran just now: quiet no-op
+    assert calls == ["nightly"]
+    run()  # no flag always runs (the nightly line)
+    assert calls == ["nightly", "nightly"]
+    old = (app.state_dir / ".ran-backup-nightly").stat().st_mtime - 27 * 3600
+    os.utime(app.state_dir / ".ran-backup-nightly", (old, old))
+    run("--if-older", "26")
+    assert len(calls) == 3
+    run("--slot", "weekly", "--if-older", "194")  # slots keep separate markers
+    assert calls[-1] == "weekly"
+
+
+def test_failed_backup_leaves_no_marker(app: App, monkeypatch: pytest.MonkeyPatch):
+    def boom(slot: str, state_dir: Path):
+        raise cli_module.BackupError("x")
+
+    monkeypatch.setattr(cli_module, "backup_offsite", boom)
+    assert CliRunner().invoke(cli, ["backup", "--if-older", "1"], obj=app).exit_code == 1
+    assert not (app.state_dir / ".ran-backup-nightly").exists()
+
+
+def test_drift_if_older_skips_when_recent(app: App, monkeypatch: pytest.MonkeyPatch):
+    runs: list[int] = []
+
+    def fake_run(*a, **k) -> list[str]:
+        runs.append(1)
+        return ["parser broke"]
+
+    monkeypatch.setattr(cli_module.drift_check, "run", fake_run)
+    args = ["drift", "--if-older", "26", "--dir", str(app.state_dir / "rec")]
+    assert CliRunner().invoke(cli, args, obj=app).exit_code == 1  # problem found: alerts
+    assert CliRunner().invoke(cli, args, obj=app).exit_code == 0  # not again within 26h
+    assert runs == [1]

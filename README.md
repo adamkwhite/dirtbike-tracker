@@ -1,10 +1,11 @@
 # dirtbike-tracker
 
 Finds a **project bike** to wrench on with the kids: a used dirt bike that needs work, priced
-right, with ownership. Scrapes Kijiji, AutoTrader, Facebook Marketplace and a dealer's used
-inventory (Sturgess Cycle) for the models in `config/models.yml`,
-stores listings in SQLite, rates each one against the model's 90-day market median, scores its
-project fit, and pushes alerts to your phone via [ntfy](https://ntfy.sh).
+right, with ownership. Scrapes Kijiji, AutoTrader, Facebook Marketplace and dealers' used
+inventory (Sturgess Cycle, Cycle World, DeWildt, Del Mastro: `dealers:` in `config/models.yml`)
+for the models in `config/models.yml`, stores listings in SQLite, rates each one against the
+model's 90-day market median, scores its project fit, and pushes alerts to your phone via
+[ntfy](https://ntfy.sh). It also watches dealers' new stock of those models for markdowns.
 
 ## How it works
 
@@ -14,11 +15,14 @@ flowchart TB
     config[/"config/models.yml"/] --> cli
 
     subgraph application
-        cli["cli.py: commands + composition root<br/>watch · list · stats · report · dashboard<br/>dismiss · contact · backup"]
+        cli["cli.py: commands + composition root<br/>watch · list · stats · report · dashboard · serve<br/>dismiss · contact · backup · drift"]
         watch["watch.py<br/>scrape → store → score → alert"]
         market["market.py<br/>snapshot(slug, store)"]
+        details["details.py<br/>full ad text, FB post dates"]
+        markdowns["markdowns.py<br/>new-stock price cuts"]
         ports["ports.py<br/>ListingStore · ListingSource<br/>AdDetailFetcher · Notifier"]
         cli --> watch --> market
+        watch --> details & markdowns
         cli -.->|wires adapters into| ports
     end
 
@@ -30,9 +34,9 @@ flowchart TB
         kij["kijiji_scraper.py"]
         at["autotrader_scraper.py"]
         fb["fb_scraper.py<br/>Playwright, opt-in"]
-        ds["dealerspike.py<br/>dealer inventory file"]
+        dealers["dealerspike.py · escsite.py · focus.py<br/>dealer inventory, once per run"]
         storage[("storage.py<br/>SQLite")]
-        render["dashboard.py<br/>reporter.py"]
+        render["dashboard.py · reporter.py<br/>dashboard_server.py"]
         notifier["notifier.py"]
         backup["backup.py"]
         drift["drift.py"]
@@ -40,15 +44,16 @@ flowchart TB
 
     market -->|score| scoring
     market -->|read via ListingStore| storage
-    watch -->|ListingSource| kij & at & fb & ds
+    watch -->|ListingSource| kij & at & fb & dealers
+    markdowns -->|new units| dealers
     watch -->|upsert via ListingStore| storage
     cli -->|render snapshot| render
-    watch -->|DEAL / GOOD / target / price drop via Notifier| notifier
+    watch -->|DEAL / GOOD / target / price drop / MARKDOWN via Notifier| notifier
 
     kijiji{{Kijiji}} --> kij
     autotrader{{AutoTrader}} --> at
     facebook{{"Facebook Marketplace"}} --> fb
-    sturgess{{"Sturgess Cycle (Dealer Spike)"}} --> ds
+    dealersites{{"Sturgess (Dealer Spike) · Cycle World, DeWildt (EquipmentSearch) · Del Mastro (Focus)"}} --> dealers
     notifier --> ntfy{{"ntfy.sh → phone"}}
     notifier --> hc{{healthchecks.io}}
     cli -->|nightly| backup
@@ -65,7 +70,7 @@ Ratings are price vs market median: **DEAL** ≤ -30%, **GOOD** ≤ -10%, **FAIR
 **HIGH** above that. A listing under a model's `target_price` alerts regardless of market.
 
 **Private vs dealer (#81):** each listing records its seller type (Kijiji's "for sale by", AutoTrader's
-seller). Once a model has 5 private sales in 90 days, its median is private sales only, shown as
+seller); Facebook doesn't say, so its ads count as private. Once a model has 5 private sales in 90 days, its median is private sales only, shown as
 "Median (private)": dealer asks run high, and a dealer posting on both sites counts twice. Dealer
 listings are still shown and rated against that median, tagged `dealer`. A dealer's
 current-model-year bike is treated as new/demo stock and skipped, like the sites' own "new" flags.
@@ -112,7 +117,7 @@ dirtbike list --model crf150f        # stored listings with ratings
 dirtbike stats --model crf150f       # low / median / high / count
 dirtbike report --model crf150f --write   # markdown snapshot to reports/
 dirtbike dashboard --open
-dirtbike dismiss <url-or-id>         # hide a listing you've evaluated (survives re-scrapes)
+dirtbike dismiss <url-or-id>         # junk: out of lists and the median (survives re-scrapes)
 dirtbike undismiss <url-or-id>
 dirtbike serve [--port 8765]          # the dashboard on localhost with its ✕ hide buttons working
 dirtbike contact <url-or-id> --note "offered 750" [--on 2026-10-01]  # log messaging a seller (--clear to undo)
@@ -144,6 +149,10 @@ command run in dev (which runs `init_db()` and its schema migrations) never touc
 work on fresh data in dev, copy prod's over between cron ticks:
 `cp ~/Code/dirtbike-tracker-prod/data/listings.db ~/Code/dirtbike-tracker/data/`.
 
+Each watch runs under `flock` on `data/watch.lock`: a run frozen when the machine sleeps
+resumes on wake, and the next tick then skips instead of running beside it (the friend's
+watch waits up to 15 min for the lock).
+
 ```bash
 # one-time setup
 git clone https://github.com/adamkwhite/dirtbike-tracker.git ~/Code/dirtbike-tracker-prod
@@ -158,7 +167,7 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 ~/Code/dirtbike-tracker-prod/scripts/install_cron.sh --remove
 ```
 
-`install_cron.sh` installs five jobs (Ontario time):
+`install_cron.sh` installs the jobs (Ontario time):
 
 | When | Job | Log |
 |---|---|---|
@@ -166,6 +175,11 @@ git -C ~/Code/dirtbike-tracker-prod pull --ff-only
 | 23:30 daily | `dirtbike report --model crf150f --write` | `logs/report.log` |
 | 23:55 daily, 23:58 Sundays | `dirtbike backup` (nightly / `--slot weekly`) | `logs/backup.log` |
 | 05:00 daily | `dirtbike drift` (see Site drift) | `logs/drift.log` |
+| :10, :12, :14 hourly, 8:00–22:00 | catch-up: `backup --if-older 26`, `backup --slot weekly --if-older 194`, `drift --if-older 26` | same logs |
+
+The catch-up lines cover a laptop asleep at the nightly times: `--if-older HOURS` exits quietly
+unless the job's last run (`data/state/.ran-<job>`, touched on success; for drift, on any
+completed check) is older than HOURS, so nothing runs twice when nothing was missed.
 
 Logs are in `~/Code/dirtbike-tracker-prod/logs/` (timestamped if `moreutils` is installed). After
 changing the schedule in `install_cron.sh`, re-run it from the prod clone with the same
@@ -192,12 +206,16 @@ The main `dashboard.html` has a tab for each watchlist: **Dirt** (the `project` 
 whenever his watch runs). `dirtbike --config config/friend.yml dashboard --open` shows his bikes alone. Each tab's
 make buttons (Honda, Yamaha, ...; every `models.yml` entry sets `make`) show only that brand's bikes. Its cc buttons (125, 150, 250, ...; an entry's `cc` is its size class) do the same by engine size, together with the make.
 
+A private ad that looks like a repost (same source, model, year and town as ads now gone, at a
+similar price) is tagged `↻3 since 11-02, $2,800`: reposted 3 times, first listed 11-02 at
+$2,800. A seller deleting and reposting a bike that won't sell is a seller ready to deal.
+
 ### Hiding bikes on the dashboard
 
 Each row has a ✕. It asks for an optional note ("too far", "parts ad"), then moves the
 listing to the **Hidden** section at the bottom of its tab, with an Unhide button. A hidden
 listing stops alerting and stays hidden across re-scrapes, but still counts toward the market
-median. `dismiss` is the stronger version for junk: never shown anywhere.
+median. `dismiss` is the stronger version for junk: never shown anywhere, and left out of the median.
 
 The **Notes** column holds your own notes on a bike ("asked for VIN", "Dad's friend knows him"):
 click a cell to edit, empty clears it. Click a **Year** to set it when the ad has none or
@@ -250,7 +268,8 @@ once a scraper has returned **nothing** for 24h; a field that quietly stops pars
 km, the new-stock filter) would go unnoticed. `dirtbike drift` catches that:
 
 1. It records a few live pages into `tests/recorded/`: Kijiji searches for `crf150f` and
-   `rebel500`, one Kijiji ad page, and an AutoTrader `rebel500` search (which has dealer stock).
+   `rebel500`, one Kijiji ad page, an AutoTrader `rebel500` search (which has dealer stock),
+   and the inventory of the first configured dealer on each platform.
 2. It runs our real parsers over them and checks that listings parse with id, link, title and
    price state; that snippets, post dates, photos, year and km are read; that new dealer stock
    is skipped; and that the ad page's description reads. Logic: `infrastructure/drift.py`.
@@ -271,22 +290,40 @@ with `dirtbike drift --replay --no-notify`. Locally, `make drift` re-records and
 sellers' names and phone numbers, and this repo is public. That's also why CI skips
 `tests/drift`: there are no recordings there.
 
-### Dealer inventory (Sturgess Cycle)
+### Dealer inventory
+
+Every dealer is a `dealers:` block in `config/models.yml` (platform, url, location, plus the
+platform's own settings; optional `groups` limits it to some models). One fetch per watch run
+is the dealer's whole used stock, shared across models (`run_cache.OncePerRun`, a failure
+included: retrying a 403 per model kept a host blocking us). Three platforms:
+
+- **Dealer Spike** (Sturgess Cycle, Hamilton): one static inventory file, below.
+- **EquipmentSearch** (`escsite.py`; Cycle World Superstore, DeWildt's 3 stores): crawls the
+  server-rendered `.../page/N/` used cards. Cycle World has `groups` set: it carries no dirt bikes.
+- **Focus** (`focus.py`; Del Mastro): no server-rendered cards. Each run reads the search-only
+  Typesense key from the inventory page and queries `<base>/ts/multi_search` for used
+  motorcycles and powersports in one request.
+
+**New-bike markdowns:** a dealer with `new_stock: true` (Del Mastro) also reports its new units
+of the tracked models, and so does AutoTrader for the models in
+`autotrader_scraper.NEW_STOCK_CATEGORIES` (KLX140): one new-only search across every Ontario
+dealer. Each watch compares their prices with `data/state/new_stock.json` and
+pushes MARKDOWN on a price cut, or for a unit first seen under its regular price/MSRP (the
+first run only records). New units never enter the listings table, since MSRP would skew the
+used medians; the dashboard shows them as NEW AT DEALERS.
 
 `infrastructure/dealerspike.py` (#99) reads a Dealer Spike dealer's inventory file: the site
 renders its list client-side from `/imglib/Inventory/cache/<site id>/UVehInv.js` (used;
 `VehInv.js` is everything), a `var Vehicles=[...]` literal with every unit. One plain GET per
 watch run (cached across models), no browser, no paging; each model filters it by title.
-Sturgess Cycle (Hamilton, site id 5620) is defined in `config/models.yml` under `dealers:`.
-Every dealer lives there (platform, url, location, plus the platform's own settings), so a new
-dealer on a platform we already read (`dealerspike`, `escsite`, `focus`; `cli.PLATFORMS`) is a
-config block, no code. A dealer on another platform needs an adapter first.
+A new dealer on a platform we already read (`dealerspike`, `escsite`, `focus`; `cli.PLATFORMS`)
+is a config block, no code. A dealer on another platform needs an adapter first.
 
 Every unit is dealer stock (`seller_type = dealer`, so it stays out of the private-sales
 median), and new units plus a dealer's current-model-year bikes are skipped unless a model sets
 `include_new`. A model with none at the dealer is normal: a fetch that worked counts as "seen",
 so unmatched listings age out as sold and source health only alerts if the fetch itself keeps
-failing. The drift check records the file daily.
+failing. The drift check records the first dealer on each platform daily.
 
 ### Shop a Ride (many dealers at once)
 
@@ -315,7 +352,11 @@ them not on Kijiji or AutoTrader.
 Logged out, a search returns only ~12 cards (scrolling loads no more), so each one is a sample.
 Searches alternate between the slug and its spaced form (`klx140`, then `klx 140`: they shared
 only 7 of 12 cards, 2026-10-27), and a Facebook ad counts as gone after 7 days unseen
-(`storage.SAMPLED_SOURCE_HOURS`), not the 2 days Kijiji and AutoTrader get.
+(`storage.SAMPLED_SOURCE_HOURS`), not the 2 days Kijiji and AutoTrader get. An ad that misses a
+day of searches gets its page opened (up to 3 a run, each every 48h): one marked sold, or
+deleted (logged out, FB shows its login wall instead of the ad, while the other ads in the run
+load), leaves the dashboard then, not a week later. Only an ad marked sold lands in Recently
+sold: a deleted or aged-out Facebook ad may just have been reposted, or still be listed.
 
 **Setup** (in the checkout that runs it; the prod clone for cron):
 
@@ -342,7 +383,8 @@ never copy it into the repo.
 - FB titles are often vague ("2003 Honda crf"). They're kept, since FB's search matched them on
   the model; titles naming a different known model (e.g. CRF150R) are dropped.
 - No full ad text yet (fit scores on the title only), and FB cross-posts of Kijiji ads aren't
-  merged (titles and locations differ).
+  merged (titles and locations differ). Search cards carry no post date, so each watch opens
+  at most 3 undated FB ads, newest first, just for the date (`details.POST_DATE_BUDGET`).
 - Not in the Docker image (no browser there).
 
 ## Requirements

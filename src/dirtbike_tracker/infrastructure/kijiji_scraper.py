@@ -127,6 +127,7 @@ KNOWN_MODEL_SLUGS = [
     "dr200",
     "dr350",
     "drz125",
+    "drz250",
     "rebel300",
     "rebel500",
     "cb500f",
