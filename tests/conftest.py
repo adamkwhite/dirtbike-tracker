@@ -8,6 +8,15 @@ SHARED_DB = (Path(__file__).resolve().parent.parent / "data" / "listings.db").re
 
 
 @pytest.fixture(autouse=True)
+def _shoparide_cache_in_tmp(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Shop a Ride caches units under ~/.cache by default: keep tests out of it."""
+    from dirtbike_tracker.infrastructure import shoparide
+
+    monkeypatch.setattr(shoparide, "CACHE_DIR", tmp_path / "shoparide-cache")
+    shoparide._units.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def _never_open_shared_db(monkeypatch: pytest.MonkeyPatch) -> None:
     """data/ is shared with prod (CLAUDE.md): fail any test that opens its DB, reads included.
 

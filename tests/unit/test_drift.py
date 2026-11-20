@@ -16,7 +16,9 @@ from .conftest import PushSpy
 from .test_escsite import card as esc_card
 from .test_escsite import page as esc_page
 from .test_focus import doc as focus_doc
+from .test_shoparide import FakeSite, unit
 
+SHOPARIDE = FakeSite([unit("a", "2023 Honda CRF250F")], [unit("e", "2021 Suzuki SV650")])
 DEALERS = cli_module.build_dealers(cli_module.load_dealers())  # models.yml's real definitions
 
 
@@ -123,6 +125,8 @@ class FakeSites:
         self.ad_body = ad_body
 
     def get(self, url: str, **_: object) -> object:
+        if "shoparide.ca" in url:
+            return SHOPARIDE.get(url)
         if "delmastro.ca" in url:
             text = "apiKey: 'k3y'"
         elif "cycleworldsuperstore.com" in url:
@@ -183,6 +187,7 @@ def test_record_then_check_end_to_end(monkeypatch: pytest.MonkeyPatch, tmp_path:
         "kijiji_ad.html",
         "kijiji_search_crf150f.html",
         "kijiji_search_rebel500.html",
+        "shoparide_units.json",
         "sturgess_inventory.js",
     ]
 
@@ -242,3 +247,16 @@ def test_reports_a_focus_index_with_no_used_units(
     )
 
     assert run(out, replay=True) == ["delmastro_inventory.json: no unit has condition 'Used'"]
+
+
+def test_reports_shop_a_ride_units_missing_a_field(tmp_path: Path) -> None:
+    units = [unit("a", "2023 Honda CRF250F"), unit("b", "2021 Suzuki SV650", condition="New")]
+    pages = {"shoparide_units.json": {"url": "https://www.shoparide.ca", "platform": "shoparide"}}
+    (tmp_path / "manifest.json").write_text(json.dumps({"pages": pages}))
+    (tmp_path / "shoparide_units.json").write_text(json.dumps(units))
+    assert problems(tmp_path) == []
+
+    for u in units:
+        del u["sale_price_value"]
+    (tmp_path / "shoparide_units.json").write_text(json.dumps(units))
+    assert problems(tmp_path) == ["shoparide_units.json: no unit has 'sale_price_value'"]

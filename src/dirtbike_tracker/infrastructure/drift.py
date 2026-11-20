@@ -15,7 +15,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ..domain.listing import Listing
-from . import autotrader_scraper, dealerspike, escsite, focus, kijiji_scraper
+from . import autotrader_scraper, dealerspike, escsite, focus, kijiji_scraper, shoparide
 
 # A kid dirt bike (cards, snippets) and a street bike (year/km form fields, dealer stock)
 KIJIJI_SLUGS = ("crf150f", "rebel500")
@@ -24,6 +24,7 @@ PRICE_STATES = {"numeric", "please_contact", "swap_trade", "unknown"}
 AD_PAGE = "kijiji_ad.html"
 AUTOTRADER_PAGE = "autotrader_search.html"
 # Typesense fields the Focus adapter reads; each must be on at least one unit
+SHOPARIDE_KEYS = ("vehicle_id", "label", "year", "condition", "url", "sale_price_value", "usage")
 FOCUS_KEYS = ("id", "name", "condition", "model_year", "price", "slug", "dealer_id", "image")
 # Fields the Dealer Spike adapter reads (#99); each must be on at least one unit
 DEALERSPIKE_KEYS = ("id", "bike_year", "manuf", "model", "price", "type", "miles", "bike_image")
@@ -72,6 +73,13 @@ def record(out: Path, sources: Mapping[str, object]) -> None:
         focus._inventory.cache_clear()  # a fresh query, not this process's cached result
         (out / name).write_text(json.dumps(list(focus._inventory(foc.base_url))))
         pages[name] = {"url": foc.base_url, "platform": "focus"}
+
+    if sar := _first(sources, shoparide.ShopARideSource):
+        name = f"{sar.name}_units.json"
+        shoparide._units.cache_clear()  # the build check, not this process's cached result
+        units = shoparide._units(sar.base_url, sar.province, sar.types, sar.cache_dir)
+        (out / name).write_text(json.dumps(units))
+        pages[name] = {"url": sar.base_url, "platform": "shoparide"}
 
     manifest = {"recorded_at": datetime.now(UTC).isoformat(timespec="seconds"), "pages": pages}
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
@@ -176,6 +184,20 @@ def _focus_problems(name: str, text: str) -> list[str]:
     return found
 
 
+def _shoparide_problems(name: str, text: str) -> list[str]:
+    units = json.loads(text)
+    if not units:
+        return [f"{name}: no units in the province"]
+    found = [
+        f"{name}: no unit has {key!r}"
+        for key in SHOPARIDE_KEYS
+        if not any(u.get(key) for u in units)
+    ]
+    if not any(u.get("condition") == "Used" for u in units):
+        found.append(f"{name}: no unit has condition 'Used'")
+    return found
+
+
 def problems(out: Path) -> list[str]:
     """Everything our parsers no longer read from the recordings in `out`. [] = no drift."""
     manifest_path = out / "manifest.json"
@@ -198,6 +220,8 @@ def problems(out: Path) -> list[str]:
             found += _escsite_problems(name, html)
         elif info.get("platform") == "focus":
             found += _focus_problems(name, html)
+        elif info.get("platform") == "shoparide":
+            found += _shoparide_problems(name, html)
     return found
 
 
@@ -207,6 +231,7 @@ def run(out: Path, replay: bool = False, sources: Mapping[str, object] | None = 
     if not replay:
         try:
             record(out, sources or {})
-        except (requests.RequestException, ValueError) as exc:  # ValueError: Focus key/JSON
+        # ValueError: Focus key/JSON; LookupError: Shop a Ride's data chunks not found
+        except (requests.RequestException, ValueError, LookupError) as exc:
             return [f"recording failed: {exc}"]
     return problems(out)
