@@ -69,6 +69,21 @@ def test_reports_a_page_that_parses_nothing(tmp_path: Path) -> None:
     assert problems(out) == ["kijiji_search_rebel500.html: parsed no listings"]
 
 
+def test_cards_all_filtered_out_is_a_real_zero(tmp_path: Path) -> None:
+    # Cards parse, but every one is another model: an empty search, not drift
+    out = _record(tmp_path / "rec", _kijiji_search([YEAR, KM, OWNER], title="CRF150R rims"))
+
+    assert problems(out) == []
+
+
+def test_cards_without_ad_links_still_report_drift(tmp_path: Path) -> None:
+    html = '<div data-testid="listing-card"><a href="/somewhere-new"><h3>Rebel 500</h3></a></div>'
+
+    assert problems(_record(tmp_path / "rec", html)) == [
+        "kijiji_search_rebel500.html: parsed no listings"
+    ]
+
+
 def test_drift_command_alerts_and_fails_on_problems(
     app: App, sent: PushSpy, tmp_path: Path
 ) -> None:

@@ -343,6 +343,17 @@ def _field_text(card: Tag, testid: str, class_pattern: str | None = None, sep: s
     return el.get_text(sep, strip=True) if isinstance(el, Tag) else ""
 
 
+def result_cards(soup: BeautifulSoup) -> list[Tag]:
+    """The search page's result cards, before any category/model filtering."""
+    # Kijiji's current markup uses [data-testid='listing-card'] but
+    # fall back to older selectors for resilience.
+    return list(
+        soup.select("[data-testid='listing-card']")
+        or soup.select("section[data-testid*='listing']")
+        or soup.select("div.search-item")
+    )
+
+
 def parse_listings(html: str, model_slug: str, include_new: bool = False) -> list[Listing]:
     """Extract listing data from a Kijiji search results page.
 
@@ -353,15 +364,7 @@ def parse_listings(html: str, model_slug: str, include_new: bool = False) -> lis
     now = datetime.now(UTC).replace(tzinfo=None).isoformat()
     meta = _ad_meta(soup)
 
-    # Kijiji's current markup uses [data-testid='listing-card'] but
-    # fall back to older selectors for resilience.
-    cards = (
-        soup.select("[data-testid='listing-card']")
-        or soup.select("section[data-testid*='listing']")
-        or soup.select("div.search-item")
-    )
-
-    for card in cards:
+    for card in result_cards(soup):
         link_el = card.find("a", href=True)
         if not link_el:
             continue
