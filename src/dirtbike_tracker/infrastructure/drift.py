@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from ..domain.listing import Listing
 from . import autotrader_scraper, dealerspike, escsite, focus, kijiji_scraper, shoparide
@@ -101,8 +101,21 @@ def _field_problems(name: str, listings: list[Listing], url_prefix: str) -> list
     return found
 
 
+def _kijiji_ad_cards(soup: BeautifulSoup) -> list[Tag]:
+    """Result cards whose link still carries a 10+ digit ad id, i.e. the card markup parses."""
+    return [
+        c
+        for c in kijiji_scraper.result_cards(soup)
+        if (a := c.find("a", href=True))
+        and kijiji_scraper._extract_external_id(str(a["href"])).isdigit()
+    ]
+
+
 def _kijiji_search_problems(name: str, html: str, slug: str) -> list[str]:
     listings = kijiji_scraper.parse_listings(html, slug)
+    soup = BeautifulSoup(html, "html.parser")
+    if not listings and _kijiji_ad_cards(soup):
+        return []  # cards with ad links, all filtered out (wrong model/category): a real zero
     found = _field_problems(name, listings, "https://www.kijiji.ca/v-")
     if any(not re.fullmatch(r"\d{10,}", x.external_id) for x in listings):
         found.append(f"{name}: ad ids are no longer 10+ digit numbers")
@@ -110,7 +123,7 @@ def _kijiji_search_problems(name: str, html: str, slug: str) -> list[str]:
         found.append(f"{name}: no search-page snippets (#76)")
     if listings and not any(x.posted_text for x in listings):
         found.append(f"{name}: no activationDate")
-    meta = kijiji_scraper._ad_meta(BeautifulSoup(html, "html.parser"))
+    meta = kijiji_scraper._ad_meta(soup)
     new_ids = {ad_id for ad_id, facts in meta.items() if facts.get("new")}
     if leaked := {x.external_id for x in listings} & new_ids:
         found.append(f"{name}: new dealer stock not skipped: {sorted(leaked)}")
